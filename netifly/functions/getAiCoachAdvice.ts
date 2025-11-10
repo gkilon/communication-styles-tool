@@ -1,5 +1,5 @@
-import { GoogleGenAI } from "@google/genai";
-import type { Handler } from "@netlify/functions";
+import { GoogleGenAI } from "https://esm.sh/@google/genai@1.29.0";
+import type { Handler } from "https://esm.sh/@netlify/functions@5.1.0";
 
 // This is the serverless function that will securely call the Gemini API
 const handler: Handler = async (event) => {
@@ -46,7 +46,7 @@ const handler: Handler = async (event) => {
         model: "gemini-2.5-flash",
         contents: userInput,
         config: {
-            systemInstruction: systemInstruction,
+            systemInstruction: systemInstruction, 
         }
     });
 
