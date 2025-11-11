@@ -1,5 +1,6 @@
-import { GoogleGenAI } from "https://esm.sh/@google/genai@1.29.0";
-import type { Handler } from "https://esm.sh/@netlify/functions@5.1.0";
+// Fix: Use standard package imports for Node.js environment.
+import { GoogleGenAI } from "@google/genai";
+import type { Handler } from "@netlify/functions";
 
 
 // This is the serverless function that will securely call the Gemini API
@@ -8,7 +9,10 @@ const handler: Handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  if (!process.env.API_KEY) {
+  // Fix: Use process.env for Node.js environment, as Deno is not available.
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey) {
     return { 
       statusCode: 500, 
       body: JSON.stringify({ error: "מפתח ה-API אינו מוגדר בשרת." }) 
@@ -22,7 +26,7 @@ const handler: Handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: "Missing scores or userInput in request" }) };
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: apiKey });
     const maxScore = 15 * 5;
 
     const systemInstruction = `
