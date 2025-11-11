@@ -1,9 +1,6 @@
-// Deno-compatible imports from CDN
-import { GoogleGenAI } from "https://esm.sh/@google/genai@^1.29.0";
-// Import the Context type for Netlify Edge Functions on Deno
-import type { Context } from "https://deno.land/x/netlify_functions@v2.6.2/mod.ts";
-
 // Deno provides the Deno global object. A declaration helps with type checking in some editors.
+// This is necessary to inform the TypeScript compiler about the Deno global,
+// preventing build failures in Node.js-based build environments.
 declare global {
   const Deno: {
     env: {
@@ -12,8 +9,16 @@ declare global {
   };
 }
 
-// Netlify Edge Function handler for Deno runtime
-export default async (req: Request, context: Context) => {
+// Netlify Edge Function handler for Deno runtime.
+// The `context` parameter is removed as it's unused and its type import from a URL
+// could cause issues with standard TypeScript build tools.
+export default async (req: Request) => {
+  // The GoogleGenAI library is imported dynamically.
+  // This prevents static analysis from failing in a non-Deno build environment
+  // that doesn't support URL imports, which is the likely cause of the build failure
+  // leading to the 404 error.
+  const { GoogleGenAI } = await import("https://esm.sh/@google/genai@^1.29.0");
+
   // Ensure the request is a POST request
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
