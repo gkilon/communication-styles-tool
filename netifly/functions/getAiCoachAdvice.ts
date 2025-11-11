@@ -56,10 +56,24 @@ const handler: Handler = async (event) => {
     };
 
   } catch (error) {
-    console.error("Error in Netlify function:", error);
+    console.error("שגיאה בפונקציית Netlify:", error);
+    let userFriendlyError = "אירעה שגיאה פנימית בשרת.";
+
+    if (error instanceof Error && error.message) {
+        if (error.message.includes('API key not valid') || error.message.includes('permission denied')) {
+            userFriendlyError = "מפתח ה-API שסופק אינו תקין או שאין לו הרשאות מתאימות. אנא ודא שהמפתח נכון ופעיל בחשבון Google AI Studio שלך.";
+        } else if (error.message.includes('billing')) {
+            userFriendlyError = "אירעה בעיית חיוב. אנא ודא שהחיוב (Billing) מופעל עבור פרויקט ה-Google Cloud המשויך למפתח ה-API שלך.";
+        } else if (error.message.includes('User location is not supported')) {
+            userFriendlyError = "המיקום שממנו אתה מנסה לגשת אינו נתמך כרגע על ידי ה-API.";
+        } else {
+             userFriendlyError = "אירעה שגיאה לא צפויה בעת התקשורת עם שירות ה-AI.";
+        }
+    }
+    
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "An internal error occurred." }),
+      body: JSON.stringify({ error: userFriendlyError }),
     };
   }
 };

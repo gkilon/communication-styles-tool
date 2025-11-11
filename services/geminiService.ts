@@ -22,8 +22,9 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     if (!response.ok) {
       // Try to get a meaningful error message from the server function's response.
       const errorData = await response.json().catch(() => ({ error: 'תקלה בתקשורת עם השרת.' }));
-      console.error(`Error from Netlify function (${response.status}):`, errorData.error);
-      return `מצטער, חוויתי תקלה טכנית (${response.status}). אנא נסה שוב מאוחר יותר.`;
+      const detailedError = errorData.error || `קוד סטטוס ${response.status}`;
+      console.error(`Error from Netlify function (${response.status}):`, detailedError);
+      return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;
     }
 
     const data = await response.json();
