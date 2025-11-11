@@ -20,6 +20,12 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     });
 
     if (!response.ok) {
+        if (response.status === 404) {
+            const detailedError = "נקודת הקצה של השרת לא נמצאה (שגיאת 404). ייתכן שהפונקציה לא הופעלה כראוי.";
+            console.error(`Error from Netlify function (${response.status}):`, detailedError);
+            return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;
+        }
+        
         let detailedError;
         try {
             // First, try to parse the response as JSON, as the server should return a JSON error

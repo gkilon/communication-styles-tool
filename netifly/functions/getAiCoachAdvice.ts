@@ -1,20 +1,31 @@
-// Fix: Use standard package imports for Node.js environment.
-import { GoogleGenAI } from "@google/genai";
-import type { Handler } from "@netlify/functions";
+// Deno-compatible imports from CDN
+import { GoogleGenAI } from "https://esm.sh/@google/genai@^1.29.0";
+import type { Handler, HandlerContext, HandlerEvent } from "https://deno.land/x/netlify_functions@v2.6.2/mod.ts";
 
+// Fix for TypeScript not recognizing the Deno global object in some environments.
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 
 // This is the serverless function that will securely call the Gemini API
-const handler: Handler = async (event) => {
+const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { 
+      statusCode: 405, 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Method Not Allowed' })
+    };
   }
 
-  // Fix: Use process.env for Node.js environment, as Deno is not available.
-  const apiKey = process.env.API_KEY;
+  // Use Deno.env.get for Deno runtime
+  const apiKey = Deno.env.get("API_KEY");
 
   if (!apiKey) {
     return { 
       statusCode: 500, 
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: "מפתח ה-API אינו מוגדר בשרת." }) 
     };
   }
@@ -23,7 +34,11 @@ const handler: Handler = async (event) => {
     const { scores, userInput } = JSON.parse(event.body || '{}');
 
     if (!scores || !userInput) {
-      return { statusCode: 400, body: JSON.stringify({ error: "Missing scores or userInput in request" }) };
+      return { 
+        statusCode: 400, 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: "Missing scores or userInput in request" }) 
+      };
     }
 
     const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -57,11 +72,12 @@ const handler: Handler = async (event) => {
 
     return {
       statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: response.text }),
     };
 
   } catch (error) {
-    console.error("שגיאה בפונקציית Netlify:", error);
+    console.error("שגיאה בפונקציית Netlify (Deno):", error);
     let userFriendlyError = "אירעה שגיאה פנימית בשרת.";
 
     if (error instanceof Error && error.message) {
@@ -80,6 +96,7 @@ const handler: Handler = async (event) => {
     
     return {
       statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: userFriendlyError }),
     };
   }
