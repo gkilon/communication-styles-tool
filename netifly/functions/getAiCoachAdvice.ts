@@ -1,5 +1,6 @@
-import { GoogleGenAI } from "https://aistudiocdn.com/@google/genai@^1.29.0";
-import type { Handler } from "https://aistudiocdn.com/@netlify/functions@^5.1.0";
+import { GoogleGenAI } from "npm:@google/genai@^1.29.0";
+import type { Handler } from "npm:@netlify/functions@^5.1.0";
+
 
 // This is the serverless function that will securely call the Gemini API
 const handler: Handler = async (event) => {
@@ -10,7 +11,7 @@ const handler: Handler = async (event) => {
   if (!process.env.API_KEY) {
     return { 
       statusCode: 500, 
-      body: JSON.stringify({ error: "API key is not configured on the server." }) 
+      body: JSON.stringify({ error: "מפתח ה-API אינו מוגדר בשרת." }) 
     };
   }
 
@@ -67,8 +68,10 @@ const handler: Handler = async (event) => {
         } else if (error.message.includes('User location is not supported')) {
             userFriendlyError = "המיקום שממנו אתה מנסה לגשת אינו נתמך כרגע על ידי ה-API.";
         } else {
-             userFriendlyError = "אירעה שגיאה לא צפויה בעת התקשורת עם שירות ה-AI.";
+             userFriendlyError = `אירעה שגיאה לא צפויה בעת התקשורת עם שירות ה-AI. פרטי השגיאה: ${error.message}`;
         }
+    } else {
+        userFriendlyError = `אירעה שגיאה לא ידועה בשרת. פרטי השגיאה: ${String(error)}`;
     }
     
     return {

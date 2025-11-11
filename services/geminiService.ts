@@ -20,18 +20,26 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     });
 
     if (!response.ok) {
-      // Try to get a meaningful error message from the server function's response.
-      const errorData = await response.json().catch(() => ({ error: 'תקלה בתקשורת עם השרת.' }));
-      const detailedError = errorData.error || `קוד סטטוס ${response.status}`;
-      console.error(`Error from Netlify function (${response.status}):`, detailedError);
-      return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;
+        let detailedError;
+        try {
+            // First, try to parse the response as JSON, as the server should return a JSON error
+            const errorData = await response.json();
+            detailedError = errorData.error || `קוד סטטוס ${response.status}`;
+        } catch (e) {
+            // If JSON parsing fails, it means the server function crashed and returned something else (like HTML or plain text)
+            console.error("Could not parse JSON error response. Status:", response.status);
+            detailedError = "השרת החזיר תגובה בפורמט לא תקין, ייתכן שנפלה בו שגיאה קריטית.";
+        }
+        console.error(`Error from Netlify function (${response.status}):`, detailedError);
+        return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;
     }
-
+    
+    // If response is OK, it should be valid JSON.
     const data = await response.json();
     return data.text;
 
   } catch (error) {
     console.error("Error calling the Netlify function endpoint:", error);
-    return "מצטער, חוויתי תקלה טכנית. אנא בדוק את חיבור האינטרנט שלך ונסה שוב.";
+    return "מצטער, חוויתי תקלת רשת בתקשורת עם השרת. אנא בדוק את חיבור האינטרנט שלך ונסה שוב.";
   }
 };
