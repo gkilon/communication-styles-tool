@@ -9,8 +9,8 @@ import { Scores } from '../types';
  */
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
-    // The endpoint for our Netlify function. Netlify automatically maps this path.
-    const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
+    // The endpoint for our Netlify function, using the clean /api proxy.
+    const response = await fetch('/api/getAiCoachAdvice', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -23,24 +23,24 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
         if (response.status === 404) {
             const detailedError = "נקודת הקצה של השרת לא נמצאה (שגיאת 404). ייתכן שהפונקציה לא הופעלה כראוי.";
             console.error(`Error from Netlify function (${response.status}):`, detailedError);
-            return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;
+            return detailedError;
         }
         
-        let detailedError;
         try {
-            // First, try to parse the response as JSON, as the server should return a JSON error
+            // The server should return a JSON object with a user-friendly 'error' field.
             const errorData = await response.json();
-            detailedError = errorData.error || `קוד סטטוס ${response.status}`;
+            const detailedError = errorData.error || `אירעה שגיאה לא צפויה מהשרת (קוד ${response.status}).`;
+            console.error(`Error from Netlify function (${response.status}):`, detailedError);
+            return detailedError;
         } catch (e) {
-            // If JSON parsing fails, it means the server function crashed and returned something else (like HTML or plain text)
+            // If JSON parsing fails, it's an unexpected server error.
+            const detailedError = "השרת החזיר תגובה בפורמט לא תקין, ייתכן שנפלה בו שגיאה קריטית.";
             console.error("Could not parse JSON error response. Status:", response.status);
-            detailedError = "השרת החזיר תגובה בפורמט לא תקין, ייתכן שנפלה בו שגיאה קריטית.";
+            return detailedError;
         }
-        console.error(`Error from Netlify function (${response.status}):`, detailedError);
-        return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;
     }
     
-    // If response is OK, it should be valid JSON.
+    // If response is OK, it should be valid JSON with a 'text' field.
     const data = await response.json();
     return data.text;
 
