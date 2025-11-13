@@ -57,7 +57,7 @@ const App: React.FC = () => {
   };
   
   const handleAuthenticate = (password: string): boolean => {
-    if (password === 'inspire') {
+    if (password === 'Admin2024') {
       setIsAuthenticated(true);
       return true;
     }

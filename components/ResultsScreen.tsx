@@ -88,7 +88,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
     <div className="space-y-8 animate-fade-in-up">
       {/* Wrapper for PDF content */}
       <div ref={resultsRef} className="bg-gray-900 p-4 sm:p-6 md:p-8 rounded-lg">
-        <h2 className="text-3xl font-bold text-center text-cyan-400 mb-6">פרופיל תקשורת</h2>
         <div className="flex flex-col lg:flex-row gap-8 mb-8">
           <div className="flex-none lg:w-1/3 bg-gray-800 p-4 sm:p-6 rounded-lg shadow-xl">
             <ResultsChart scores={scores} />
