@@ -57,14 +57,15 @@ exports.handler = async (event) => {
     } catch (geminiErr) {
       // אם Gemini כשל – נחזיר את הדמה עם אותו התוכן
       // אם המשתמש לא כתב כלום או רק מילה-שתיים – נחזיר גנרי, אחרת – נחזיר תשובה מותאמת
-const isShort = !userInput || userInput.trim().split(/\s+/).length <= 2;
 const fallback = isShort
   ? `היי! פרופיל התקשורת שלך מראה איזון מעניין בין כל ארבעת הצבעים. כדי לתת לך המלצה מדויקת, ספר לי בבקשה מה המצב איתו אתה רוצה עזרה (לדוגמה: "איך לנהל צוות?", "איך להציג רעיון למנהל שלי?")`
   : `היי! על בסיס הציונים שלך (אדום: ${scores.a}, כחול: ${scores.b}, ירוק: ${scores.c}, צהוב: ${scores.d}) – הנה המלצה מותאמת: נראה שאתה משלב בין יצירתיות ומיקוד במשימות. כשאתה פונה לאנשים, כדאי לך להתחיל בקשר אישי (צהוב), לספק נתונים ברורים (כחול) ולבסוף לשתף בחזון (אדום). בהצלחה!`;
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: fallback })
-      };
+
+return {
+  statusCode: 200,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ text: fallback })
+};
     }
   } catch (err) {
     console.error(err);
