@@ -34,7 +34,11 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
         } catch (e) {
             // If JSON parsing fails, it means the server function crashed and returned something else (like HTML or plain text)
             console.error("Could not parse JSON error response. Status:", response.status);
-            detailedError = "השרת החזיר תגובה בפורמט לא תקין, ייתכן שנפלה בו שגיאה קריטית.";
+            if (response.status === 502 || response.status === 503 || response.status === 504) {
+                detailedError = `השרת אינו זמין או לא הגיב בזמן (שגיאת ${response.status}). ייתכן שיש עומס כבד או שהפונקציה לקחה יותר מדי זמן להסתיים. אנא נסה שוב בעוד מספר רגעים.`;
+            } else {
+                detailedError = "השרת החזיר תגובה בפורמט לא תקין, ייתכן שנפלה בו שגיאה קריטית.";
+            }
         }
         console.error(`Error from Netlify function (${response.status}):`, detailedError);
         return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;

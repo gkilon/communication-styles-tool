@@ -64,7 +64,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       אל תזכיר שאתה מודל שפה או AI. דבר כמאמן מומחה.
     `;
     
-    const generateWithRetry = async (retries = 5, delay = 1000) => {
+    const generateWithRetry = async (retries = 3, delay = 500) => {
       for (let i = 0; i < retries; i++) {
         try {
           const response = await ai.models.generateContent({
