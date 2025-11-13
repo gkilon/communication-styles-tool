@@ -10,7 +10,7 @@ import { Scores } from '../types';
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
     // The endpoint for our Netlify function, using the clean /api proxy.
-    const response = await fetch('/api/getAiCoachAdvice', {
+    const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
