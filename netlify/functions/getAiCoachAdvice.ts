@@ -63,14 +63,36 @@ const handler: Handler = async (event: HandlerEvent) => {
       היה חיובי, תומך וממוקד בפתרונות.
       אל תזכיר שאתה מודל שפה או AI. דבר כמאמן מומחה.
     `;
+    
+    const generateWithRetry = async (retries = 3, delay = 1000) => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          const response = await ai.models.generateContent({
+              model: "gemini-2.5-flash",
+              contents: userInput,
+              config: {
+                  systemInstruction: systemInstruction,
+              }
+          });
+          return response;
+        } catch (error: any) {
+          const errorMessage = error.message || String(error);
+          const isOverloaded = errorMessage.includes('overloaded') || errorMessage.includes('503');
 
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: userInput,
-        config: {
-            systemInstruction: systemInstruction,
+          if (isOverloaded && i < retries - 1) {
+            console.log(`Model overloaded. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+            await new Promise(res => setTimeout(res, delay));
+            delay *= 2; // Exponential backoff
+          } else {
+            throw error; // Re-throw if it's not an overload error or if retries are exhausted
+          }
         }
-    });
+      }
+      // This should be unreachable if the logic is correct, but satisfies TypeScript
+      throw new Error("Failed to get response from AI after multiple retries.");
+    };
+
+    const response = await generateWithRetry();
 
     // Return a successful response
     return {
@@ -83,20 +105,18 @@ const handler: Handler = async (event: HandlerEvent) => {
     console.error("שגיאה בפונקציית Netlify (Node.js):", error);
     let userFriendlyError = "אירעה שגיאה פנימית בשרת.";
     
-    if (error && error.message) {
-        if (error.message.includes('overloaded')) {
-            userFriendlyError = "מצטער, נראה שיש עומס על שירות ה-AI כרגע. אנא נסה שוב בעוד מספר דקות.";
-        } else if (error.message.includes('API key not valid') || error.message.includes('permission denied')) {
-            userFriendlyError = "מפתח ה-API שסופק אינו תקין או שאין לו הרשאות מתאימות. אנא ודא שהמפתח נכון ופעיל בחשבון Google AI Studio שלך.";
-        } else if (error.message.includes('billing')) {
-            userFriendlyError = "אירעה בעיית חיוב. אנא ודא שהחיוב (Billing) מופעל עבור פרויקט ה-Google Cloud המשויך למפתח ה-API שלך.";
-        } else if (error.message.includes('User location is not supported')) {
-            userFriendlyError = "המיקום שממנו אתה מנסה לגשת אינו נתמך כרגע על ידי ה-API.";
-        } else {
-             userFriendlyError = `אירעה שגיאה לא צפויה בעת התקשורת עם שירות ה-AI. פרטי השגיאה: ${error.message}`;
-        }
+    const errorMessage = error.message || String(error);
+
+    if (errorMessage.includes('overloaded') || errorMessage.includes('503')) {
+        userFriendlyError = "מצטער, נראה שיש עומס על שירות ה-AI כרגע. אנא נסה שוב בעוד מספר דקות.";
+    } else if (errorMessage.includes('API key not valid') || errorMessage.includes('permission denied')) {
+        userFriendlyError = "מפתח ה-API שסופק אינו תקין או שאין לו הרשאות מתאימות. אנא ודא שהמפתח נכון ופעיל בחשבון Google AI Studio שלך.";
+    } else if (errorMessage.includes('billing')) {
+        userFriendlyError = "אירעה בעיית חיוב. אנא ודא שהחיוב (Billing) מופעל עבור פרויקט ה-Google Cloud המשויך למפתח ה-API שלך.";
+    } else if (errorMessage.includes('User location is not supported')) {
+        userFriendlyError = "המיקום שממנו אתה מנסה לגשת אינו נתמך כרגע על ידי ה-API.";
     } else {
-        userFriendlyError = `אירעה שגיאה לא ידועה בשרת. פרטי השגיאה: ${String(error)}`;
+         userFriendlyError = `אירעה שגיאה לא צפויה בעת התקשורת עם שירות ה-AI. פרטי השגיאה: ${errorMessage}`;
     }
     
     // Return a server error response
