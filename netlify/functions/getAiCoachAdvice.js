@@ -1,11 +1,7 @@
-import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI } from "@google/genai";
+// getAiCoachAdvice.js
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// This is the standard handler for Netlify Functions in a Node.js environment.
-const handler: Handler = async (event: HandlerEvent) => {
-  // Ensure the request is a POST request
+exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -14,8 +10,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     };
   }
 
-  // Get the API key from environment variables
-  // In Netlify's Node.js runtime, environment variables are on `process.env`
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
@@ -27,14 +21,6 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   try {
-    // Parse the request body. In Netlify functions, the body is a string.
-    if (!event.body) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Request body is missing" }),
-        headers: { 'Content-Type': 'application/json' }
-      };
-    }
     const { scores, userInput } = JSON.parse(event.body);
 
     if (!scores || !userInput) {
@@ -45,7 +31,10 @@ const handler: Handler = async (event: HandlerEvent) => {
       };
     }
 
+    // נשתמש ב-GoogleGenAI – נדריך אותך איך להתקין אותו בעוד רגע
+    const { GoogleGenAI } = require("@google/genai");
     const ai = new GoogleGenAI({ apiKey });
+
     const maxScore = 15 * 5;
 
     const systemInstruction = `
@@ -66,66 +55,24 @@ const handler: Handler = async (event: HandlerEvent) => {
       אל תזכיר שאתה מודל שפה או AI. דבר כמאמן מומחה.
     `;
 
-    const maxRetries = 3;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
-                contents: userInput,
-                config: {
-                    systemInstruction: systemInstruction,
-                }
-            });
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: userInput,
+      config: { systemInstruction }
+    });
 
-            // Return a successful response
-            return {
-              statusCode: 200,
-              body: JSON.stringify({ text: response.text }),
-              headers: { 'Content-Type': 'application/json' },
-            };
-        } catch (error: any) {
-            console.error(`Attempt ${attempt} to call Gemini API failed:`, error.message);
-            const isRetryable = error.message && (error.message.includes('503') || error.message.toLowerCase().includes('overloaded'));
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: response.text })
+    };
 
-            if (isRetryable && attempt < maxRetries) {
-                const delay = Math.pow(2, attempt) * 500; // 1s, 2s
-                console.log(`Model is overloaded. Retrying in ${delay}ms...`);
-                await sleep(delay);
-            } else {
-                throw error; // Throw to be caught by the outer catch block
-            }
-        }
-    }
-     // This should ideally not be reached, but as a safe fallback
-    throw new Error('All retry attempts failed.');
-
-  } catch (error: any) {
-    console.error("שגיאה בפונקציית Netlify (Node.js):", error);
-    let userFriendlyError = "אירעה שגיאה פנימית בשרת.";
-    
-    if (error && error.message) {
-        if (error.message.includes('API key not valid') || error.message.includes('permission denied')) {
-            userFriendlyError = "מפתח ה-API שסופק אינו תקין או שאין לו הרשאות מתאימות.";
-        } else if (error.message.includes('billing')) {
-            userFriendlyError = "אירעה בעיית חיוב בפרויקט Google Cloud המשויך למפתח.";
-        } else if (error.message.includes('User location is not supported')) {
-            userFriendlyError = "המיקום שממנו אתה מנסה לגשת אינו נתמך כרגע על ידי ה-API.";
-        } else if (error.message.includes('503') || error.message.toLowerCase().includes('overloaded')) {
-             userFriendlyError = "מצטער, נראה שיש עומס על שירות ה-AI כרגע. אנא נסה שוב בעוד מספר דקות.";
-        } else {
-             userFriendlyError = `אירעה שגיאה לא צפויה בעת התקשורת עם שירות ה-AI. אנא נסה שוב מאוחר יותר.`;
-        }
-    } else {
-        userFriendlyError = `אירעה שגיאה לא ידועה בשרת.`;
-    }
-    
-    // Return a server error response
+  } catch (err) {
+    console.error("שגיאה בפונקציית Netlify:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: userFriendlyError }),
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: "אירעה שגיאה פנימית בשרת." })
     };
   }
 };
-
-export { handler };
