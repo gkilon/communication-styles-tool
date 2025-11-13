@@ -27,7 +27,7 @@
     "constants",
     "services",
     "types",
-    "netlify/functions/getAiCoachAdvice.ts"
+    "netlify/functions"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

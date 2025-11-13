@@ -19,7 +19,7 @@ export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value,
         type="range"
         min="1"
         max="6"
-        step="1"
+        step="0.5"
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
