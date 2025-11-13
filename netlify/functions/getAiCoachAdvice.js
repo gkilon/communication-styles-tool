@@ -55,12 +55,11 @@ exports.handler = async (event) => {
       אל תזכיר שאתה מודל שפה או AI. דבר כמאמן מומחה.
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: userInput,
-      config: { systemInstruction }
-    });
-
+    const prompt = systemInstruction + "\n\nשאלת המשתמש: " + userInput;
+const response = await ai.models.generateContent({
+  model: "gemini-2.5-flash",
+  contents: prompt
+});
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
