@@ -65,7 +65,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     `;
 
     const response = await ai.models.generateContent({
-        model: "gemini-2.5-pro",
+        model: "gemini-2.5-flash",
         contents: userInput,
         config: {
             systemInstruction: systemInstruction,
@@ -84,7 +84,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     let userFriendlyError = "אירעה שגיאה פנימית בשרת.";
     
     if (error && error.message) {
-        if (error.message.includes('API key not valid') || error.message.includes('permission denied')) {
+        if (error.message.includes('overloaded')) {
+            userFriendlyError = "מצטער, נראה שיש עומס על שירות ה-AI כרגע. אנא נסה שוב בעוד מספר דקות.";
+        } else if (error.message.includes('API key not valid') || error.message.includes('permission denied')) {
             userFriendlyError = "מפתח ה-API שסופק אינו תקין או שאין לו הרשאות מתאימות. אנא ודא שהמפתח נכון ופעיל בחשבון Google AI Studio שלך.";
         } else if (error.message.includes('billing')) {
             userFriendlyError = "אירעה בעיית חיוב. אנא ודא שהחיוב (Billing) מופעל עבור פרויקט ה-Google Cloud המשויך למפתח ה-API שלך.";
