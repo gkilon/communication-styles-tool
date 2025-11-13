@@ -60,11 +60,15 @@ const response = await ai.models.generateContent({
   model: "gemini-2.5-flash",
   contents: prompt
 });
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: response.text })
-    };
+    let answer = response.text;
+if (!answer || answer.trim() === "") {
+  answer = `היי! פרופיל התקשורת שלך מראה איזון מעניין בין כל ארבעת הצבעים. כדי לתת לך המלצה מדויקת, ספר לי בבקשה מה המצב איתו אתה רוצה עזרה (לדוגמה: "איך לנהל צוות?", "איך להציג רעיון למנהל שלי?")`;
+}
+return {
+  statusCode: 200,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ text: answer })
+};
 
   } catch (err) {
     console.error("שגיאה בפונקציית Netlify:", err);
