@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const [answers, setAnswers] = useState<Record<string, number>>(() => {
     const initialAnswers: Record<string, number> = {};
     QUESTION_PAIRS.forEach(q => {
-      initialAnswers[q.id] = 3.5; // Start in the middle
+      initialAnswers[q.id] = 4; // Default to a side, no middle option.
     });
     return initialAnswers;
   });
@@ -44,7 +44,7 @@ const App: React.FC = () => {
   const handleReset = () => {
      const initialAnswers: Record<string, number> = {};
     QUESTION_PAIRS.forEach(q => {
-      initialAnswers[q.id] = 3.5; // Start in the middle
+      initialAnswers[q.id] = 4; // Default to a side, no middle option.
     });
     setAnswers(initialAnswers);
     setCurrentQuestionIndex(0);

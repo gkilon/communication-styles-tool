@@ -1,9 +1,106 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI } from "@google/genai";
 
-// This is the standard handler for Netlify Functions in a Node.js environment.
+// --- Analysis Logic (copied from services/analysisService.ts for self-containment) ---
+
+interface Scores {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+}
+
+interface Analysis {
+  general: string;
+  strengths: string;
+  weaknesses: string;
+  recommendations: string;
+}
+
+const colorData = {
+  red: {
+    name: "אדום",
+    adjective: "הנחוש",
+    general: "מנהיגות טבעית, נחישות ומיקוד במטרה. אתה מונחה תוצאות, אוהב אתגרים ולא חושש לקבל החלטות מהירות.",
+    strengths: ["יכולת הנעת תהליכים", "החלטיות תחת לחץ", "תקשורת ישירה ויעילה", "חתירה למטרה"],
+    weaknesses: ["חוסר סבלנות", "עלול להיתפס כשתלטן או אגרסיבי", "קושי בהקשבה לדעות שונות", "התמקדות ב'מה' על חשבון ה'איך'"],
+    recommendation_focus: "לשלב את הנחישות עם הקשבה פעילה ואמפתיה"
+  },
+  yellow: {
+    name: "צהוב",
+    adjective: "המשפיע",
+    general: "כריזמה, אופטימיות ויכולת להלהיב אחרים. אתה יצירתי, חברותי ושואב אנרגיה מאינטראקציה חברתית.",
+    strengths: ["יצירת קשרים והשפעה חברתית", "הנעה באמצעות חזון והתלהבות", "חשיבה יצירתית וראיית התמונה הגדולה", "יצירת אווירה חיובית"],
+    weaknesses: ["קושי בהתמודדות עם פרטים וסדר", "נטייה להימנע מקונפליקטים", "אופטימיות יתר שעלולה להוביל לחוסר תכנון", "זקוק להכרה ומשוב חיובי"],
+    recommendation_focus: "לתרגם את הרעיונות הגדולים לתוכניות עבודה מעשיות"
+  },
+  green: {
+    name: "ירוק",
+    adjective: "התומך",
+    general: "יציבות, הרמוניה וחשיבות עליונה ליחסים בינאישיים. אתה איש צוות מעולה, סבלני, יודע להקשיב ומהווה עוגן של תמיכה.",
+    strengths: ["יכולת הקשבה ואמפתיה", "אמינות ויציבות", "גישור ופתרון קונפליקטיפ", "יצירת סביבת עבודה תומכת והרמונית"],
+    weaknesses: ["הימנעות מקונפליקטים ועימותים", "התנגדות לשינויים פתאומיים", "קושי בקבלת החלטות מהירות", "נטייה לוותר על צרכים אישיים למען הקבוצה"],
+    recommendation_focus: "להביע את דעתך ועמדותיך באופן אסרטיבי ומכבד"
+  },
+  blue: {
+    name: "כחול",
+    adjective: "המדויק",
+    general: "חשיבה אנליטית, יסודיות ושאיפה לאיכות ללא פשרות. אתה מבוסס נתונים, מקפיד על פרטים, נהלים וסדר.",
+    strengths: ["תכנון וארגון מעולים", "דיוק ותשומת לב לפרטים", "חשיבה לוגית ואנליטית", "שמירה על סטנדרטים גבוהים"],
+    weaknesses: ["ביקורתיות יתר (עצמית וכלפי אחרים)", "שיתוק כתוצאה מעודף ניתוח (Analysis paralysis)", "עלול להיתפס כקר, מרוחק ופסימי", "קושי בגמישות ובאילתור"],
+    recommendation_focus: "לאזן בין השאיפה לשלמות לבין הצורך להתקדם ולהיות פרגמטי"
+  }
+};
+
+type Color = keyof typeof colorData;
+
+const generateProfileAnalysis = (scores: Scores): Analysis => {
+  const { a, b, c, d } = scores;
+  const colorScores = { red: a + c, yellow: a + d, green: b + d, blue: b + c };
+  const totalScore = Object.values(colorScores).reduce((sum, score) => sum + score, 0);
+
+  if (totalScore === 0) {
+    return {
+      general: "לא ניתן היה לקבוע פרופיל דומיננטי. ייתכן שהתשובות היו מאוזנות לחלוטין.",
+      strengths: "היכולת לראות את כל הצדדים באופן שווה.",
+      weaknesses: "קושי בקבלת החלטה על נתיב פעולה מועדף.",
+      recommendations: "נסה לבחון באילו מצבים אתה מרגיש יותר בנוח כדי לזהות נטיות טבעיות."
+    };
+  }
+
+  const sortedColors = (Object.keys(colorScores) as Color[]).sort((colorA, colorB) => colorScores[colorB] - colorScores[colorA]);
+  const [dominant, secondary, , weakest] = sortedColors;
+  const dominantData = colorData[dominant];
+  const secondaryData = colorData[secondary];
+  const weakestData = colorData[weakest];
+  const dominantPercentage = Math.round((colorScores[dominant] / totalScore) * 100);
+  const secondaryPercentage = Math.round((colorScores[secondary] / totalScore) * 100);
+
+  let general = `הפרופיל שלך מראה דומיננטיות של הסגנון ה${dominantData.name} (${dominantData.adjective}), המהווה כ-${dominantPercentage}% מהתמהיל. זה אומר שהנטייה הטבעית שלך היא לכיוון של ${dominantData.general.toLowerCase()}`;
+  if (secondaryPercentage > 20) {
+    general += ` הסגנון המשני הבולט שלך הוא ה${secondaryData.name} (${secondaryData.adjective}), התורם כ-${secondaryPercentage}% לפרופיל. שילוב זה מעניק לך גישה ייחודית.`;
+  } else {
+    general += " הפרופיל שלך ממוקד מאוד, מה שהופך את סגנון התקשורת שלך לעקבי וצפוי עבור אחרים."
+  }
+  
+  let strengths = `החוזקות הבולטות שלך נובעות מהסגנון ה${dominantData.name}. אתה מצטיין ב${dominantData.strengths[0]} וב${dominantData.strengths[1]}.`;
+  if (secondaryPercentage > 20) {
+      strengths += ` הסגנון ה${secondaryData.name} מוסיף לכך ${secondaryData.strengths[0]} ו${secondaryData.strengths[1]}.`;
+  }
+
+  let weaknesses = `כל חוזקה מגיעה עם "צד צל". הדומיננטיות של סגנון ה${dominantData.name} עלולה להוביל לעיתים ל${dominantData.weaknesses[0]} או ${dominantData.weaknesses[1]}.`;
+  weaknesses += ` המינון הנמוך יחסית של הסגנון ה${weakestData.name} בפרופיל שלך מצביע על כך שתכונות כמו ${weakestData.strengths[0]} ו${weakestData.strengths[1]} אינן הנטייה הטבעית שלך, ודורשות ממך מאמץ מודע יותר.`
+
+  let recommendations = `כדי למקסם את הפוטנציאל שלך, התמקד ב${dominantData.recommendation_focus.toLowerCase()}.`;
+  recommendations += ` המלצה מרכזית עבורך היא להגביר את המודעות לאיכויות של הסגנון ה${weakestData.name}. לדוגמה, נסה באופן יזום ${weakestData.recommendation_focus.toLowerCase()}, גם אם זה מרגיש פחות טבעי.`
+  
+  return { general, strengths, weaknesses, recommendations };
+};
+
+
+// --- Netlify Function Handler ---
+
 const handler: Handler = async (event: HandlerEvent) => {
-  // Ensure the request is a POST request
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -12,8 +109,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     };
   }
 
-  // Get the API key from environment variables
-  // In Netlify's Node.js runtime, environment variables are on `process.env`
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
@@ -25,7 +120,6 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   try {
-    // Parse the request body. In Netlify functions, the body is a string.
     if (!event.body) {
       return {
         statusCode: 400,
@@ -46,22 +140,32 @@ const handler: Handler = async (event: HandlerEvent) => {
     const ai = new GoogleGenAI({ apiKey });
     const maxScore = 15 * 5;
 
+    // Generate the textual analysis to enrich the prompt
+    const analysis = generateProfileAnalysis(scores);
+
     const systemInstruction = `
       אתה מאמן אישי ויועץ ארגוני מומחה, המתמחה בסגנונות תקשורת על פי מודל ארבעת הצבעים.
-      המשתמש שאתה מדבר איתו סיים שאלון, וזהו תיאור פרופיל התקשורת המלא שלו:
+      המשתמש שאתה מדבר איתו סיים שאלון, וזהו תיאור פרופיל התקשורת המלא שלו. השתמש בכל המידע הבא כדי לספק לו את הייעוץ המדויק והאישי ביותר.
+
+      **חלק א': ניתוח מילולי של הפרופיל (ההקשר החשוב ביותר):**
+      - **ניתוח כללי:** ${analysis.general}
+      - **חוזקות עיקריות:** ${analysis.strengths}
+      - **אזורים לפיתוח:** ${analysis.weaknesses}
+
+      **חלק ב': נתונים גולמיים (לעיון נוסף):**
       - נטייה למוחצנות (סגנונות אדום/צהוב): ציון ${scores.a} מתוך ${maxScore}.
       - נטייה למופנמות (סגנונות כחול/ירוק): ציון ${scores.b} מתוך ${maxScore}.
       - נטייה למשימתיות (סגנונות אדום/כחול): ציון ${scores.c} מתוך ${maxScore}.
       - נטייה לאנושיות (סגנונות צהוב/ירוק): ציון ${scores.d} מתוך ${maxScore}.
       
-      אל תזכיר את הציונים המספריים בתשובותיך. השתמש במידע זה רק כדי להבין את הפרופיל שלו לעומק.
-
-      כשאתה עונה על שאלות המשתמש, עליך לספק תשובות מקצועיות, מעשיות ומעצימות בעברית, בשפה קולחת ופשוטה.
-      בסס את תשובותיך על **השילוב והאיזון** בין כל ארבעת הצבעים בפרופיל שלו, ולא רק על הסגנון הדומיננטי.
-      
-      התשובות צריכות להיות מעוצבות ב-Markdown לקריאות נוחה.
-      היה חיובי, תומך וממוקד בפתרונות.
-      אל תזכיר שאתה מודל שפה או AI. דבר כמאמן מומחה.
+      **הנחיות כלליות לתשובותיך:**
+      1. אל תזכיר את הציונים המספריים או את הניתוח המילולי שקיבלת כאן. השתמש במידע זה כהקשר פנימי בלבד כדי להבין את המשתמש לעומק.
+      2. ענה על שאלת המשתמש באופן ישיר, מקצועי, מעשי ומעצים.
+      3. השתמש בשפה עברית, קולחת ופשוטה.
+      4. בסס את תשובותיך על **השילוב והאיזון** בין כל ארבעת הצבעים בפרופיל שלו.
+      5. עצב את התשובות ב-Markdown לקריאות נוחה (רשימות, הדגשות וכו').
+      6. היה חיובי, תומך וממוקד בפתרונות.
+      7. אל תזכיר שאתה מודל שפה או AI. דבר כמאמן מומחה.
     `;
     
     const generateWithRetry = async (retries = 5, delay = 500) => {
@@ -84,17 +188,15 @@ const handler: Handler = async (event: HandlerEvent) => {
             await new Promise(res => setTimeout(res, delay));
             delay *= 2; // Exponential backoff
           } else {
-            throw error; // Re-throw if it's not an overload error or if retries are exhausted
+            throw error;
           }
         }
       }
-      // This should be unreachable if the logic is correct, but satisfies TypeScript
       throw new Error("Failed to get response from AI after multiple retries.");
     };
 
     const response = await generateWithRetry();
 
-    // Return a successful response
     return {
       statusCode: 200,
       body: JSON.stringify({ text: response.text }),
@@ -119,7 +221,6 @@ const handler: Handler = async (event: HandlerEvent) => {
          userFriendlyError = `אירעה שגיאה לא צפויה בעת התקשורת עם שירות ה-AI. פרטי השגיאה: ${errorMessage}`;
     }
     
-    // Return a server error response
     return {
       statusCode: 500,
       body: JSON.stringify({ error: userFriendlyError }),
