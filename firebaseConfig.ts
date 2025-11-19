@@ -3,48 +3,48 @@ import { initializeApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
 
-// קריאת משתני סביבה - המפתחות נלקחים מקובץ .env ולא כתובים ישירות בקוד
-// Cast import.meta to any to avoid TypeScript errors when Vite types are not globally loaded
+// Cast import.meta to any to avoid TypeScript errors
 const env = (import.meta as any).env || {};
 
+// --- הוראות ---
+// מכיוון שיש בעיה להגדיר משתנים ב-Netlify, אנא הדבק את המפתחות שלך ישירות כאן למטה.
+// החלף את המחרוזת "הדבק כאן..." בערך האמיתי מתוך מסוף פיירבייס.
+// (Project Settings -> General -> Your apps -> SDK setup and configuration)
+
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: env.VITE_FIREBASE_APP_ID,
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyAzP5HCS_qly0jmPT3hkdsn05NlPq1haNA",
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "communication-tool-4d386.firebaseapp.com",
+  projectId: env.VITE_FIREBASE_PROJECT_ID || "communication-tool-4d386",
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "communication-tool-4d386.firebasestorage.app",
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "837244077464",
+  appId: env.VITE_FIREBASE_APP_ID || "1:837244077464:web:95ffac269ba42de4d457ed"
 };
 
-// משתנים לייצוא - ברירת מחדל לאובייקטים ריקים כדי למנוע קריסה בייבוא אם אין קונפיגורציה
-// Initialize with a minimal mock to prevent immediate crashes if accessed before init
 let auth: Auth = { currentUser: null } as unknown as Auth;
 let db: Firestore = {} as Firestore;
 let isFirebaseInitialized = false;
 
-// פונקציית עזר לבדיקת תקינות בסיסית של המפתח
-const isApiKeyValid = (key: string | undefined) => {
-    // מפתחות Firebase הם מחרוזות ארוכות (כ-39 תווים). בדיקה זו מסננת מחרוזות ריקות או placeholders
-    return key && typeof key === 'string' && key.length > 20 && !key.includes("API_KEY");
+// פונקציה פשוטה לבדיקה אם הוכנס מפתח אמיתי (לא ריק ולא הטקסט "הדבק כאן")
+const isConfigValid = (config: typeof firebaseConfig) => {
+    return config.apiKey && 
+           config.apiKey.length > 20 && 
+           !config.apiKey.includes("הדבק כאן");
 };
 
-// בדיקה אם הקונפיגורציה קיימת ותקינה לפני שמנסים לאתחל
-if (isApiKeyValid(firebaseConfig.apiKey)) {
+if (isConfigValid(firebaseConfig)) {
     try {
-        // אתחול האפליקציה רק אם יש מפתח API תקין לכאורה
         const app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
         isFirebaseInitialized = true;
+        console.log("Firebase initialized successfully connected to project:", firebaseConfig.projectId);
     } catch (error) {
         console.error("Failed to initialize Firebase:", error);
         isFirebaseInitialized = false;
     }
 } else {
-    console.warn("Firebase config keys are missing or invalid. App running in offline/simple mode.");
+    console.warn("Firebase keys are missing. Please edit firebaseConfig.ts and paste your keys.");
     isFirebaseInitialized = false;
 }
 
-// ייצוא שירותי האימות והמסד נתונים לשימוש בשאר האפליקציה
 export { auth, db, isFirebaseInitialized };
