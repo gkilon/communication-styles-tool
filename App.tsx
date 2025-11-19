@@ -14,36 +14,43 @@ export const App: React.FC = () => {
   const [view, setView] = useState<AppView>('simple');
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
+  // Refactored useEffect for auth listener
   useEffect(() => {
-    if (!isFirebaseInitialized) return;
-
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        try {
-          const profile = await getUserProfile(currentUser.uid);
-          setUserProfile(profile);
-          if (profile?.role === 'admin') {
-            setView('admin');
-          } else {
-            setView('team_app');
-          }
-        } catch (error) {
-          console.error("Error fetching profile:", error);
-          setView('team_app'); // Fallback
-        }
-      } else {
-        // If we were in a restricted view, go back to simple or auth
-        setUserProfile(null);
-        if (view === 'admin' || view === 'team_app') {
-          setView('auth');
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, [view]);
+     if (!isFirebaseInitialized || !auth) {
+         setIsAuthChecking(false);
+         return;
+     }
+     
+     try {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            setUser(currentUser);
+            if (currentUser) {
+                try {
+                    const profile = await getUserProfile(currentUser.uid);
+                    setUserProfile(profile);
+                    if (profile?.role === 'admin') {
+                        setView('admin');
+                    } else {
+                        setView('team_app');
+                    }
+                } catch (e) {
+                    console.error("Error fetching user profile", e);
+                    setView('team_app');
+                }
+            } else {
+                setUserProfile(null);
+            }
+            setIsAuthChecking(false);
+        });
+        
+        return () => unsubscribe();
+     } catch (error) {
+        console.error("Auth listener setup failed:", error);
+        setIsAuthChecking(false);
+     }
+  }, []);
 
   const handleSwitchToTeamLogin = () => {
     if (!isFirebaseInitialized) {
@@ -58,7 +65,7 @@ export const App: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    if (isFirebaseInitialized) {
+    if (isFirebaseInitialized && auth) {
       await signOut(auth);
       setView('simple');
     }
@@ -75,14 +82,14 @@ export const App: React.FC = () => {
         );
       case 'auth':
         return (
-          <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 p-4">
+          <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 p-4 animate-fade-in-up">
             <button 
               onClick={handleBackToSimple}
               className="mb-8 text-gray-400 hover:text-white flex items-center gap-2 transition-colors"
             >
               <span>← חזרה לשאלון אישי</span>
             </button>
-            <AuthScreen onLoginSuccess={() => {}} />
+            <AuthScreen onLoginSuccess={() => { /* View update handled by auth listener */ }} />
           </div>
         );
       case 'admin':

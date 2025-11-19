@@ -49,22 +49,22 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
         </button>
       </form>
 
-      <div className="mt-8 pt-6 border-t border-gray-700 flex flex-col gap-3">
+      <div className="mt-10 pt-6 border-t border-gray-700 flex flex-col gap-4">
+        <button 
+            onClick={handleReload}
+            className="w-full py-2 px-4 rounded-lg border border-gray-600 text-gray-400 hover:text-white hover:border-gray-500 transition-all text-sm"
+        >
+            מחיקת נתונים והתחלה מחדש
+        </button>
+
         {onSwitchToTeamLogin && (
             <button 
                 onClick={onSwitchToTeamLogin}
-                className="text-sm text-cyan-400 hover:text-cyan-200 transition-colors underline"
+                className="text-sm text-cyan-500 hover:text-cyan-300 transition-colors underline mt-2"
             >
                 כניסה לגרסת צוות / ניהול (Firebase)
             </button>
         )}
-        
-        <button 
-            onClick={handleReload}
-            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
-        >
-            ניקוי וטעינה מחדש
-        </button>
       </div>
     </div>
   );

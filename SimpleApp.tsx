@@ -27,15 +27,18 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
 
-  // Reset state when switching modes
   useEffect(() => {
     setIsAuthenticated(isTeamMode);
-    setStep('intro');
+    if (isTeamMode) {
+        setStep('intro');
+    } else {
+        setIsAuthenticated(false);
+        setStep('intro');
+    }
     setAnswers({});
     setCurrentQuestionIndex(0);
   }, [isTeamMode]);
 
-  // Initialize default answers
   useEffect(() => {
      const defaultAnswers: Record<string, number> = {};
      QUESTION_PAIRS.forEach(q => {
@@ -74,7 +77,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const handleSubmit = async () => {
     setStep('results');
     
-    // Save to Firebase if in Team Mode
     if (isTeamMode && scores && isFirebaseInitialized) {
       try {
         await saveUserResults(scores);
@@ -109,7 +111,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
           
           {isTeamMode && userProfile && (
-            <div className="mt-4 bg-cyan-900/30 inline-block px-4 py-1 rounded-full border border-cyan-700/50">
+            <div className="mt-4 bg-cyan-900/30 inline-block px-4 py-1 rounded-full border border-cyan-700/50 animate-fade-in">
                 <span className="text-cyan-300 text-sm ml-2">מחובר כ: {userProfile.displayName}</span>
                 <span className="text-gray-400 text-sm">| צוות: {userProfile.team}</span>
             </div>
@@ -118,7 +120,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           {isTeamMode && onSignOut && (
             <button 
               onClick={onSignOut}
-              className="absolute top-0 left-0 text-xs sm:text-sm text-gray-500 hover:text-white border border-gray-700 hover:border-gray-500 rounded px-3 py-1 transition-all"
+              className="absolute top-0 left-0 text-xs sm:text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded px-3 py-1 transition-all"
             >
               יציאה
             </button>
