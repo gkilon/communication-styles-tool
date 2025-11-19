@@ -64,7 +64,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     const blue = safeScore(scores?.b) + safeScore(scores?.c);
     
     // Sort colors by value to determine hierarchy
-    // Naming updated to reflect Jungian energies rather than DISC
     const sorted = [
         { name: 'Red (Goal-Oriented / Driving)', val: red },
         { name: 'Yellow (Enthusiastic / Expressive)', val: yellow },
@@ -78,7 +77,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 3. Initialize AI
     const ai = new GoogleGenAI({ apiKey });
 
-    // 4. System Instruction - Updated for Jungian Model, Deep Answers, and No Confusing Numbers
+    // 4. System Instruction - Updated for Jungian Model
     const systemInstruction = `You are an expert communication coach based on the Jungian Color Model (similar to Insights Discovery).
     
     User Profile Analysis:
@@ -91,42 +90,61 @@ const handler: Handler = async (event: HandlerEvent) => {
     Tone: Professional, empathetic, practical, and thorough.
     
     Guidelines:
-    - This is NOT DISC. Do not use DISC terminology (Dominance, Influence, Steadiness, Compliance).
+    - This is NOT DISC. Do not use DISC terminology.
     - Focus on the "Color Energies" (Red, Yellow, Green, Blue) as described in Jungian typology.
     - Do NOT mention the specific raw score numbers (e.g., "Your score is 45") in your final response, as these raw numbers may confuse the user who sees percentages on their chart. Use terms like "High", "Moderate", or "Low" instead.
     - Analyze the user's situation deeply through the lens of their specific color blend.
     - Provide concrete, actionable steps or strategies.
     - Use specific examples to illustrate your points.
-    - Do NOT be brief. Elaborate as much as necessary to provide high value.
+    - Be detailed but concise enough to not time out.
     - Address both their strengths and potential blind spots in the answer.`;
 
-    // 5. Call Gemini API
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: userInput, 
-            config: {
-                systemInstruction: systemInstruction,
-                temperature: 0.7,
-                maxOutputTokens: 2000, // Increased limit for deeper answers
-                // Safety settings to prevent blocking Hebrew content
-                safetySettings: [
-                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-                ]
+    // Helper function for retries
+    const generateWithRetry = async (retries = 3) => {
+        for (let i = 0; i < retries; i++) {
+            try {
+                console.log(`Attempt ${i + 1} calling Gemini...`);
+                const response = await ai.models.generateContent({
+                    model: "gemini-2.5-flash",
+                    contents: userInput, 
+                    config: {
+                        systemInstruction: systemInstruction,
+                        temperature: 0.7,
+                        // Reduced max tokens to 1000 to prevent Netlify function timeouts (10s limit)
+                        maxOutputTokens: 1000, 
+                        safetySettings: [
+                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+                        ]
+                    }
+                });
+                return response;
+            } catch (error) {
+                console.warn(`Attempt ${i + 1} failed:`, error);
+                if (i === retries - 1) throw error;
+                // Exponential backoff: 500ms, 1000ms
+                await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)));
             }
-        });
+        }
+    };
 
-        const responseText = response.text;
+    // 5. Call Gemini API with retry
+    try {
+        const response = await generateWithRetry();
+        const responseText = response?.text;
 
         if (!responseText) {
             console.warn("Empty response text received from Gemini Model.");
+            // Check if blocked
+            if (response?.candidates?.[0]?.finishReason) {
+                 console.warn("Finish Reason:", response.candidates[0].finishReason);
+            }
             
             return {
                 statusCode: 200,
-                body: JSON.stringify({ text: "המערכת לא הצליחה לייצר תשובה לשאלה זו. נסה לנסח את השאלה מחדש." }),
+                body: JSON.stringify({ text: "המערכת לא הצליחה לייצר תשובה (חסימת תוכן או תשובה ריקה). נסה לנסח את השאלה מחדש." }),
                 headers: { 'Content-Type': 'application/json' },
             };
         }
@@ -137,7 +155,7 @@ const handler: Handler = async (event: HandlerEvent) => {
           headers: { 'Content-Type': 'application/json' },
         };
     } catch (innerError: any) {
-         console.error("Inner Gemini Generate Error:", innerError);
+         console.error("Inner Gemini Generate Error after retries:", innerError);
          throw innerError;
     }
 
@@ -147,11 +165,12 @@ const handler: Handler = async (event: HandlerEvent) => {
     let errorMessage = "מצטער, חוויתי תקלה טכנית בתקשורת עם המודל.";
     
     // Extract more details if possible
-    if (error.toString().includes("403") || error.toString().includes("API key")) {
+    const errStr = error.toString();
+    if (errStr.includes("403") || errStr.includes("API key")) {
         errorMessage = "שגיאת הרשאה: מפתח ה-API אינו תקין או שפג תוקפו.";
-    } else if (error.toString().includes("429")) {
+    } else if (errStr.includes("429") || errStr.includes("Resource has been exhausted")) {
         errorMessage = "עומס על המערכת: אנא נסה שוב בעוד מספר שניות.";
-    } else if (error.toString().includes("SAFETY")) {
+    } else if (errStr.includes("SAFETY")) {
         errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. נסה לנסח מחדש.";
     }
 

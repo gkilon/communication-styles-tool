@@ -23,10 +23,20 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     if (!response.ok) {
         let detailedError = `Error ${response.status}`;
         try {
-            const errorData = await response.json();
-            detailedError = errorData.error || errorData.text || detailedError;
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const errorData = await response.json();
+                detailedError = errorData.error || errorData.text || detailedError;
+            } else {
+                // If not JSON (likely HTML error page from Netlify/timeout), read text
+                const textData = await response.text();
+                console.error("Non-JSON error response:", textData.substring(0, 200)); // Log first 200 chars
+                if (response.status === 502 || response.status === 504) {
+                   return "תקלת תקשורת: השרת לא הגיב בזמן (Timeout). נסה לשאול שאלה קצרה יותר.";
+                }
+            }
         } catch (e) {
-            // Ignore JSON parse error for error responses
+            // Ignore parsing errors
         }
         
         console.error(`Server Error (${response.status}):`, detailedError);
@@ -38,14 +48,18 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     }
     
     // If response is OK, it should be valid JSON.
-    const data = await response.json();
-    
-    // Validate that we actually got text back
-    if (data && typeof data.text === 'string') {
-        return data.text;
-    } else {
-        console.error("Invalid response format from server:", data);
-        return "מצטער, התקבלה תשובה לא תקינה מהשרת.";
+    try {
+        const data = await response.json();
+        // Validate that we actually got text back
+        if (data && typeof data.text === 'string') {
+            return data.text;
+        } else {
+            console.error("Invalid response format from server:", data);
+            return "מצטער, התקבלה תשובה לא תקינה מהשרת.";
+        }
+    } catch (e) {
+        console.error("Failed to parse JSON response (likely HTML received):", e);
+        return "תקלת תקשורת: התקבלה תשובה לא ברורה מהשרת. אנא נסה שוב.";
     }
 
   } catch (error) {
