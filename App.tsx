@@ -61,7 +61,6 @@ const SimpleApp: React.FC = () => {
     }
 
     // Ensure all questions have a default value (4) if missing
-    // This prevents "controlled input" warnings and UI glitches
     const mergedAnswers = { ...initialAnswers };
     QUESTION_PAIRS.forEach(q => {
       if (typeof mergedAnswers[q.id] !== 'number') {
@@ -129,7 +128,6 @@ const SimpleApp: React.FC = () => {
   };
 
   const handleReset = () => {
-    // Clear LocalStorage safely
     try {
       localStorage.removeItem('cs_step');
       localStorage.removeItem('cs_index');
@@ -150,7 +148,6 @@ const SimpleApp: React.FC = () => {
     setStep('questionnaire');
   };
 
-  // Switch to Team Mode Handler
   const switchToTeamMode = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('mode', 'team');
@@ -188,10 +185,14 @@ const SimpleApp: React.FC = () => {
         </main>
       </div>
       
-      <footer className="mt-12 text-center text-xs text-gray-600 border-t border-gray-800 pt-4">
-        <p>גרסה אישית | <button onClick={switchToTeamMode} className="text-gray-500 hover:text-cyan-400 underline ml-1">
-           האם אתה מנהל צוות? עבור לגרסת ארגון
-        </button></p>
+      <footer className="mt-12 text-center text-sm text-gray-600 border-t border-gray-800 pt-6 pb-4">
+        <p className="mb-2">גרסה אישית</p>
+        <button 
+            onClick={switchToTeamMode} 
+            className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-400 hover:text-white px-3 py-1.5 rounded transition-all"
+        >
+           כניסה למנהלים / גרסת ארגון (עבור ל-?mode=team)
+        </button>
       </footer>
     </div>
   );
@@ -210,22 +211,18 @@ const AuthenticatedApp: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
 
-  // Listen to Firebase Auth State
   useEffect(() => {
     let unsubscribe = () => {};
     
     try {
-        // Safety Check 1: Did Firebase init succeed?
         if (!isFirebaseInitialized) {
             throw new Error("Firebase initialization failed or keys are missing.");
         }
 
-        // Safety Check 2: Is the auth object valid?
         if (!auth) {
             throw new Error("Auth object is not initialized");
         }
         
-        // Safety Check 3: Check SDK availability
         if (typeof onAuthStateChanged !== 'function') {
             throw new Error("Firebase Auth functions are not available");
         }
@@ -234,17 +231,9 @@ const AuthenticatedApp: React.FC = () => {
             async (currentUser) => {
                 setUser(currentUser);
                 if (currentUser) {
-                    const emailIsAdmin = currentUser.email?.toLowerCase().includes('admin');
-                    
-                    getUserProfile(currentUser.uid).then(profile => {
-                        if (emailIsAdmin || profile?.role === 'admin') {
-                            setIsAdmin(true);
-                        } else {
-                            setIsAdmin(false);
-                        }
-                    }).catch(() => {
-                        setIsAdmin(!!emailIsAdmin);
-                    });
+                    // Temporary check: allow all logged in users to see admin panel for setup
+                    // In production, you would check a specific claim or email list
+                    setIsAdmin(true); 
                 } else {
                     setIsAdmin(false);
                 }
@@ -265,7 +254,6 @@ const AuthenticatedApp: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Initialize default answers
   useEffect(() => {
      const defaultAnswers: Record<string, number> = {};
      QUESTION_PAIRS.forEach(q => {
@@ -295,7 +283,6 @@ const AuthenticatedApp: React.FC = () => {
   
   const handleSubmit = async () => {
     setStep('results');
-    // Save to Firebase
     if (user) {
         const calculatedScores = { a: 0, b: 0, c: 0, d: 0 };
         QUESTION_PAIRS.forEach(q => {
@@ -333,7 +320,6 @@ const AuthenticatedApp: React.FC = () => {
       handleReset();
   };
 
-  // Switch back to Personal Mode
   const switchToPersonalMode = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete('mode');
@@ -344,7 +330,6 @@ const AuthenticatedApp: React.FC = () => {
       return <SimpleApp />;
   }
 
-  // תצוגת שגיאה אם Firebase לא הוגדר כראוי אך המצב מופעל
   if (initError) {
       return (
           <div className="min-h-screen flex flex-col items-center justify-center text-white p-6 font-sans" dir="rtl">
@@ -397,10 +382,10 @@ const AuthenticatedApp: React.FC = () => {
           <p className="text-cyan-600 text-sm font-bold mt-1 bg-cyan-900/20 inline-block px-3 py-1 rounded-full border border-cyan-900/50">גרסת ארגון</p>
           
           {user && (
-             <div className="absolute top-0 left-0 flex gap-2 text-sm items-center">
+             <div className="absolute top-0 left-0 flex gap-2 text-sm items-center z-20">
                  <button onClick={handleLogout} className="text-gray-400 hover:text-white underline">התנתק</button>
                  {isAdmin && (
-                     <button onClick={() => setStep('admin')} className="text-yellow-400 hover:text-yellow-300 font-bold ml-2 border border-yellow-500 px-3 py-1 rounded transition-colors">
+                     <button onClick={() => setStep('admin')} className="bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/40 border border-yellow-500/50 px-3 py-1.5 rounded-md transition-all font-bold ml-2 text-sm shadow-sm">
                          לוח מנהל
                      </button>
                  )}
@@ -432,7 +417,7 @@ const AuthenticatedApp: React.FC = () => {
       </div>
        <footer className="mt-12 text-center text-xs text-gray-600 border-t border-gray-800 pt-4">
         <p>גרסת ארגון | <button onClick={switchToPersonalMode} className="text-gray-500 hover:text-cyan-400 underline ml-1">
-           עבור לגרסה אישית (ללא שמירת נתונים)
+           יציאה לגרסה האישית (הסר mode=team)
         </button></p>
       </footer>
     </div>
@@ -440,8 +425,6 @@ const AuthenticatedApp: React.FC = () => {
 };
 
 // Main App Component
-const App: React.FC = () => {
+export const App: React.FC = () => {
   return USE_FIREBASE_MODE ? <AuthenticatedApp /> : <SimpleApp />;
 };
-
-export default App;

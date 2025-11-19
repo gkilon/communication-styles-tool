@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { getAllUsers } from '../services/firebaseService';
 import { UserProfile } from '../types';
@@ -11,6 +12,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterTeam, setFilterTeam] = useState('');
+  const [copySuccess, setCopySuccess] = useState('');
 
   useEffect(() => {
     const loadData = async () => {
@@ -44,6 +46,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     );
   };
 
+  const handleCopyTeamLink = () => {
+      const baseUrl = window.location.origin + window.location.pathname;
+      // מסיר סלאש אחרון אם קיים כדי למנוע כפילות
+      const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+      const teamUrl = `${cleanBaseUrl}?mode=team`;
+      
+      navigator.clipboard.writeText(teamUrl).then(() => {
+          setCopySuccess('הקישור הועתק!');
+          setTimeout(() => setCopySuccess(''), 3000);
+      }).catch(err => {
+          console.error('Failed to copy: ', err);
+      });
+  };
+
   // סינון לפי צוות
   const filteredUsers = filterTeam 
     ? users.filter(u => u.team.toLowerCase().includes(filterTeam.toLowerCase())) 
@@ -55,12 +71,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   return (
     <div className="bg-gray-900 p-4 sm:p-8 min-h-screen animate-fade-in">
         <div className="max-w-6xl mx-auto">
-            <div className="flex justify-between items-center mb-8">
-                <h2 className="text-3xl font-bold text-cyan-300">לוח בקרה - ניהול צוותים</h2>
-                <button onClick={onBack} className="flex items-center gap-2 text-gray-300 hover:text-white">
-                    <ArrowLeftIcon className="w-5 h-5 rotate-180" />
-                    <span>חזרה לשאלון</span>
-                </button>
+            <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
+                <div className="text-center sm:text-right">
+                    <h2 className="text-3xl font-bold text-cyan-300">לוח בקרה - ניהול צוותים</h2>
+                    <p className="text-gray-400 text-sm mt-1">צפה בנתונים ונהל משתמשים</p>
+                </div>
+                
+                <div className="flex gap-3">
+                    <button 
+                        onClick={handleCopyTeamLink} 
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center gap-2 text-sm"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                        </svg>
+                        {copySuccess || 'העתק קישור הרשמה לצוות'}
+                    </button>
+
+                    <button onClick={onBack} className="flex items-center gap-2 text-gray-300 hover:text-white border border-gray-600 px-4 py-2 rounded-lg text-sm">
+                        <ArrowLeftIcon className="w-4 h-4 rotate-180" />
+                        <span>חזרה</span>
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
