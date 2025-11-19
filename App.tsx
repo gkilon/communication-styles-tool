@@ -12,11 +12,12 @@ type AppView = 'simple' | 'auth' | 'admin' | 'team_app' | 'loading';
 
 export const App: React.FC = () => {
   const [view, setView] = useState<AppView>('simple');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isAuthChecking, setIsAuthChecking] = useState(true);
 
-  // Refactored useEffect for auth listener
   useEffect(() => {
      if (!isFirebaseInitialized || !auth) {
          setIsAuthChecking(false);
@@ -37,10 +38,12 @@ export const App: React.FC = () => {
                     }
                 } catch (e) {
                     console.error("Error fetching user profile", e);
+                    // Fallback to team app if profile fetch fails but auth works
                     setView('team_app');
                 }
             } else {
                 setUserProfile(null);
+                // Do not automatically switch view to simple here, allow manual control
             }
             setIsAuthChecking(false);
         });
@@ -67,6 +70,7 @@ export const App: React.FC = () => {
   const handleSignOut = async () => {
     if (isFirebaseInitialized && auth) {
       await signOut(auth);
+      setUserProfile(null);
       setView('simple');
     }
   };
@@ -89,7 +93,7 @@ export const App: React.FC = () => {
             >
               <span>← חזרה לשאלון אישי</span>
             </button>
-            <AuthScreen onLoginSuccess={() => { /* View update handled by auth listener */ }} />
+            <AuthScreen onLoginSuccess={() => { /* View update is handled by the auth listener in useEffect */ }} />
           </div>
         );
       case 'admin':
@@ -107,7 +111,7 @@ export const App: React.FC = () => {
       case 'loading':
         return <div className="text-white text-center mt-20">טוען...</div>;
       default:
-        return <div>Error: Unknown state</div>;
+        return <div className="text-white text-center">Error: Unknown state</div>;
     }
   };
 
