@@ -9,6 +9,24 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Global Error Handler for White Screen Debugging -->
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        var root = document.getElementById('root');
+        // Only show if root is empty (meaning React failed to mount)
+        if (root && root.innerHTML.trim() === "") {
+            var errorDiv = document.createElement('div');
+            errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#111;color:#ff5555;padding:20px;font-family:monospace;z-index:9999;direction:ltr;overflow:auto;';
+            errorDiv.innerHTML = '<h1>Startup Error</h1><p>' + message + '</p><p>Source: ' + source + ':' + lineno + '</p>';
+            if(error && error.stack) {
+               errorDiv.innerHTML += '<pre style="white-space:pre-wrap;margin-top:20px;color:#ccc">' + error.stack + '</pre>';
+            }
+            document.body.appendChild(errorDiv);
+        }
+      };
+    </script>
+
     <style>
       body {
         -webkit-font-smoothing: antialiased;
@@ -25,6 +43,10 @@
         }
       }
       .animate-fade-in-up {
+        animation: fade-in-up 0.5s ease-out forwards;
+      }
+      /* Alias for compatibility */
+      .animate-fade-in {
         animation: fade-in-up 0.5s ease-out forwards;
       }
       .text-shadow {

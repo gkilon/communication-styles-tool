@@ -6,7 +6,7 @@ interface IntroScreenProps {
 
 export const IntroScreen: React.FC<IntroScreenProps> = ({ onStart }) => {
   return (
-    <div className="bg-gray-800 p-8 rounded-lg shadow-2xl text-center max-w-3xl mx-auto animate-fade-in">
+    <div className="bg-gray-800 p-8 rounded-lg shadow-2xl text-center max-w-3xl mx-auto animate-fade-in-up">
       <h2 className="text-3xl font-bold text-cyan-300 mb-4">ברוכים הבאים לשאלון סגנונות התקשורת</h2>
       <p className="text-gray-300 mb-6 text-lg leading-relaxed">
         שאלון זה יסייע לך לזהות את סגנון התקשורת הדומיננטי שלך. בכל שאלה יוצג בפניך צמד של תכונות.

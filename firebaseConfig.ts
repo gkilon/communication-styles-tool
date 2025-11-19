@@ -10,12 +10,14 @@ import { getFirestore, Firestore } from "firebase/firestore";
 // שימוש בטוח במשתני סביבה של Vite
 const getEnv = (key: string) => {
   try {
-    // Fix TS error: Property 'env' does not exist on type 'ImportMeta'
-    const meta = import.meta as any;
-    return meta.env ? meta.env[key] : undefined;
+    // בדיקה אם import.meta מוגדר (למניעת קריסה בסביבות מסוימות)
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+        return (import.meta as any).env[key];
+    }
   } catch (e) {
     return undefined;
   }
+  return undefined;
 };
 
 const firebaseConfig = {
@@ -35,12 +37,13 @@ let isFirebaseInitialized = false;
 
 // בדיקה קפדנית יותר שהמפתחות הוזנו כראוי
 const isConfigValid = (config: typeof firebaseConfig) => {
+    if (!config) return false;
     // בדיקה שאף שדה לא מכיל את המילה "הדבק"
     const hasPlaceholder = Object.values(config).some(val => val && typeof val === 'string' && val.includes("הדבק"));
     if (hasPlaceholder) return false;
 
-    // בדיקה שה-apiKey ארוך מספיק (מפתחות אמיתיים הם כ-39 תווים)
-    return config.apiKey && config.apiKey.length > 30;
+    // בדיקה שה-apiKey ארוך מספיק
+    return config.apiKey && config.apiKey.length > 20;
 };
 
 if (isConfigValid(firebaseConfig)) {
@@ -49,14 +52,13 @@ if (isConfigValid(firebaseConfig)) {
         auth = getAuth(app);
         db = getFirestore(app);
         isFirebaseInitialized = true;
-        console.log("Firebase initialized successfully connected to project:", firebaseConfig.projectId);
+        console.log("Firebase initialized successfully.");
     } catch (error) {
         console.error("Failed to initialize Firebase:", error);
         isFirebaseInitialized = false;
     }
 } else {
-    // הודעה שקטה לקונסול אם המפתחות טרם הוזנו
-    console.warn("Firebase keys are missing or invalid in firebaseConfig.ts");
+    console.warn("Firebase keys are missing or invalid in firebaseConfig.ts. Running in offline mode.");
     isFirebaseInitialized = false;
 }
 

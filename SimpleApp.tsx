@@ -22,31 +22,32 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   onSwitchToTeamLogin, 
   onSignOut 
 }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(isTeamMode);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>('intro');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
 
+  // Effect to handle mode switching
   useEffect(() => {
-    setIsAuthenticated(isTeamMode);
     if (isTeamMode) {
-        setStep('intro');
+        setIsAuthenticated(true);
     } else {
         setIsAuthenticated(false);
-        setStep('intro');
     }
+    // Reset state when mode changes
+    setStep('intro');
     setAnswers({});
     setCurrentQuestionIndex(0);
   }, [isTeamMode]);
 
-  // Initialize default answers safely
+  // Initialize default answers safely once
   useEffect(() => {
      const defaultAnswers: Record<string, number> = {};
      if (QUESTION_PAIRS && Array.isArray(QUESTION_PAIRS)) {
          QUESTION_PAIRS.forEach(q => {
            defaultAnswers[q.id] = 4;
          });
-         setAnswers(defaultAnswers);
+         setAnswers(prev => Object.keys(prev).length === 0 ? defaultAnswers : prev);
      }
   }, []);
   
@@ -59,10 +60,6 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       const value = answers[q.id] ?? 4;
       const [col1, col2] = q.columns;
       
-      // Logic: Slider 1..6. 
-      // 1 = Strong first trait (score 5 for col1, 0 for col2)
-      // 6 = Strong second trait (score 0 for col1, 5 for col2)
-      
       const score1 = 6 - value; 
       const score2 = value - 1;
       
@@ -73,6 +70,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   }, [step, answers]);
 
   const handleAuthenticate = (password: string) => {
+    // Simple password check
     if (password.toLowerCase() === 'inspire') {
       setIsAuthenticated(true);
       return true;
@@ -98,7 +96,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       finalScores[col2] += score2;
     });
 
-    // Save to Firebase if in team mode
+    // Save to Firebase if in team mode and firebase is ready
     if (isTeamMode && isFirebaseInitialized) {
       try {
         await saveUserResults(finalScores);
@@ -133,7 +131,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
           <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
           
           {isTeamMode && userProfile && (
-            <div className="mt-4 bg-cyan-900/30 inline-block px-4 py-1 rounded-full border border-cyan-700/50 animate-fade-in">
+            <div className="mt-4 bg-cyan-900/30 inline-block px-4 py-1 rounded-full border border-cyan-700/50 animate-fade-in-up">
                 <span className="text-cyan-300 text-sm ml-2">מחובר כ: {userProfile.displayName}</span>
                 <span className="text-gray-400 text-sm">| צוות: {userProfile.team}</span>
             </div>

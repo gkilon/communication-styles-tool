@@ -1,4 +1,4 @@
-ס
+
 import React, { useState } from 'react';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
@@ -36,7 +36,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         }
 
         // קביעת תפקיד המשתמש לפי קוד המנהל
-        const role = (adminCode === 'inspire') ? 'admin' : 'user';
+        // שימוש בטיפוס מפורש כדי למנוע שגיאות TypeScript
+        const role: 'user' | 'admin' = (adminCode === 'inspire') ? 'admin' : 'user';
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         // שמירת הפרטים הנוספים במסד הנתונים
@@ -126,6 +127,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500 placeholder-gray-500"
                     placeholder="הזן קוד רק אם אתה מנהל"
                 />
+                <p className="text-xs text-gray-500 pr-2 mt-1">משתמשים רגילים יכולים להשאיר שדה זה ריק.</p>
             </div>
         )}
 
