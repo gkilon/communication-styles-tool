@@ -1,3 +1,4 @@
+
 import { db, auth } from '../firebaseConfig';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Scores, UserProfile } from '../types';
@@ -22,12 +23,14 @@ export const saveUserResults = async (scores: Scores) => {
 };
 
 // יצירת משתמש חדש בבסיס הנתונים (פרטים אישיים וצוות)
-export const createUserProfile = async (uid: string, data: { email: string; displayName: string; team: string }) => {
+export const createUserProfile = async (uid: string, data: { email: string; displayName: string; team: string; role?: 'user' | 'admin' }) => {
   const userRef = doc(db, "users", uid);
   await setDoc(userRef, {
     uid,
-    ...data,
-    role: 'user', // ברירת מחדל
+    email: data.email,
+    displayName: data.displayName,
+    team: data.team,
+    role: data.role || 'user', // ברירת מחדל למשתמש רגיל
     createdAt: new Date().toISOString()
   });
 };

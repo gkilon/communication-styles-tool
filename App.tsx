@@ -47,16 +47,18 @@ const AuthenticatedApp: React.FC = () => {
         async (currentUser) => {
             setUser(currentUser);
             if (currentUser) {
-                setIsAdmin(true); // In real app, check claims/DB
-                
                 try {
                     const profile = await getUserProfile(currentUser.uid);
+                    // Check if user is admin based on DB role
+                    setIsAdmin(profile?.role === 'admin');
+
                     if (profile?.scores) {
                         // Optional: Auto-redirect to results if already done
                         // setStep('results'); 
                     }
                 } catch (e) {
                     console.error("Error fetching profile", e);
+                    setIsAdmin(false);
                 }
             } else {
                 setIsAdmin(false);

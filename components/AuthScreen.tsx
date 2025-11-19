@@ -1,3 +1,4 @@
+ס
 import React, { useState } from 'react';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
@@ -13,6 +14,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
+  const [adminCode, setAdminCode] = useState(''); // New state for admin code
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -32,12 +34,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             setLoading(false);
             return;
         }
+
+        // קביעת תפקיד המשתמש לפי קוד המנהל
+        const role = (adminCode === 'inspire') ? 'admin' : 'user';
+
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         // שמירת הפרטים הנוספים במסד הנתונים
         await createUserProfile(userCredential.user.uid, {
             email,
             displayName: name,
-            team: team
+            team: team,
+            role: role
         });
       }
       onLoginSuccess();
@@ -108,6 +115,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             required
             />
         </div>
+
+        {!isLogin && (
+            <div>
+                <label className="block text-gray-400 text-xs mb-1 pr-2">קוד מנהל (אופציונלי)</label>
+                <input
+                    type="password"
+                    value={adminCode}
+                    onChange={(e) => setAdminCode(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500 placeholder-gray-500"
+                    placeholder="הזן קוד רק אם אתה מנהל"
+                />
+            </div>
+        )}
 
         {error && <p className="text-red-400 text-sm text-center bg-red-900/30 p-2 rounded">{error}</p>}
 
