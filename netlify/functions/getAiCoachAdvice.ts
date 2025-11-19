@@ -17,7 +17,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   if (!apiKey) {
     console.error("CRITICAL ERROR: API_KEY is missing in Netlify environment variables.");
     return {
-      statusCode: 200, // Return 200 to handle gracefully in frontend
+      statusCode: 200, 
       body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר. אנא ודא שהגדרת את API_KEY בממשק של Netlify." }),
       headers: { 'Content-Type': 'application/json' }
     };
@@ -91,17 +91,25 @@ const handler: Handler = async (event: HandlerEvent) => {
     - Provide actionable steps.
     - Keep the tone professional yet encouraging.`;
 
-    // 5. Generate with Robust Retry Logic
-    const generateWithRetry = async (retries = 1) => {
+    // 5. Generate with Robust Retry Logic & Model Fallback
+    // Strategy: Try primary model -> Wait -> Try Lite model (backup) -> Wait -> Try primary again
+    const generateWithRetry = async () => {
+        const attempts = [
+            { model: "gemini-2.5-flash", delay: 1000 },
+            { model: "gemini-flash-lite-latest", delay: 1500 }, // Fallback to Lite
+            { model: "gemini-2.5-flash", delay: 0 }  // Last ditch attempt
+        ];
+
         let lastError;
-        // Loop runs (retries + 1) times
-        for (let i = 0; i <= retries; i++) {
+
+        for (let i = 0; i < attempts.length; i++) {
+            const { model, delay } = attempts[i];
             try {
-                console.log(`Attempt ${i + 1} calling Gemini...`);
+                console.log(`Attempt ${i + 1}/${attempts.length} using model: ${model}...`);
                 
                 const response = await ai.models.generateContent({
-                    model: "gemini-2.5-flash",
-                    contents: userInput, 
+                    model: model,
+                    contents: { parts: [{ text: userInput }] }, // Explicit format
                     config: {
                         systemInstruction: systemInstruction,
                         temperature: 0.7, 
@@ -121,20 +129,17 @@ const handler: Handler = async (event: HandlerEvent) => {
                 
                 const finishReason = response.candidates?.[0]?.finishReason || 'UNKNOWN';
                 console.warn(`Attempt ${i+1}: Empty response. Finish reason: ${finishReason}`);
+                // If empty response but no error thrown, we manually throw to trigger retry
                 throw new Error(`Empty response from model (Reason: ${finishReason})`);
 
             } catch (error: any) {
                 console.warn(`Attempt ${i + 1} failed:`, error.message);
                 lastError = error;
                 
-                if (i === retries) break;
-                
-                const isOverloaded = error.message?.includes('503') || error.message?.includes('overloaded');
-                // Wait 1.5s if overloaded, else 0.5s. Keep it short to avoid Netlify 10s timeout.
-                const waitTime = isOverloaded ? 1500 : 500; 
-                
-                console.log(`Waiting ${waitTime}ms before retry...`);
-                await new Promise(r => setTimeout(r, waitTime));
+                if (i < attempts.length - 1) {
+                    console.log(`Switching models/retrying in ${delay}ms...`);
+                    await new Promise(r => setTimeout(r, delay));
+                }
             }
         }
         throw lastError;
@@ -145,7 +150,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!response?.text) {
          return {
             statusCode: 200,
-            body: JSON.stringify({ text: "המערכת מתקשה לייצר תשובה כרגע. אנא נסה שנית." }),
+            body: JSON.stringify({ text: "המערכת מתקשה לייצר תשובה כרגע (Empty Response). אנא נסה שנית." }),
             headers: { 'Content-Type': 'application/json' },
         };
     }
@@ -162,18 +167,14 @@ const handler: Handler = async (event: HandlerEvent) => {
     let errorMessage = "מצטער, נתקלתי בבעיה זמנית בתקשורת עם המודל.";
     const errStr = error.toString();
 
-    // User-friendly error mapping
     if (errStr.includes("SAFETY")) {
         errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. אנא נסה לנסח את השאלה מחדש.";
     } else if (errStr.includes("503") || errStr.includes("overloaded")) {
-         errorMessage = "שרתי המודל עמוסים כרגע עקב ביקוש גבוה. אנא המתן דקה ונסה שוב.";
+         errorMessage = "שרתי המודל עמוסים כרגע. המערכת ניסתה מספר פעמים אך לא הצליחה להתחבר. אנא נסה שוב בעוד דקה.";
     } else if (errStr.includes("Empty response")) {
-         errorMessage = "המערכת ניסתה לענות אך לא הצליחה לייצר תוכן. אנא נסה שנית.";
+         errorMessage = "המערכת ניסתה לענות אך לא הצליחה לייצר תוכן תקין. אנא נסה שנית.";
     }
     
-    // Note: We intentionally do NOT append the raw technical error to the user message anymore
-    // to avoid showing scary JSON like 'Api {"error":...}'
-
     return {
       statusCode: 200,
       body: JSON.stringify({ text: errorMessage }),
