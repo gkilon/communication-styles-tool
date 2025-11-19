@@ -17,14 +17,13 @@ const handler: Handler = async (event: HandlerEvent) => {
   if (!apiKey) {
     console.error("CRITICAL ERROR: API_KEY is missing in Netlify environment variables.");
     return {
-      statusCode: 200, // Return 200 to client so it can display the text gracefully
-      body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר בהגדרות. אנא ודא שהגדרת את API_KEY בממשק של Netlify." }),
+      statusCode: 200,
+      body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר. אנא ודא שהגדרת את API_KEY בממשק של Netlify." }),
       headers: { 'Content-Type': 'application/json' }
     };
   }
 
   try {
-    // Handle Base64 encoding (common in Netlify functions)
     let bodyStr = event.body || "{}";
     if (event.isBase64Encoded) {
         try {
@@ -56,19 +55,18 @@ const handler: Handler = async (event: HandlerEvent) => {
       };
     }
 
-    // 2. Calculate profile stats for context
+    // 2. Calculate profile stats
     const safeScore = (val: any) => typeof val === 'number' ? val : Number(val) || 0;
     const red = safeScore(scores?.a) + safeScore(scores?.c);
     const yellow = safeScore(scores?.a) + safeScore(scores?.d);
     const green = safeScore(scores?.b) + safeScore(scores?.d);
     const blue = safeScore(scores?.b) + safeScore(scores?.c);
     
-    // Sort colors by value to determine hierarchy
     const sorted = [
-        { name: 'Red (Goal-Oriented / Driving)', val: red },
-        { name: 'Yellow (Enthusiastic / Expressive)', val: yellow },
-        { name: 'Green (Supportive / Amiable)', val: green },
-        { name: 'Blue (Analytical / Precise)', val: blue }
+        { name: 'Red (Goal-Oriented)', val: red },
+        { name: 'Yellow (Enthusiastic)', val: yellow },
+        { name: 'Green (Supportive)', val: green },
+        { name: 'Blue (Analytical)', val: blue }
     ].sort((x, y) => y.val - x.val);
 
     const dominant = sorted[0].name;
@@ -77,41 +75,35 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 3. Initialize AI
     const ai = new GoogleGenAI({ apiKey });
 
-    // 4. System Instruction - Updated for Jungian Model
-    // Explicitly mentioning "Don't timeout" strategy in system prompt logic (conciseness where possible while deep)
-    const systemInstruction = `You are an expert communication coach based on the Jungian Color Model (similar to Insights Discovery).
+    // 4. System Instruction
+    const systemInstruction = `You are an expert communication coach based on the Jungian Color Model.
     
-    User Profile Analysis:
-    - Primary Color Energy: ${dominant}
-    - Secondary Color Energy: ${secondary}
-    - Contextual intensities (internal use only): Red=${red}, Yellow=${yellow}, Green=${green}, Blue=${blue}
+    User Profile:
+    - Primary: ${dominant}
+    - Secondary: ${secondary}
     
-    Task: Provide insightful advice to the user's question.
-    Language: Hebrew only.
-    Tone: Professional, empathetic, practical.
+    Task: Provide insightful, practical advice to the user's question in Hebrew.
     
     Guidelines:
-    - This is NOT DISC. Do not use DISC terminology.
-    - Focus on the "Color Energies" (Red, Yellow, Green, Blue) as described in Jungian typology.
-    - Do NOT mention the specific raw score numbers (e.g., "Your score is 45") in your final response. Use terms like "High", "Moderate", or "Low" instead.
-    - Analyze the user's situation deeply through the lens of their specific color blend.
-    - Provide concrete, actionable steps.
-    - Be concise and direct to ensure a quick response. Avoid fluff.`;
+    - Be concise and direct.
+    - Focus on "Color Energies" (Red, Yellow, Green, Blue).
+    - Do NOT mention raw numbers.
+    - Provide actionable steps.`;
 
-    // Helper function for retries
+    // 5. Generate with Robust Retry Logic
     const generateWithRetry = async (retries = 3) => {
+        let lastError;
         for (let i = 0; i < retries; i++) {
             try {
                 console.log(`Attempt ${i + 1} calling Gemini...`);
+                
                 const response = await ai.models.generateContent({
                     model: "gemini-2.5-flash",
                     contents: userInput, 
                     config: {
                         systemInstruction: systemInstruction,
-                        temperature: 0.7,
-                        // Reduced max tokens to 1000 to prevent Netlify function timeouts (10s limit)
-                        // Hebrew characters take more tokens, but 1000 is plenty for a good answer.
-                        maxOutputTokens: 1000, 
+                        temperature: 0.6, // Reduced for stability
+                        maxOutputTokens: 800, // Limit length to ensure quick response and avoid timeout
                         safetySettings: [
                             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                             { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -120,58 +112,58 @@ const handler: Handler = async (event: HandlerEvent) => {
                         ]
                     }
                 });
-                return response;
+                
+                // Check if response has text content
+                // IMPORTANT: We throw here if text is missing to trigger the catch block and retry
+                if (response.text && response.text.trim().length > 0) {
+                    return response;
+                }
+                
+                const finishReason = response.candidates?.[0]?.finishReason || 'UNKNOWN';
+                console.warn(`Attempt ${i+1}: Empty response. Finish reason: ${finishReason}`);
+                throw new Error(`Empty response from model (Reason: ${finishReason})`);
+
             } catch (error) {
                 console.warn(`Attempt ${i + 1} failed:`, error);
-                if (i === retries - 1) throw error;
-                // Exponential backoff: 500ms, 1000ms
-                await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)));
+                lastError = error;
+                
+                // If this was the last attempt, don't wait, just exit loop
+                if (i === retries - 1) break;
+                
+                // Exponential backoff: 700ms, 1400ms
+                await new Promise(r => setTimeout(r, 700 * Math.pow(2, i)));
             }
         }
+        throw lastError;
     };
 
-    // 5. Call Gemini API with retry
-    try {
-        const response = await generateWithRetry();
-        const responseText = response?.text;
-
-        if (!responseText) {
-            console.warn("Empty response text received from Gemini Model.");
-            // Check if blocked
-            if (response?.candidates?.[0]?.finishReason) {
-                 console.warn("Finish Reason:", response.candidates[0].finishReason);
-            }
-            
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ text: "המערכת לא הצליחה לייצר תשובה (חסימת תוכן או תשובה ריקה). נסה לנסח את השאלה מחדש." }),
-                headers: { 'Content-Type': 'application/json' },
-            };
-        }
-
-        return {
-          statusCode: 200,
-          body: JSON.stringify({ text: responseText }),
-          headers: { 'Content-Type': 'application/json' },
+    const response = await generateWithRetry();
+    
+    // Final check before sending back
+    if (!response?.text) {
+         return {
+            statusCode: 200,
+            body: JSON.stringify({ text: "המערכת מתקשה לייצר תשובה כרגע עקב עומס. אנא נסה שוב בעוד רגע או נסח את השאלה אחרת." }),
+            headers: { 'Content-Type': 'application/json' },
         };
-    } catch (innerError: any) {
-         console.error("Inner Gemini Generate Error after retries:", innerError);
-         throw innerError;
     }
 
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ text: response.text }),
+      headers: { 'Content-Type': 'application/json' },
+    };
+
   } catch (error: any) {
-    console.error("Gemini API Global Error:", error);
+    console.error("Gemini API Final Error:", error);
     
     let errorMessage = "מצטער, חוויתי תקלה טכנית בתקשורת עם המודל.";
-    
-    // Extract more details if possible
     const errStr = error.toString();
-    if (errStr.includes("403") || errStr.includes("API key")) {
-        errorMessage = "שגיאת הרשאה: מפתח ה-API אינו תקין או שפג תוקפו.";
-    } else if (errStr.includes("429") || errStr.includes("Resource has been exhausted")) {
-        errorMessage = "עומס על המערכת: אנא נסה שוב בעוד מספר שניות.";
-    } else if (errStr.includes("SAFETY")) {
+
+    if (errStr.includes("SAFETY")) {
         errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. נסה לנסח מחדש.";
+    } else if (errStr.includes("Empty response")) {
+         errorMessage = "המערכת ניסתה לענות אך לא הצליחה לייצר תוכן. אנא נסה שנית.";
     }
 
     return {
