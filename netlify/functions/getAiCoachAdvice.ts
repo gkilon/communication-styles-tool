@@ -17,7 +17,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   if (!apiKey) {
     console.error("CRITICAL ERROR: API_KEY is missing in Netlify environment variables.");
     return {
-      statusCode: 200,
+      statusCode: 200, // Return 200 to handle gracefully in frontend
       body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר. אנא ודא שהגדרת את API_KEY בממשק של Netlify." }),
       headers: { 'Content-Type': 'application/json' }
     };
@@ -91,9 +91,11 @@ const handler: Handler = async (event: HandlerEvent) => {
     - Provide actionable steps.`;
 
     // 5. Generate with Robust Retry Logic
-    const generateWithRetry = async (retries = 3) => {
+    // Reduced retries to 1 (2 attempts total) to avoid Netlify function timeouts (10s limit)
+    const generateWithRetry = async (retries = 1) => {
         let lastError;
-        for (let i = 0; i < retries; i++) {
+        // Loop runs (retries + 1) times
+        for (let i = 0; i <= retries; i++) {
             try {
                 console.log(`Attempt ${i + 1} calling Gemini...`);
                 
@@ -102,8 +104,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                     contents: userInput, 
                     config: {
                         systemInstruction: systemInstruction,
-                        temperature: 0.6, // Reduced for stability
-                        maxOutputTokens: 800, // Limit length to ensure quick response and avoid timeout
+                        temperature: 0.6, 
+                        maxOutputTokens: 500, // Reduced from 800 to ensure faster response
                         safetySettings: [
                             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                             { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -114,7 +116,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 });
                 
                 // Check if response has text content
-                // IMPORTANT: We throw here if text is missing to trigger the catch block and retry
                 if (response.text && response.text.trim().length > 0) {
                     return response;
                 }
@@ -127,11 +128,11 @@ const handler: Handler = async (event: HandlerEvent) => {
                 console.warn(`Attempt ${i + 1} failed:`, error);
                 lastError = error;
                 
-                // If this was the last attempt, don't wait, just exit loop
-                if (i === retries - 1) break;
+                // If this was the last attempt, break
+                if (i === retries) break;
                 
-                // Exponential backoff: 700ms, 1400ms
-                await new Promise(r => setTimeout(r, 700 * Math.pow(2, i)));
+                // Short wait before retry
+                await new Promise(r => setTimeout(r, 500));
             }
         }
         throw lastError;
@@ -143,7 +144,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!response?.text) {
          return {
             statusCode: 200,
-            body: JSON.stringify({ text: "המערכת מתקשה לייצר תשובה כרגע עקב עומס. אנא נסה שוב בעוד רגע או נסח את השאלה אחרת." }),
+            body: JSON.stringify({ text: "המערכת מתקשה לייצר תשובה כרגע. אנא נסה שנית." }),
             headers: { 'Content-Type': 'application/json' },
         };
     }
@@ -164,6 +165,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. נסה לנסח מחדש.";
     } else if (errStr.includes("Empty response")) {
          errorMessage = "המערכת ניסתה לענות אך לא הצליחה לייצר תוכן. אנא נסה שנית.";
+    } else {
+        // Expose the error message for debugging purposes
+        errorMessage += ` (שגיאה: ${errStr.replace('Error:', '').trim()})`;
     }
 
     return {
