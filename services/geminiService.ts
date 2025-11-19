@@ -1,3 +1,4 @@
+
 import { Scores } from '../types';
 
 /**
@@ -46,7 +47,14 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     
     // If response is OK, it should be valid JSON.
     const data = await response.json();
-    return data.text;
+    
+    // Validate that we actually got text back
+    if (data && typeof data.text === 'string') {
+        return data.text;
+    } else {
+        console.error("Invalid response format from server:", data);
+        return "מצטער, התקבלה תשובה בפורמט לא תקין מהשרת.";
+    }
 
   } catch (error) {
     console.error("Error calling the Netlify function endpoint:", error);

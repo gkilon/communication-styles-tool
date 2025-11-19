@@ -47,41 +47,54 @@ const SimpleApp: React.FC = () => {
   const [answers, setAnswers] = useState<Record<string, number>>(() => {
     let initialAnswers: Record<string, number> = {};
     
-    // Try to load from storage
+    // Try to load from storage safely
     try {
       const saved = localStorage.getItem('cs_answers');
       if (saved) {
-        initialAnswers = JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          initialAnswers = parsed;
+        }
       }
     } catch (e) {
       console.error("Failed to parse answers from storage", e);
     }
 
-    // Ensure all questions have a default value if missing
+    // Ensure all questions have a default value (4) if missing
+    // This prevents "controlled input" warnings and UI glitches
+    const mergedAnswers = { ...initialAnswers };
     QUESTION_PAIRS.forEach(q => {
-      if (initialAnswers[q.id] === undefined) {
-        initialAnswers[q.id] = 4;
+      if (typeof mergedAnswers[q.id] !== 'number') {
+        mergedAnswers[q.id] = 4;
       }
     });
     
-    return initialAnswers;
+    return mergedAnswers;
   });
 
-  // Persistence Effects
+  // Persistence Effects - Safe writes
   useEffect(() => {
-    localStorage.setItem('cs_auth', isAuthenticated.toString());
+    try {
+      localStorage.setItem('cs_auth', isAuthenticated.toString());
+    } catch (e) { console.error("LocalStorage write error", e); }
   }, [isAuthenticated]);
 
   useEffect(() => {
-    localStorage.setItem('cs_step', step);
+    try {
+      localStorage.setItem('cs_step', step);
+    } catch (e) { console.error("LocalStorage write error", e); }
   }, [step]);
 
   useEffect(() => {
-    localStorage.setItem('cs_index', currentQuestionIndex.toString());
+    try {
+      localStorage.setItem('cs_index', currentQuestionIndex.toString());
+    } catch (e) { console.error("LocalStorage write error", e); }
   }, [currentQuestionIndex]);
 
   useEffect(() => {
-    localStorage.setItem('cs_answers', JSON.stringify(answers));
+    try {
+      localStorage.setItem('cs_answers', JSON.stringify(answers));
+    } catch (e) { console.error("LocalStorage write error", e); }
   }, [answers]);
   
   const scores = useMemo<Scores | null>(() => {
@@ -116,10 +129,12 @@ const SimpleApp: React.FC = () => {
   };
 
   const handleReset = () => {
-    // Clear LocalStorage
-    localStorage.removeItem('cs_step');
-    localStorage.removeItem('cs_index');
-    localStorage.removeItem('cs_answers');
+    // Clear LocalStorage safely
+    try {
+      localStorage.removeItem('cs_step');
+      localStorage.removeItem('cs_index');
+      localStorage.removeItem('cs_answers');
+    } catch (e) { console.error("LocalStorage clear error", e); }
 
     const resetAnswers: Record<string, number> = {};
     QUESTION_PAIRS.forEach(q => {

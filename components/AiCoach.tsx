@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Scores } from '../types';
 import { getAiCoachAdvice } from '../services/geminiService';
@@ -20,18 +21,26 @@ const PRESET_QUESTIONS = [
 ];
 
 const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
+  // Defensive check: Ensure text exists
+  if (!text) return null;
+
   let htmlContent;
   try {
-    // FIX: Cast window to `any` to access the `marked` property, which is added by a script.
-    htmlContent = (window as any).marked ? (window as any).marked.parse(text) : text.replace(/\n/g, '<br />');
+    const marked = (window as any).marked;
+    // Robust check for marked library availability
+    if (marked && typeof marked.parse === 'function') {
+        htmlContent = marked.parse(text);
+    } else if (marked && typeof marked === 'function') {
+        // Fallback for older versions of marked
+        htmlContent = marked(text);
+    } else {
+        // Fallback if library is missing
+        htmlContent = text.replace(/\n/g, '<br />');
+    }
   } catch (error) {
-    console.error("Error parsing AI coach markdown:", error);
-    return (
-      <div className="prose prose-invert max-w-none">
-        <p className="text-red-400">שגיאה בעיבוד התשובה.</p>
-        <pre className="whitespace-pre-wrap text-sm">{text}</pre>
-      </div>
-    );
+    console.warn("Error parsing AI coach markdown, falling back to plain text:", error);
+    // Fallback to simple text formatting instead of showing an error message
+    htmlContent = text.replace(/\n/g, '<br />');
   }
 
   return (
@@ -59,10 +68,13 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
 
     try {
       const aiResponse = await getAiCoachAdvice(scores, text);
-      const newAiMessage: Message = { sender: 'ai', text: aiResponse };
+      // Ensure we always have a string, even if the service returns null/undefined somehow
+      const safeResponse = aiResponse || "מצטער, התקבלה תשובה ריקה. אנא נסה שוב.";
+      const newAiMessage: Message = { sender: 'ai', text: safeResponse };
       setConversation(prev => [...prev, newAiMessage]);
     } catch (error) {
-      const errorMessage: Message = { sender: 'ai', text: 'מצטער, התרחשה שגיאה. אנא נסה שוב.' };
+      console.error("Component error:", error);
+      const errorMessage: Message = { sender: 'ai', text: 'מצטער, התרחשה שגיאה בתקשורת. אנא נסה שוב.' };
       setConversation(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
