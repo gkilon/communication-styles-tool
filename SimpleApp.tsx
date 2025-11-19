@@ -39,16 +39,18 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
     setCurrentQuestionIndex(0);
   }, [isTeamMode]);
 
-  // Initialize default answers
+  // Initialize default answers safely
   useEffect(() => {
      const defaultAnswers: Record<string, number> = {};
-     QUESTION_PAIRS.forEach(q => {
-       defaultAnswers[q.id] = 4;
-     });
-     setAnswers(defaultAnswers);
+     if (QUESTION_PAIRS && Array.isArray(QUESTION_PAIRS)) {
+         QUESTION_PAIRS.forEach(q => {
+           defaultAnswers[q.id] = 4;
+         });
+         setAnswers(defaultAnswers);
+     }
   }, []);
   
-  // Calculate scores for display
+  // Calculate scores
   const scores = useMemo<Scores | null>(() => {
     if (step !== 'results') return null;
 
@@ -57,12 +59,9 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       const value = answers[q.id] ?? 4;
       const [col1, col2] = q.columns;
       
-      // Invert the score for the first column (1->5, 6->0) logic or standard?
-      // Standard logic: Slider 1..6. 
-      // Left side (1) is 'Strongly first trait'. Right side (6) is 'Strongly second trait'.
-      // Logic used: score1 = 6 - value; score2 = value - 1;
-      // If value is 1: score1 = 5, score2 = 0.
-      // If value is 6: score1 = 0, score2 = 5.
+      // Logic: Slider 1..6. 
+      // 1 = Strong first trait (score 5 for col1, 0 for col2)
+      // 6 = Strong second trait (score 0 for col1, 5 for col2)
       
       const score1 = 6 - value; 
       const score2 = value - 1;
@@ -84,7 +83,9 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   const handleStart = () => setStep('questionnaire');
   
   const handleSubmit = async () => {
-    // Calculate scores locally to ensure availability before state update
+    setStep('results');
+    
+    // Calculate scores locally for immediate saving
     const finalScores: Scores = { a: 0, b: 0, c: 0, d: 0 };
     QUESTION_PAIRS.forEach(q => {
       const value = answers[q.id] ?? 4;
@@ -97,9 +98,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
       finalScores[col2] += score2;
     });
 
-    setStep('results');
-    
-    // If in Team Mode, save to Firebase immediately
+    // Save to Firebase if in team mode
     if (isTeamMode && isFirebaseInitialized) {
       try {
         await saveUserResults(finalScores);
@@ -125,7 +124,7 @@ export const SimpleApp: React.FC<SimpleAppProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans">
+    <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans dir-rtl">
       <div className="max-w-4xl mx-auto">
         <header className="text-center mb-8 relative">
           <div className="flex justify-center items-center relative">
