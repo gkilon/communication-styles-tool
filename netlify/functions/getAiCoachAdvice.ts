@@ -1,6 +1,6 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
 const handler: Handler = async (event: HandlerEvent) => {
   // 1. Check Method
@@ -89,48 +89,61 @@ const handler: Handler = async (event: HandlerEvent) => {
     Constraint: Keep the answer under 100 words.`;
 
     // 5. Call Gemini API
-    // Using the simplified string format for contents as per standard usage
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: userInput, 
-        config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.7,
-            // Setting explicit safety settings to avoid blocking standard Hebrew text
-            // Note: In the Node SDK, we pass these in the config
-            // Using permissive settings for a coaching app
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: userInput, 
+            config: {
+                systemInstruction: systemInstruction,
+                temperature: 0.7,
+                // Safety settings to prevent blocking Hebrew content
+                safetySettings: [
+                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+                ]
+            }
+        });
+
+        const responseText = response.text;
+
+        if (!responseText) {
+            console.warn("Empty response text received from Gemini Model.");
+            
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ text: "המערכת לא הצליחה לייצר תשובה לשאלה זו. נסה לנסח את השאלה מחדש." }),
+                headers: { 'Content-Type': 'application/json' },
+            };
         }
-    });
 
-    const responseText = response.text;
-
-    if (!responseText) {
-        console.warn("Empty response text received from Gemini Model.");
-        console.warn("Full Response Object:", JSON.stringify(response, null, 2));
-        
         return {
-            statusCode: 200,
-            body: JSON.stringify({ text: "המערכת לא הצליחה לייצר תשובה לשאלה זו. נסה לנסח את השאלה מחדש." }),
-            headers: { 'Content-Type': 'application/json' },
+          statusCode: 200,
+          body: JSON.stringify({ text: responseText }),
+          headers: { 'Content-Type': 'application/json' },
         };
+    } catch (innerError: any) {
+         console.error("Inner Gemini Generate Error:", innerError);
+         // Re-throw to be caught by outer block
+         throw innerError;
     }
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ text: responseText }),
-      headers: { 'Content-Type': 'application/json' },
-    };
-
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    console.error("Gemini API Global Error:", error);
     
-    // Check for specific API errors
     let errorMessage = "מצטער, חוויתי תקלה טכנית בתקשורת עם המודל.";
     
-    if (error.message?.includes("403") || error.message?.includes("API key")) {
+    // Extract more details if possible
+    if (error.toString().includes("403") || error.toString().includes("API key")) {
         errorMessage = "שגיאת הרשאה: מפתח ה-API אינו תקין או שפג תוקפו.";
-    } else if (error.message?.includes("429")) {
+    } else if (error.toString().includes("429")) {
         errorMessage = "עומס על המערכת: אנא נסה שוב בעוד מספר שניות.";
+    } else if (error.toString().includes("SAFETY")) {
+        errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. נסה לנסח מחדש.";
+    } else if (error.message) {
+        // Add technical details for debugging if it's a weird error
+        console.error(`Full error message: ${error.message}`);
     }
 
     return {
