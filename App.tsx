@@ -149,7 +149,7 @@ const SimpleApp: React.FC = () => {
   };
 
   const handleFullClear = () => {
-      if (window.confirm("האם אתה בתוך שברצונך למחוק את כל הנתונים ולהתחיל מחדש?")) {
+      if (window.confirm("האם אתה בטוח שברצונך למחוק את כל הנתונים ולהתחיל מחדש?\n(פעולה זו תמחק את התשובות השמורות ותחזיר אותך למסך הכניסה)")) {
           localStorage.clear();
           window.location.reload();
       }
@@ -192,20 +192,32 @@ const SimpleApp: React.FC = () => {
         </main>
       </div>
       
-      <footer className="mt-12 text-center text-sm text-gray-600 border-t border-gray-800 pt-6 pb-4">
-        <p className="mb-2 font-bold text-gray-500">גרסה אישית</p>
-        <div className="flex justify-center gap-4 flex-wrap">
+      <footer className="mt-16 text-center border-t border-gray-800 pt-8 pb-6">
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-6">
             <button 
                 onClick={handleFullClear} 
-                className="text-xs bg-red-900/30 hover:bg-red-900/50 border border-red-900 text-red-400 hover:text-red-300 px-3 py-1.5 rounded transition-all"
+                className="group relative px-6 py-2.5 rounded-full overflow-hidden bg-transparent text-red-400 border border-red-900/50 hover:border-red-500 transition-all duration-300 w-64 sm:w-auto"
             >
-            נקה נתונים (איפוס מלא)
+                <span className="relative z-10 flex items-center justify-center gap-2 font-medium text-sm group-hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                    איפוס נתונים מלא (יציאה)
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-r from-red-900/80 to-red-800/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </button>
+
             <button 
                 onClick={switchToTeamMode} 
-                className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-400 hover:text-white px-3 py-1.5 rounded transition-all"
+                className="group relative px-6 py-2.5 rounded-full overflow-hidden bg-transparent text-cyan-400 border border-cyan-900/50 hover:border-cyan-500 transition-all duration-300 w-64 sm:w-auto"
             >
-            כניסה למנהלים / גרסת ארגון
+                 <span className="relative z-10 flex items-center justify-center gap-2 font-medium text-sm group-hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                    </svg>
+                    מעבר לגרסת מנהלים
+                </span>
+                 <div className="absolute inset-0 bg-gradient-to-r from-cyan-900/80 to-blue-900/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             </button>
         </div>
       </footer>
