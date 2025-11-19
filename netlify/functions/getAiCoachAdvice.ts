@@ -2,15 +2,6 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI } from "@google/genai";
 
-// --- Helper Types & Logic ---
-
-interface Scores {
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-}
-
 const handler: Handler = async (event: HandlerEvent) => {
   // 1. Check Method
   if (event.httpMethod !== 'POST') {
@@ -26,28 +17,25 @@ const handler: Handler = async (event: HandlerEvent) => {
   if (!apiKey) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "מפתח ה-API אינו מוגדר בשרת." }),
+      body: JSON.stringify({ error: "Server configuration error (API Key)" }),
       headers: { 'Content-Type': 'application/json' }
     };
   }
 
   try {
-    if (!event.body) {
-      throw new Error("No body provided");
-    }
+    if (!event.body) throw new Error("No body provided");
+    
     const { scores, userInput } = JSON.parse(event.body);
 
     if (!scores || !userInput) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "Missing scores or userInput" }),
+        body: JSON.stringify({ error: "Missing data" }),
         headers: { 'Content-Type': 'application/json' }
       };
     }
 
-    // 2. Fast Profile Calculation
-    // We calculate simple stats here to send to AI, instead of sending full analysis text.
-    // This saves token processing time.
+    // 2. Calculate simple profile stats
     const { a, b, c, d } = scores;
     const red = a + c;
     const yellow = a + d;
@@ -55,10 +43,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     const blue = b + c;
     
     const sorted = [
-        { name: 'Red (Dominant)', val: red },
-        { name: 'Yellow (Influential)', val: yellow },
-        { name: 'Green (Steady)', val: green },
-        { name: 'Blue (Compliant)', val: blue }
+        { name: 'Red', val: red },
+        { name: 'Yellow', val: yellow },
+        { name: 'Green', val: green },
+        { name: 'Blue', val: blue }
     ].sort((x, y) => y.val - x.val);
 
     const dominant = sorted[0].name;
@@ -67,39 +55,29 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 3. Initialize AI
     const ai = new GoogleGenAI({ apiKey });
 
-    // 4. Highly Optimized System Instruction
-    // Removed extensive background theory. The model knows DISC/Jung.
-    const systemInstruction = `
-      You are an expert communication coach using the DISC color model.
-      User Profile: Dominant: ${dominant}, Secondary: ${secondary}.
-      Scores: Red=${red}, Yellow=${yellow}, Green=${green}, Blue=${blue}.
-      
-      Task: Answer the user's question based on their profile.
-      Language: Hebrew.
-      Tone: Encouraging, practical, concise.
-      Format: Markdown.
-      Length: Keep it under 100 words unless asked for detailed analysis.
-      
-      Question: "${userInput}"
-    `;
+    // 4. Minimal System Instruction for Speed
+    const systemInstruction = `Role: DISC Communication Coach.
+Profile: Dominant=${dominant}, Secondary=${secondary}.
+Scores: Red=${red}, Yellow=${yellow}, Green=${green}, Blue=${blue}.
+Lang: Hebrew.
+Task: Answer briefly and practically. Max 60 words.`;
 
-    // 5. Single Execution with strict Timeout race
-    // Netlify limit is 10s. We cut off at 8s to return a graceful error instead of 504.
+    // 5. Strict Timeout Logic (5.5 seconds) to beat Netlify's 10s limit
     const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error("TIMEOUT")), 8000)
+        setTimeout(() => reject(new Error("TIMEOUT")), 5500)
     );
 
     const apiPromise = ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: userInput, // The actual user input is in system prompt context mostly, but passing it here is standard
+        contents: userInput,
         config: {
             systemInstruction: systemInstruction,
-            maxOutputTokens: 400, // Strict limit to ensure speed
+            maxOutputTokens: 200, // Lower token limit for speed
             temperature: 0.7,
         }
     });
 
-    // Race between API and Timer
+    // Race: AI vs Clock
     const response = await Promise.race([apiPromise, timeoutPromise]);
 
     return {
@@ -109,19 +87,18 @@ const handler: Handler = async (event: HandlerEvent) => {
     };
 
   } catch (error: any) {
-    console.error("Error inside function:", error);
+    console.error("Function Error:", error);
     
-    let errorMessage = "אירעה שגיאה זמנית.";
+    // If timeout or other error, return a friendly message instead of 500/504
+    let userMessage = "מצטער, חוויתי תקלה זמנית. אנא נסה שוב.";
     
     if (error.message === "TIMEOUT") {
-        errorMessage = "השרת עמוס כרגע ולא הספיק לענות בזמן. אנא נסה שאלה קצרה יותר.";
-    } else {
-        errorMessage = "מצטער, חוויתי תקלה. אנא נסה שוב.";
+        userMessage = "השרת עמוס מדי כרגע. אנא נסה שאלה קצרה יותר.";
     }
 
     return {
-      statusCode: 200, // Return 200 with error text to display in chat bubble instead of crashing app
-      body: JSON.stringify({ text: errorMessage }),
+      statusCode: 200, // Return 200 so the UI handles it gracefully
+      body: JSON.stringify({ text: userMessage }),
       headers: { 'Content-Type': 'application/json' },
     };
   }

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { QUESTION_PAIRS } from '../constants/questionnaireData';
 import { QuestionSlider } from './QuestionSlider';
@@ -62,7 +63,7 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
       <div key={currentQuestion.id} className="animate-fade-in-up my-8">
         <QuestionSlider
           question={currentQuestion}
-          value={answers[currentQuestion.id]}
+          value={answers[currentQuestion.id] ?? 4}
           onChange={(value) => handleAnswerChange(currentQuestion.id, value)}
         />
       </div>

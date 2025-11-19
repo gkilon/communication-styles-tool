@@ -17,31 +17,54 @@ type AppStep = 'intro' | 'questionnaire' | 'results' | 'admin';
 
 // גרסה פשוטה של האפליקציה (ללא Firebase), מוטמעת כאן למניעת בעיות ייבוא
 const SimpleApp: React.FC = () => {
-  // State with LocalStorage initialization
+  // State with Robust LocalStorage initialization
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return localStorage.getItem('cs_auth') === 'true';
+    try {
+      return localStorage.getItem('cs_auth') === 'true';
+    } catch {
+      return false;
+    }
   });
   
   const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>(() => {
-    return (localStorage.getItem('cs_step') as 'intro' | 'questionnaire' | 'results') || 'intro';
+    try {
+      const saved = localStorage.getItem('cs_step');
+      return (saved as 'intro' | 'questionnaire' | 'results') || 'intro';
+    } catch {
+      return 'intro';
+    }
   });
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(() => {
-    const saved = localStorage.getItem('cs_index');
-    return saved ? parseInt(saved, 10) : 0;
+    try {
+      const saved = localStorage.getItem('cs_index');
+      return saved ? parseInt(saved, 10) : 0;
+    } catch {
+      return 0;
+    }
   });
 
   const [answers, setAnswers] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem('cs_answers');
-    if (saved) {
-      return JSON.parse(saved);
+    let initialAnswers: Record<string, number> = {};
+    
+    // Try to load from storage
+    try {
+      const saved = localStorage.getItem('cs_answers');
+      if (saved) {
+        initialAnswers = JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("Failed to parse answers from storage", e);
     }
-    // Default initialization
-    const defaultAnswers: Record<string, number> = {};
+
+    // Ensure all questions have a default value if missing
     QUESTION_PAIRS.forEach(q => {
-      defaultAnswers[q.id] = 4;
+      if (initialAnswers[q.id] === undefined) {
+        initialAnswers[q.id] = 4;
+      }
     });
-    return defaultAnswers;
+    
+    return initialAnswers;
   });
 
   // Persistence Effects
@@ -90,7 +113,6 @@ const SimpleApp: React.FC = () => {
   
   const handleSubmit = async () => {
     setStep('results');
-    // In Simple Mode, we do not save to Firebase
   };
 
   const handleReset = () => {
@@ -98,8 +120,6 @@ const SimpleApp: React.FC = () => {
     localStorage.removeItem('cs_step');
     localStorage.removeItem('cs_index');
     localStorage.removeItem('cs_answers');
-    // We keep 'cs_auth' so they don't have to login again immediately, or remove it if you prefer full logout:
-    // localStorage.removeItem('cs_auth'); 
 
     const resetAnswers: Record<string, number> = {};
     QUESTION_PAIRS.forEach(q => {
@@ -166,7 +186,6 @@ const AuthenticatedApp: React.FC = () => {
     let unsubscribe = () => {};
     
     try {
-        // Guard clause: if auth was not initialized properly in config, throw to catch block
         if (!auth) {
             throw new Error("Auth object is null");
         }
@@ -175,10 +194,8 @@ const AuthenticatedApp: React.FC = () => {
             async (currentUser) => {
                 setUser(currentUser);
                 if (currentUser) {
-                    // בדיקה ראשונית מהירה לפי כתובת המייל כדי להציג כפתור ניהול מיד
                     const emailIsAdmin = currentUser.email?.toLowerCase().includes('admin');
                     
-                    // בדיקה מעמיקה יותר מול בסיס הנתונים (למקרה שיש תפקיד מוגדר)
                     getUserProfile(currentUser.uid).then(profile => {
                         if (emailIsAdmin || profile?.role === 'admin') {
                             setIsAdmin(true);
@@ -186,7 +203,6 @@ const AuthenticatedApp: React.FC = () => {
                             setIsAdmin(false);
                         }
                     }).catch(() => {
-                        // במקרה של שגיאה בשליפה (למשל אם הפרופיל עדיין לא נוצר), נסתמך על המייל
                         setIsAdmin(!!emailIsAdmin);
                     });
                 } else {
@@ -277,12 +293,10 @@ const AuthenticatedApp: React.FC = () => {
       handleReset();
   };
 
-  // Fallback to SimpleApp if auth failed significantly
   if (initError) {
       return <SimpleApp />;
   }
 
-  // Render Logic
   if (authLoading) {
       return <div className="min-h-screen flex items-center justify-center text-white">טוען מערכת...</div>;
   }
@@ -336,7 +350,7 @@ const AuthenticatedApp: React.FC = () => {
   );
 };
 
-// Main App Component - Chooses between Simple and Authenticated based on config
+// Main App Component
 const App: React.FC = () => {
   return USE_FIREBASE_MODE ? <AuthenticatedApp /> : <SimpleApp />;
 };
