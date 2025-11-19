@@ -21,28 +21,20 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     });
 
     if (!response.ok) {
-        if (response.status === 404) {
-            const detailedError = "נקודת הקצה של השרת לא נמצאה (שגיאת 404). ייתכן שהפונקציה לא הופעלה כראוי.";
-            console.error(`Error from Netlify function (${response.status}):`, detailedError);
-            return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;
+        let detailedError = `Error ${response.status}`;
+        try {
+            const errorData = await response.json();
+            detailedError = errorData.error || errorData.text || detailedError;
+        } catch (e) {
+            // Ignore JSON parse error for error responses
         }
         
-        let detailedError;
-        try {
-            // First, try to parse the response as JSON, as the server should return a JSON error
-            const errorData = await response.json();
-            detailedError = errorData.error || `קוד סטטוס ${response.status}`;
-        } catch (e) {
-            // If JSON parsing fails, it means the server function crashed and returned something else (like HTML or plain text)
-            console.error("Could not parse JSON error response. Status:", response.status);
-            if (response.status === 502 || response.status === 503 || response.status === 504) {
-                detailedError = `השרת אינו זמין או לא הגיב בזמן (שגיאת ${response.status}). עומס גבוה.`;
-            } else {
-                detailedError = "שגיאת שרת פנימית (Format Error).";
-            }
+        console.error(`Server Error (${response.status}):`, detailedError);
+        
+        if (response.status === 404) {
+            return "שגיאה: לא ניתן למצוא את שירות ה-AI (404). ייתכן שהאתר לא נפרס במלואו.";
         }
-        console.error(`Error from Netlify function (${response.status}):`, detailedError);
-        return `מצטער, חוויתי תקלה טכנית: ${detailedError}`;
+        return `תקלת שרת: ${detailedError}`;
     }
     
     // If response is OK, it should be valid JSON.
@@ -53,11 +45,11 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
         return data.text;
     } else {
         console.error("Invalid response format from server:", data);
-        return "מצטער, התקבלה תשובה בפורמט לא תקין מהשרת.";
+        return "מצטער, התקבלה תשובה לא תקינה מהשרת.";
     }
 
   } catch (error) {
-    console.error("Error calling the Netlify function endpoint:", error);
-    return "מצטער, חוויתי תקלת רשת בתקשורת עם השרת. אנא בדוק את חיבור האינטרנט שלך ונסה שוב.";
+    console.error("Network Error calling AI service:", error);
+    return "מצטער, ישנה בעיית חיבור לאינטרנט או שהשרת אינו זמין כרגע.";
   }
 };

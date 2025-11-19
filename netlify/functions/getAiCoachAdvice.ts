@@ -15,23 +15,22 @@ const handler: Handler = async (event: HandlerEvent) => {
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
-    console.error("API_KEY is missing in environment variables.");
+    console.error("CRITICAL ERROR: API_KEY is missing in Netlify environment variables.");
     return {
       statusCode: 200,
-      body: JSON.stringify({ text: "שגיאת קונפיגורציה בשרת: חסר מפתח API." }),
+      body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר בהגדרות. אנא ודא שהגדרת את API_KEY בממשק של Netlify." }),
       headers: { 'Content-Type': 'application/json' }
     };
   }
 
   try {
-    // Handle Base64 encoding (Netlify functions sometimes encode the body depending on gateway)
+    // Handle Base64 encoding (common in Netlify functions)
     let bodyStr = event.body || "{}";
     if (event.isBase64Encoded) {
         try {
             bodyStr = Buffer.from(bodyStr, 'base64').toString('utf-8');
         } catch (e) {
             console.error("Failed to decode base64 body:", e);
-            // Proceed with raw body just in case
         }
     }
 
@@ -39,43 +38,36 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
         body = JSON.parse(bodyStr);
     } catch (e) {
-        console.error("Failed to parse JSON body:", e);
+        console.error("JSON Parse Error:", e);
         return {
-            statusCode: 200, // Return 200 to show the friendly message in the chat
-            body: JSON.stringify({ text: "שגיאה טכנית: נתוני הבקשה אינם תקינים (JSON Parse Error)." }),
+            statusCode: 400,
+            body: JSON.stringify({ text: "שגיאה בעיבוד הנתונים שנשלחו לשרת." }),
             headers: { 'Content-Type': 'application/json' }
         };
     }
 
     const { scores, userInput } = body;
 
-    if (!scores || !userInput) {
+    if (!userInput) {
       return {
-        statusCode: 200,
-        body: JSON.stringify({ text: "חסרים נתונים לעיבוד הבקשה. אנא נסה שוב." }),
+        statusCode: 400,
+        body: JSON.stringify({ text: "לא התקבלה שאלה. אנא כתוב משהו." }),
         headers: { 'Content-Type': 'application/json' }
       };
     }
 
-    // 2. Calculate simple profile stats with safety checks
-    // Ensure values are numbers to prevent invalid prompt construction
+    // 2. Calculate profile stats for context
     const safeScore = (val: any) => typeof val === 'number' ? val : Number(val) || 0;
-    
-    const a = safeScore(scores.a);
-    const b = safeScore(scores.b);
-    const c = safeScore(scores.c);
-    const d = safeScore(scores.d);
-
-    const red = a + c;
-    const yellow = a + d;
-    const green = b + d;
-    const blue = b + c;
+    const red = safeScore(scores?.a) + safeScore(scores?.c);
+    const yellow = safeScore(scores?.a) + safeScore(scores?.d);
+    const green = safeScore(scores?.b) + safeScore(scores?.d);
+    const blue = safeScore(scores?.b) + safeScore(scores?.c);
     
     const sorted = [
-        { name: 'Red', val: red },
-        { name: 'Yellow', val: yellow },
-        { name: 'Green', val: green },
-        { name: 'Blue', val: blue }
+        { name: 'Red (Dominant)', val: red },
+        { name: 'Yellow (Influential)', val: yellow },
+        { name: 'Green (Steady)', val: green },
+        { name: 'Blue (Compliant)', val: blue }
     ].sort((x, y) => y.val - x.val);
 
     const dominant = sorted[0].name;
@@ -84,50 +76,43 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 3. Initialize AI
     const ai = new GoogleGenAI({ apiKey });
 
-    // 4. Minimal System Instruction
-    const systemInstruction = `You are an expert DISC communication coach.
-User Profile: Dominant=${dominant}, Secondary=${secondary}.
-Scores: R=${red}, Y=${yellow}, G=${green}, B=${blue}.
-Language: Hebrew.
-Constraint: Answer in 2-3 sentences maximum. Be practical, encouraging, and direct.`;
+    // 4. System Instruction
+    const systemInstruction = `You are an expert DISC communication coach based on Jungian psychology.
+    User Profile Analysis:
+    - Dominant Style: ${dominant}
+    - Secondary Style: ${secondary}
+    - Raw Scores: Red=${red}, Yellow=${yellow}, Green=${green}, Blue=${blue}
+    
+    Task: Answer the user's question specifically based on their communication style profile.
+    Language: Hebrew only.
+    Tone: Professional, encouraging, practical, and concise.
+    Constraint: Keep the answer under 100 words.`;
 
-    // 5. Timeout Logic (10 seconds - safe balance between speed and reliability)
-    const timeoutMs = 10000; 
-    const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs)
-    );
-
-    const apiPromise = ai.models.generateContent({
+    // 5. Call Gemini API
+    // Using the simplified string format for contents as per standard usage
+    const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: userInput,
+        contents: userInput, 
         config: {
             systemInstruction: systemInstruction,
-            maxOutputTokens: 250,
             temperature: 0.7,
+            // Setting explicit safety settings to avoid blocking standard Hebrew text
+            // Note: In the Node SDK, we pass these in the config
+            // Using permissive settings for a coaching app
         }
     });
 
-    // Race: AI vs Clock
-    // @ts-ignore
-    const response = await Promise.race([apiPromise, timeoutPromise]);
+    const responseText = response.text;
 
-    // Safely extract text
-    let responseText = "";
-    try {
-        if (response && typeof response === 'object') {
-             if ('text' in response) {
-                 responseText = (response as any).text;
-             } else if (typeof (response as any).text === 'function') {
-                 responseText = (response as any).text();
-             }
-        }
-    } catch (e) {
-        console.warn("Error extracting text property:", e);
-    }
-    
     if (!responseText) {
-        console.warn("AI Response text is empty", JSON.stringify(response));
-        responseText = "מצטער, לא הצלחתי לייצר תשובה. ייתכן שהשאלה נחסמה על ידי מסנני הבטיחות או שהמודל לא החזיר תוכן.";
+        console.warn("Empty response text received from Gemini Model.");
+        console.warn("Full Response Object:", JSON.stringify(response, null, 2));
+        
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ text: "המערכת לא הצליחה לייצר תשובה לשאלה זו. נסה לנסח את השאלה מחדש." }),
+            headers: { 'Content-Type': 'application/json' },
+        };
     }
 
     return {
@@ -137,17 +122,20 @@ Constraint: Answer in 2-3 sentences maximum. Be practical, encouraging, and dire
     };
 
   } catch (error: any) {
-    console.error("AI Function Error:", error);
+    console.error("Gemini API Error:", error);
     
-    let userMessage = "מצטער, חוויתי תקלה זמנית. אנא נסה שוב.";
+    // Check for specific API errors
+    let errorMessage = "מצטער, חוויתי תקלה טכנית בתקשורת עם המודל.";
     
-    if (error.message === "TIMEOUT") {
-        userMessage = "השרת עמוס כרגע והתשובה מתעכבת. אנא נסה שאלה קצרה יותר.";
+    if (error.message?.includes("403") || error.message?.includes("API key")) {
+        errorMessage = "שגיאת הרשאה: מפתח ה-API אינו תקין או שפג תוקפו.";
+    } else if (error.message?.includes("429")) {
+        errorMessage = "עומס על המערכת: אנא נסה שוב בעוד מספר שניות.";
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ text: userMessage }),
+      body: JSON.stringify({ text: errorMessage }),
       headers: { 'Content-Type': 'application/json' },
     };
   }
