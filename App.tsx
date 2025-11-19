@@ -17,19 +17,49 @@ type AppStep = 'intro' | 'questionnaire' | 'results' | 'admin';
 
 // גרסה פשוטה של האפליקציה (ללא Firebase), מוטמעת כאן למניעת בעיות ייבוא
 const SimpleApp: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>('intro');
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  // State with LocalStorage initialization
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('cs_auth') === 'true';
+  });
+  
+  const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>(() => {
+    return (localStorage.getItem('cs_step') as 'intro' | 'questionnaire' | 'results') || 'intro';
+  });
 
-  // Initialize default answers
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(() => {
+    const saved = localStorage.getItem('cs_index');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  const [answers, setAnswers] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('cs_answers');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+    // Default initialization
+    const defaultAnswers: Record<string, number> = {};
+    QUESTION_PAIRS.forEach(q => {
+      defaultAnswers[q.id] = 4;
+    });
+    return defaultAnswers;
+  });
+
+  // Persistence Effects
   useEffect(() => {
-     const defaultAnswers: Record<string, number> = {};
-     QUESTION_PAIRS.forEach(q => {
-       defaultAnswers[q.id] = 4;
-     });
-     setAnswers(defaultAnswers);
-  }, []);
+    localStorage.setItem('cs_auth', isAuthenticated.toString());
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    localStorage.setItem('cs_step', step);
+  }, [step]);
+
+  useEffect(() => {
+    localStorage.setItem('cs_index', currentQuestionIndex.toString());
+  }, [currentQuestionIndex]);
+
+  useEffect(() => {
+    localStorage.setItem('cs_answers', JSON.stringify(answers));
+  }, [answers]);
   
   const scores = useMemo<Scores | null>(() => {
     if (step !== 'results') return null;
@@ -64,6 +94,13 @@ const SimpleApp: React.FC = () => {
   };
 
   const handleReset = () => {
+    // Clear LocalStorage
+    localStorage.removeItem('cs_step');
+    localStorage.removeItem('cs_index');
+    localStorage.removeItem('cs_answers');
+    // We keep 'cs_auth' so they don't have to login again immediately, or remove it if you prefer full logout:
+    // localStorage.removeItem('cs_auth'); 
+
     const resetAnswers: Record<string, number> = {};
     QUESTION_PAIRS.forEach(q => {
       resetAnswers[q.id] = 4; 
