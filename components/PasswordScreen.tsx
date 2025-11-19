@@ -1,10 +1,12 @@
+
 import React, { useState } from 'react';
 
 interface PasswordScreenProps {
   onAuthenticate: (password: string) => boolean;
+  onSwitchToTeamLogin?: () => void;
 }
 
-export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate }) => {
+export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, onSwitchToTeamLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
@@ -17,6 +19,10 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate }
     } else {
       setError('');
     }
+  };
+
+  const handleReload = () => {
+      window.location.reload();
   };
 
   return (
@@ -42,6 +48,24 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate }
           כניסה
         </button>
       </form>
+
+      <div className="mt-8 pt-6 border-t border-gray-700 flex flex-col gap-3">
+        {onSwitchToTeamLogin && (
+            <button 
+                onClick={onSwitchToTeamLogin}
+                className="text-sm text-cyan-400 hover:text-cyan-200 transition-colors underline"
+            >
+                כניסה לגרסת צוות / ניהול (Firebase)
+            </button>
+        )}
+        
+        <button 
+            onClick={handleReload}
+            className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
+        >
+            ניקוי וטעינה מחדש
+        </button>
+      </div>
     </div>
   );
 };
