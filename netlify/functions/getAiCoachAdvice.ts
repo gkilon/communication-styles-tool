@@ -85,7 +85,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     Task: Provide insightful, practical advice to the user's question in Hebrew.
     
     Guidelines:
-    - Be concise and direct.
+    - Be concise and direct (max 3 paragraphs).
     - Focus on "Color Energies" (Red, Yellow, Green, Blue).
     - Do NOT mention raw numbers.
     - Provide actionable steps.`;
@@ -104,8 +104,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                     contents: userInput, 
                     config: {
                         systemInstruction: systemInstruction,
-                        temperature: 0.6, 
-                        maxOutputTokens: 500, // Reduced from 800 to ensure faster response
+                        temperature: 0.7, 
+                        maxOutputTokens: 400, // Reduced to ensure faster response and less chance of timeout
                         safetySettings: [
                             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                             { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -124,15 +124,19 @@ const handler: Handler = async (event: HandlerEvent) => {
                 console.warn(`Attempt ${i+1}: Empty response. Finish reason: ${finishReason}`);
                 throw new Error(`Empty response from model (Reason: ${finishReason})`);
 
-            } catch (error) {
-                console.warn(`Attempt ${i + 1} failed:`, error);
+            } catch (error: any) {
+                console.warn(`Attempt ${i + 1} failed:`, error.message);
                 lastError = error;
                 
                 // If this was the last attempt, break
                 if (i === retries) break;
                 
-                // Short wait before retry
-                await new Promise(r => setTimeout(r, 500));
+                // Smart backoff logic
+                const isOverloaded = error.message?.includes('503') || error.message?.includes('overloaded');
+                const waitTime = isOverloaded ? 2000 : 500; // Wait longer if overloaded
+                
+                console.log(`Waiting ${waitTime}ms before retry...`);
+                await new Promise(r => setTimeout(r, waitTime));
             }
         }
         throw lastError;
@@ -163,10 +167,12 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     if (errStr.includes("SAFETY")) {
         errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. נסה לנסח מחדש.";
+    } else if (errStr.includes("503") || errStr.includes("overloaded")) {
+         errorMessage = "שרתי המודל עמוסים כרגע (שגיאה 503). אנא המתן דקה ונסה שוב.";
     } else if (errStr.includes("Empty response")) {
          errorMessage = "המערכת ניסתה לענות אך לא הצליחה לייצר תוכן. אנא נסה שנית.";
     } else {
-        // Expose the error message for debugging purposes
+        // Expose the error message for debugging purposes if it's something else
         errorMessage += ` (שגיאה: ${errStr.replace('Error:', '').trim()})`;
     }
 
