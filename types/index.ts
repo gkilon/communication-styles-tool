@@ -19,3 +19,13 @@ export interface Profile {
   strengths: string[];
   weaknesses: string[];
 }
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  team: string;
+  role: 'user' | 'admin';
+  completedAt?: string; // ISO Date string
+  scores?: Scores;
+}

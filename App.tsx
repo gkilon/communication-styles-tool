@@ -2,77 +2,68 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
-import { PasswordScreen } from './components/PasswordScreen';
+import { AuthScreen } from './components/AuthScreen';
+import { AdminDashboard } from './components/AdminDashboard';
 import { Scores } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
+import { auth } from './firebaseConfig';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { saveUserResults, getUserProfile } from './services/firebaseService';
 
-type AppStep = 'intro' | 'questionnaire' | 'results';
-
-const STORAGE_KEY = 'comm_style_app_state_v1';
-
-interface SavedState {
-  isAuthenticated: boolean;
-  step: AppStep;
-  currentQuestionIndex: number;
-  answers: Record<string, number>;
-}
+type AppStep = 'intro' | 'questionnaire' | 'results' | 'admin';
 
 const App: React.FC = () => {
-  // Helper function to load state from LocalStorage
-  const loadState = (): SavedState | null => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error("Failed to load state from local storage", e);
-    }
-    return null;
-  };
+  // Firebase Auth State
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  const savedData = loadState();
+  const [step, setStep] = useState<AppStep>('intro');
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
+  const [answers, setAnswers] = useState<Record<string, number>>({});
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
-    savedData?.isAuthenticated ?? false
-  );
-  
-  const [step, setStep] = useState<AppStep>(
-    savedData?.step ?? 'intro'
-  );
-  
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(
-    savedData?.currentQuestionIndex ?? 0
-  );
-  
-  const [answers, setAnswers] = useState<Record<string, number>>(() => {
-    if (savedData?.answers) {
-      return savedData.answers;
-    }
-    const initialAnswers: Record<string, number> = {};
-    QUESTION_PAIRS.forEach(q => {
-      initialAnswers[q.id] = 4; // Default to a side, no middle option.
-    });
-    return initialAnswers;
-  });
-
-  // Effect to save state whenever it changes
+  // Listen to Firebase Auth State
   useEffect(() => {
-    const stateToSave: SavedState = {
-      isAuthenticated,
-      step,
-      currentQuestionIndex,
-      answers
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
-  }, [isAuthenticated, step, currentQuestionIndex, answers]);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // בדיקה ראשונית מהירה לפי כתובת המייל כדי להציג כפתור ניהול מיד
+        const emailIsAdmin = currentUser.email?.toLowerCase().includes('admin');
+        
+        // בדיקה מעמיקה יותר מול בסיס הנתונים (למקרה שיש תפקיד מוגדר)
+        getUserProfile(currentUser.uid).then(profile => {
+            if (emailIsAdmin || profile?.role === 'admin') {
+                setIsAdmin(true);
+            } else {
+                setIsAdmin(false);
+            }
+        }).catch(() => {
+            // במקרה של שגיאה בשליפה (למשל אם הפרופיל עדיין לא נוצר), נסתמך על המייל
+            setIsAdmin(!!emailIsAdmin);
+        });
+      } else {
+          setIsAdmin(false);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Initialize default answers
+  useEffect(() => {
+     const defaultAnswers: Record<string, number> = {};
+     QUESTION_PAIRS.forEach(q => {
+       defaultAnswers[q.id] = 4;
+     });
+     setAnswers(defaultAnswers);
+  }, []);
   
   const scores = useMemo<Scores | null>(() => {
     if (step !== 'results') return null;
 
     const newScores: Scores = { a: 0, b: 0, c: 0, d: 0 };
     QUESTION_PAIRS.forEach(q => {
-      const value = answers[q.id];
+      const value = answers[q.id] ?? 4;
       const [col1, col2] = q.columns;
       
       const score1 = 6 - value; 
@@ -86,22 +77,34 @@ const App: React.FC = () => {
 
   const handleStart = () => setStep('questionnaire');
   
-  const handleSubmit = () => setStep('results');
+  const handleSubmit = async () => {
+    setStep('results');
+    // Save to Firebase
+    if (user) {
+        const calculatedScores = { a: 0, b: 0, c: 0, d: 0 };
+        QUESTION_PAIRS.forEach(q => {
+          const value = answers[q.id] ?? 4;
+          const [col1, col2] = q.columns;
+          calculatedScores[col1] += (6 - value);
+          calculatedScores[col2] += (value - 1);
+        });
+        
+        try {
+            await saveUserResults(calculatedScores);
+        } catch (e) {
+            console.error("Failed to save results to cloud", e);
+        }
+    }
+  };
 
   const handleReset = () => {
-    // Clear local storage on reset
-    localStorage.removeItem(STORAGE_KEY);
-    
-    const initialAnswers: Record<string, number> = {};
+    const resetAnswers: Record<string, number> = {};
     QUESTION_PAIRS.forEach(q => {
-      initialAnswers[q.id] = 4; // Default to a side, no middle option.
+      resetAnswers[q.id] = 4; 
     });
-    setAnswers(initialAnswers);
+    setAnswers(resetAnswers);
     setCurrentQuestionIndex(0);
     setStep('intro');
-    // We keep isAuthenticated true so they don't have to re-enter password just to restart quiz
-    // If you want to force re-login, uncomment the line below and set isAuthenticated to false in the state update
-    // setIsAuthenticated(false); 
   };
 
   const handleEditAnswers = () => {
@@ -109,42 +112,59 @@ const App: React.FC = () => {
     setStep('questionnaire');
   };
   
-  const handleAuthenticate = (password: string): boolean => {
-    if (password === 'inspire') {
-      setIsAuthenticated(true);
-      return true;
-    }
-    return false;
+  const handleLogout = () => {
+      signOut(auth);
+      handleReset();
   };
 
-  const renderStep = () => {
-    switch (step) {
-      case 'intro':
-        return <IntroScreen onStart={handleStart} />;
-      case 'questionnaire':
-        return <QuestionnaireScreen 
-                  answers={answers} 
-                  setAnswers={setAnswers} 
-                  onSubmit={handleSubmit}
-                  currentQuestionIndex={currentQuestionIndex}
-                  setCurrentQuestionIndex={setCurrentQuestionIndex}
-                />;
-      case 'results':
-        return scores ? <ResultsScreen scores={scores} onReset={handleReset} onEdit={handleEditAnswers} /> : null;
-      default:
-        return <IntroScreen onStart={handleStart} />;
-    }
-  };
+  // Render Logic
+  if (authLoading) {
+      return <div className="min-h-screen flex items-center justify-center text-white">טוען מערכת...</div>;
+  }
+
+  if (step === 'admin') {
+      return <AdminDashboard onBack={() => setStep('intro')} />;
+  }
 
   return (
     <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans">
       <div className="max-w-4xl mx-auto">
-        <header className="text-center mb-8">
+        <header className="text-center mb-8 relative">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-cyan-400 tracking-wide">שאלון סגנונות תקשורת</h1>
           <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
+          
+          {user && (
+             <div className="absolute top-0 left-0 flex gap-2 text-sm items-center">
+                 <button onClick={handleLogout} className="text-gray-400 hover:text-white underline">התנתק</button>
+                 {isAdmin && (
+                     <button onClick={() => setStep('admin')} className="text-yellow-400 hover:text-yellow-300 font-bold ml-2 border border-yellow-500 px-3 py-1 rounded transition-colors">
+                         לוח מנהל
+                     </button>
+                 )}
+             </div>
+          )}
         </header>
+
         <main>
-          {isAuthenticated ? renderStep() : <PasswordScreen onAuthenticate={handleAuthenticate} />}
+          {!user ? (
+              <AuthScreen onLoginSuccess={() => setStep('intro')} />
+          ) : (
+              <>
+                {step === 'intro' && <IntroScreen onStart={handleStart} />}
+                {step === 'questionnaire' && (
+                    <QuestionnaireScreen 
+                        answers={answers} 
+                        setAnswers={setAnswers} 
+                        onSubmit={handleSubmit}
+                        currentQuestionIndex={currentQuestionIndex}
+                        setCurrentQuestionIndex={setCurrentQuestionIndex}
+                    />
+                )}
+                {step === 'results' && scores && (
+                    <ResultsScreen scores={scores} onReset={handleReset} onEdit={handleEditAnswers} />
+                )}
+              </>
+          )}
         </main>
       </div>
     </div>
