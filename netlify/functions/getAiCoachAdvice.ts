@@ -76,17 +76,23 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 3. Initialize AI
     const ai = new GoogleGenAI({ apiKey });
 
-    // 4. System Instruction
+    // 4. System Instruction - Updated for deeper analysis and no length limit
     const systemInstruction = `You are an expert DISC communication coach based on Jungian psychology.
     User Profile Analysis:
     - Dominant Style: ${dominant}
     - Secondary Style: ${secondary}
     - Raw Scores: Red=${red}, Yellow=${yellow}, Green=${green}, Blue=${blue}
     
-    Task: Answer the user's question specifically based on their communication style profile.
+    Task: Provide comprehensive, deep, and insightful advice to the user's question.
     Language: Hebrew only.
-    Tone: Professional, encouraging, practical, and concise.
-    Constraint: Keep the answer under 100 words.`;
+    Tone: Professional, empathetic, practical, and thorough.
+    
+    Guidelines:
+    - Analyze the user's situation deeply through the lens of their specific color blend.
+    - Provide concrete, actionable steps or strategies.
+    - Use specific examples to illustrate your points.
+    - Do NOT be brief. Elaborate as much as necessary to provide high value.
+    - Address both their strengths and potential blind spots in the answer.`;
 
     // 5. Call Gemini API
     try {
@@ -96,6 +102,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             config: {
                 systemInstruction: systemInstruction,
                 temperature: 0.7,
+                maxOutputTokens: 2000, // Increased limit for deeper answers
                 // Safety settings to prevent blocking Hebrew content
                 safetySettings: [
                     { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -125,7 +132,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         };
     } catch (innerError: any) {
          console.error("Inner Gemini Generate Error:", innerError);
-         // Re-throw to be caught by outer block
          throw innerError;
     }
 
@@ -141,9 +147,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         errorMessage = "עומס על המערכת: אנא נסה שוב בעוד מספר שניות.";
     } else if (error.toString().includes("SAFETY")) {
         errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. נסה לנסח מחדש.";
-    } else if (error.message) {
-        // Add technical details for debugging if it's a weird error
-        console.error(`Full error message: ${error.message}`);
     }
 
     return {
