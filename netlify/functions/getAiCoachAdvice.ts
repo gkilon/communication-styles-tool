@@ -88,10 +88,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     - Be concise and direct (max 3 paragraphs).
     - Focus on "Color Energies" (Red, Yellow, Green, Blue).
     - Do NOT mention raw numbers.
-    - Provide actionable steps.`;
+    - Provide actionable steps.
+    - Keep the tone professional yet encouraging.`;
 
     // 5. Generate with Robust Retry Logic
-    // Reduced retries to 1 (2 attempts total) to avoid Netlify function timeouts (10s limit)
     const generateWithRetry = async (retries = 1) => {
         let lastError;
         // Loop runs (retries + 1) times
@@ -105,7 +105,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                     config: {
                         systemInstruction: systemInstruction,
                         temperature: 0.7, 
-                        maxOutputTokens: 400, // Reduced to ensure faster response and less chance of timeout
+                        maxOutputTokens: 400,
                         safetySettings: [
                             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                             { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -115,7 +115,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                     }
                 });
                 
-                // Check if response has text content
                 if (response.text && response.text.trim().length > 0) {
                     return response;
                 }
@@ -128,12 +127,11 @@ const handler: Handler = async (event: HandlerEvent) => {
                 console.warn(`Attempt ${i + 1} failed:`, error.message);
                 lastError = error;
                 
-                // If this was the last attempt, break
                 if (i === retries) break;
                 
-                // Smart backoff logic
                 const isOverloaded = error.message?.includes('503') || error.message?.includes('overloaded');
-                const waitTime = isOverloaded ? 2000 : 500; // Wait longer if overloaded
+                // Wait 1.5s if overloaded, else 0.5s. Keep it short to avoid Netlify 10s timeout.
+                const waitTime = isOverloaded ? 1500 : 500; 
                 
                 console.log(`Waiting ${waitTime}ms before retry...`);
                 await new Promise(r => setTimeout(r, waitTime));
@@ -144,7 +142,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     const response = await generateWithRetry();
     
-    // Final check before sending back
     if (!response?.text) {
          return {
             statusCode: 200,
@@ -162,19 +159,20 @@ const handler: Handler = async (event: HandlerEvent) => {
   } catch (error: any) {
     console.error("Gemini API Final Error:", error);
     
-    let errorMessage = "מצטער, חוויתי תקלה טכנית בתקשורת עם המודל.";
+    let errorMessage = "מצטער, נתקלתי בבעיה זמנית בתקשורת עם המודל.";
     const errStr = error.toString();
 
+    // User-friendly error mapping
     if (errStr.includes("SAFETY")) {
-        errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. נסה לנסח מחדש.";
+        errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. אנא נסה לנסח את השאלה מחדש.";
     } else if (errStr.includes("503") || errStr.includes("overloaded")) {
-         errorMessage = "שרתי המודל עמוסים כרגע (שגיאה 503). אנא המתן דקה ונסה שוב.";
+         errorMessage = "שרתי המודל עמוסים כרגע עקב ביקוש גבוה. אנא המתן דקה ונסה שוב.";
     } else if (errStr.includes("Empty response")) {
          errorMessage = "המערכת ניסתה לענות אך לא הצליחה לייצר תוכן. אנא נסה שנית.";
-    } else {
-        // Expose the error message for debugging purposes if it's something else
-        errorMessage += ` (שגיאה: ${errStr.replace('Error:', '').trim()})`;
     }
+    
+    // Note: We intentionally do NOT append the raw technical error to the user message anymore
+    // to avoid showing scary JSON like 'Api {"error":...}'
 
     return {
       statusCode: 200,
