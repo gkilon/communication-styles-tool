@@ -21,25 +21,36 @@ const PRESET_QUESTIONS = [
 ];
 
 const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
-  // Defensive check: Ensure text exists
   if (!text) return null;
 
-  let htmlContent;
+  let htmlContent = '';
+  const marked = (window as any).marked;
+
   try {
-    const marked = (window as any).marked;
-    // Robust check for marked library availability
+    // Check if marked is available and is a function
     if (marked && typeof marked.parse === 'function') {
-        htmlContent = marked.parse(text);
+        const result = marked.parse(text);
+        // Ensure we got a string back (some versions might return a Promise if async is enabled)
+        if (typeof result === 'string') {
+            htmlContent = result;
+        } else {
+            // Fallback for Promise/unexpected return
+            htmlContent = text.replace(/\n/g, '<br />');
+        }
     } else if (marked && typeof marked === 'function') {
-        // Fallback for older versions of marked
-        htmlContent = marked(text);
+        // Older marked versions
+        const result = marked(text);
+        if (typeof result === 'string') {
+             htmlContent = result;
+        } else {
+             htmlContent = text.replace(/\n/g, '<br />');
+        }
     } else {
-        // Fallback if library is missing
+        // Marked not loaded
         htmlContent = text.replace(/\n/g, '<br />');
     }
   } catch (error) {
-    console.warn("Error parsing AI coach markdown, falling back to plain text:", error);
-    // Fallback to simple text formatting instead of showing an error message
+    console.warn("Error parsing AI coach markdown:", error);
     htmlContent = text.replace(/\n/g, '<br />');
   }
 

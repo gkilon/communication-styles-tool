@@ -36,13 +36,13 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
             // If JSON parsing fails, it means the server function crashed and returned something else (like HTML or plain text)
             console.error("Could not parse JSON error response. Status:", response.status);
             if (response.status === 502 || response.status === 503 || response.status === 504) {
-                detailedError = `השרת אינו זמין או לא הגיב בזמן (שגיאת ${response.status}). ייתכן שיש עומס כבד או שהפונקציה לקחה יותר מדי זמן להסתיים. אנא נסה שוב בעוד מספר רגעים.`;
+                detailedError = `השרת אינו זמין או לא הגיב בזמן (שגיאת ${response.status}). עומס גבוה.`;
             } else {
-                detailedError = "השרת החזיר תגובה בפורמט לא תקין, ייתכן שנפלה בו שגיאה קריטית.";
+                detailedError = "שגיאת שרת פנימית (Format Error).";
             }
         }
         console.error(`Error from Netlify function (${response.status}):`, detailedError);
-        return `מצטער, חוויתי תקלה טכנית. השרת החזיר את השגיאה הבאה: "${detailedError}"`;
+        return `מצטער, חוויתי תקלה טכנית: ${detailedError}`;
     }
     
     // If response is OK, it should be valid JSON.

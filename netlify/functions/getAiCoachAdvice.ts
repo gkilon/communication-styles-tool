@@ -24,27 +24,48 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   try {
-    if (!event.body) throw new Error("No body provided");
-    
+    // Handle Base64 encoding (Netlify functions sometimes encode the body depending on gateway)
+    let bodyStr = event.body || "{}";
+    if (event.isBase64Encoded) {
+        try {
+            bodyStr = Buffer.from(bodyStr, 'base64').toString('utf-8');
+        } catch (e) {
+            console.error("Failed to decode base64 body:", e);
+            // Proceed with raw body just in case
+        }
+    }
+
     let body;
     try {
-        body = JSON.parse(event.body);
+        body = JSON.parse(bodyStr);
     } catch (e) {
-        throw new Error("Invalid JSON body");
+        console.error("Failed to parse JSON body:", e);
+        return {
+            statusCode: 200, // Return 200 to show the friendly message in the chat
+            body: JSON.stringify({ text: "שגיאה טכנית: נתוני הבקשה אינם תקינים (JSON Parse Error)." }),
+            headers: { 'Content-Type': 'application/json' }
+        };
     }
 
     const { scores, userInput } = body;
 
     if (!scores || !userInput) {
       return {
-        statusCode: 400,
-        body: JSON.stringify({ text: "חסרים נתונים לעיבוד הבקשה." }),
+        statusCode: 200,
+        body: JSON.stringify({ text: "חסרים נתונים לעיבוד הבקשה. אנא נסה שוב." }),
         headers: { 'Content-Type': 'application/json' }
       };
     }
 
-    // 2. Calculate simple profile stats
-    const { a, b, c, d } = scores;
+    // 2. Calculate simple profile stats with safety checks
+    // Ensure values are numbers to prevent invalid prompt construction
+    const safeScore = (val: any) => typeof val === 'number' ? val : Number(val) || 0;
+    
+    const a = safeScore(scores.a);
+    const b = safeScore(scores.b);
+    const c = safeScore(scores.c);
+    const d = safeScore(scores.d);
+
     const red = a + c;
     const yellow = a + d;
     const green = b + d;
@@ -63,15 +84,15 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 3. Initialize AI
     const ai = new GoogleGenAI({ apiKey });
 
-    // 4. Extremely Minimal System Instruction for Speed
+    // 4. Minimal System Instruction
     const systemInstruction = `You are an expert DISC communication coach.
 User Profile: Dominant=${dominant}, Secondary=${secondary}.
 Scores: R=${red}, Y=${yellow}, G=${green}, B=${blue}.
 Language: Hebrew.
-Constraint: Answer in 2-3 sentences maximum. Be practical and direct.`;
+Constraint: Answer in 2-3 sentences maximum. Be practical, encouraging, and direct.`;
 
-    // 5. Strict Timeout Logic (6 seconds)
-    const timeoutMs = 6000;
+    // 5. Timeout Logic (10 seconds - safe balance between speed and reliability)
+    const timeoutMs = 10000; 
     const timeoutPromise = new Promise<never>((_, reject) => 
         setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs)
     );
@@ -81,26 +102,22 @@ Constraint: Answer in 2-3 sentences maximum. Be practical and direct.`;
         contents: userInput,
         config: {
             systemInstruction: systemInstruction,
-            maxOutputTokens: 150,
+            maxOutputTokens: 250,
             temperature: 0.7,
         }
     });
 
     // Race: AI vs Clock
-    // @ts-ignore - Types for race result can be tricky with different AI SDK versions
+    // @ts-ignore
     const response = await Promise.race([apiPromise, timeoutPromise]);
 
     // Safely extract text
     let responseText = "";
     try {
         if (response && typeof response === 'object') {
-             // Try standard property access
              if ('text' in response) {
                  responseText = (response as any).text;
-             }
-             
-             // Fallback: function call (older SDKs) or candidates check
-             if (!responseText && typeof (response as any).text === 'function') {
+             } else if (typeof (response as any).text === 'function') {
                  responseText = (response as any).text();
              }
         }
@@ -109,8 +126,8 @@ Constraint: Answer in 2-3 sentences maximum. Be practical and direct.`;
     }
     
     if (!responseText) {
-        console.warn("AI Response text is empty or undefined", JSON.stringify(response));
-        responseText = "מצטער, לא הצלחתי לייצר תשובה לשאלה זו (ייתכן שהתוכן נחסם). אנא נסה לנסח שוב.";
+        console.warn("AI Response text is empty", JSON.stringify(response));
+        responseText = "מצטער, לא הצלחתי לייצר תשובה. ייתכן שהשאלה נחסמה על ידי מסנני הבטיחות או שהמודל לא החזיר תוכן.";
     }
 
     return {
@@ -126,8 +143,6 @@ Constraint: Answer in 2-3 sentences maximum. Be practical and direct.`;
     
     if (error.message === "TIMEOUT") {
         userMessage = "השרת עמוס כרגע והתשובה מתעכבת. אנא נסה שאלה קצרה יותר.";
-    } else if (error.message && error.message.includes("Invalid JSON")) {
-        userMessage = "שגיאה בעיבוד הנתונים שנשלחו.";
     }
 
     return {
