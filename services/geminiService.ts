@@ -32,7 +32,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
                 const textData = await response.text();
                 console.error("Non-JSON error response:", textData.substring(0, 200)); // Log first 200 chars
                 if (response.status === 502 || response.status === 504) {
-                   return "תקלת תקשורת: השרת לא הגיב בזמן (Timeout). נסה לשאול שאלה קצרה יותר.";
+                   return "תקלת תקשורת: השרת לא הגיב בזמן (Timeout). נסה לשאול שאלה קצרה יותר או לנסות שוב.";
                 }
             }
         } catch (e) {
@@ -59,7 +59,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
         }
     } catch (e) {
         console.error("Failed to parse JSON response (likely HTML received):", e);
-        return "תקלת תקשורת: התקבלה תשובה לא ברורה מהשרת. אנא נסה שוב.";
+        return "תקלת תקשורת: התקבלה תשובה לא ברורה מהשרת. ייתכן שהיה ניתוק רגעי.";
     }
 
   } catch (error) {

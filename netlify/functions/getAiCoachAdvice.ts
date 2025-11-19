@@ -17,7 +17,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   if (!apiKey) {
     console.error("CRITICAL ERROR: API_KEY is missing in Netlify environment variables.");
     return {
-      statusCode: 200,
+      statusCode: 200, // Return 200 to client so it can display the text gracefully
       body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר בהגדרות. אנא ודא שהגדרת את API_KEY בממשק של Netlify." }),
       headers: { 'Content-Type': 'application/json' }
     };
@@ -78,6 +78,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     const ai = new GoogleGenAI({ apiKey });
 
     // 4. System Instruction - Updated for Jungian Model
+    // Explicitly mentioning "Don't timeout" strategy in system prompt logic (conciseness where possible while deep)
     const systemInstruction = `You are an expert communication coach based on the Jungian Color Model (similar to Insights Discovery).
     
     User Profile Analysis:
@@ -85,19 +86,17 @@ const handler: Handler = async (event: HandlerEvent) => {
     - Secondary Color Energy: ${secondary}
     - Contextual intensities (internal use only): Red=${red}, Yellow=${yellow}, Green=${green}, Blue=${blue}
     
-    Task: Provide comprehensive, deep, and insightful advice to the user's question.
+    Task: Provide insightful advice to the user's question.
     Language: Hebrew only.
-    Tone: Professional, empathetic, practical, and thorough.
+    Tone: Professional, empathetic, practical.
     
     Guidelines:
     - This is NOT DISC. Do not use DISC terminology.
     - Focus on the "Color Energies" (Red, Yellow, Green, Blue) as described in Jungian typology.
-    - Do NOT mention the specific raw score numbers (e.g., "Your score is 45") in your final response, as these raw numbers may confuse the user who sees percentages on their chart. Use terms like "High", "Moderate", or "Low" instead.
+    - Do NOT mention the specific raw score numbers (e.g., "Your score is 45") in your final response. Use terms like "High", "Moderate", or "Low" instead.
     - Analyze the user's situation deeply through the lens of their specific color blend.
-    - Provide concrete, actionable steps or strategies.
-    - Use specific examples to illustrate your points.
-    - Be detailed but concise enough to not time out.
-    - Address both their strengths and potential blind spots in the answer.`;
+    - Provide concrete, actionable steps.
+    - Be concise and direct to ensure a quick response. Avoid fluff.`;
 
     // Helper function for retries
     const generateWithRetry = async (retries = 3) => {
@@ -111,6 +110,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                         systemInstruction: systemInstruction,
                         temperature: 0.7,
                         // Reduced max tokens to 1000 to prevent Netlify function timeouts (10s limit)
+                        // Hebrew characters take more tokens, but 1000 is plenty for a good answer.
                         maxOutputTokens: 1000, 
                         safetySettings: [
                             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
