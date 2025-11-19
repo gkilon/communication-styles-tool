@@ -148,6 +148,13 @@ const SimpleApp: React.FC = () => {
     setStep('questionnaire');
   };
 
+  const handleFullClear = () => {
+      if (window.confirm("האם אתה בתוך שברצונך למחוק את כל הנתונים ולהתחיל מחדש?")) {
+          localStorage.clear();
+          window.location.reload();
+      }
+  };
+
   const switchToTeamMode = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('mode', 'team');
@@ -186,13 +193,21 @@ const SimpleApp: React.FC = () => {
       </div>
       
       <footer className="mt-12 text-center text-sm text-gray-600 border-t border-gray-800 pt-6 pb-4">
-        <p className="mb-2">גרסה אישית</p>
-        <button 
-            onClick={switchToTeamMode} 
-            className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-400 hover:text-white px-3 py-1.5 rounded transition-all"
-        >
-           כניסה למנהלים / גרסת ארגון (עבור ל-?mode=team)
-        </button>
+        <p className="mb-2 font-bold text-gray-500">גרסה אישית</p>
+        <div className="flex justify-center gap-4 flex-wrap">
+            <button 
+                onClick={handleFullClear} 
+                className="text-xs bg-red-900/30 hover:bg-red-900/50 border border-red-900 text-red-400 hover:text-red-300 px-3 py-1.5 rounded transition-all"
+            >
+            נקה נתונים (איפוס מלא)
+            </button>
+            <button 
+                onClick={switchToTeamMode} 
+                className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-400 hover:text-white px-3 py-1.5 rounded transition-all"
+            >
+            כניסה למנהלים / גרסת ארגון
+            </button>
+        </div>
       </footer>
     </div>
   );
@@ -215,8 +230,11 @@ const AuthenticatedApp: React.FC = () => {
     let unsubscribe = () => {};
     
     try {
+        // First check if config was valid in config.ts
         if (!isFirebaseInitialized) {
-            throw new Error("Firebase initialization failed or keys are missing.");
+             // We deliberately throw here if not initialized, to be caught by the catch block below
+             // which sets initError to true.
+             throw new Error("Firebase not initialized due to missing config.");
         }
 
         if (!auth) {
@@ -330,6 +348,7 @@ const AuthenticatedApp: React.FC = () => {
       return <SimpleApp />;
   }
 
+  // Error Screen: If Firebase is needed but failed to load
   if (initError) {
       return (
           <div className="min-h-screen flex flex-col items-center justify-center text-white p-6 font-sans" dir="rtl">
