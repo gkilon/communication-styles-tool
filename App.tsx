@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
@@ -9,14 +10,18 @@ import { QUESTION_PAIRS } from './constants/questionnaireData';
 import { auth } from './firebaseConfig';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { saveUserResults, getUserProfile } from './services/firebaseService';
+import { SimpleApp } from './SimpleApp';
+import { USE_FIREBASE_MODE } from './config';
 
 type AppStep = 'intro' | 'questionnaire' | 'results' | 'admin';
 
-const App: React.FC = () => {
+// This component contains the complex logic with Authentication and Firebase
+const AuthenticatedApp: React.FC = () => {
   // Firebase Auth State
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [initError, setInitError] = useState(false);
 
   const [step, setStep] = useState<AppStep>('intro');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
@@ -24,28 +29,49 @@ const App: React.FC = () => {
 
   // Listen to Firebase Auth State
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // בדיקה ראשונית מהירה לפי כתובת המייל כדי להציג כפתור ניהול מיד
-        const emailIsAdmin = currentUser.email?.toLowerCase().includes('admin');
-        
-        // בדיקה מעמיקה יותר מול בסיס הנתונים (למקרה שיש תפקיד מוגדר)
-        getUserProfile(currentUser.uid).then(profile => {
-            if (emailIsAdmin || profile?.role === 'admin') {
-                setIsAdmin(true);
-            } else {
-                setIsAdmin(false);
+    let unsubscribe = () => {};
+    
+    try {
+        // Guard clause: if auth was not initialized properly in config, throw to catch block
+        if (!auth) {
+            throw new Error("Auth object is null");
+        }
+
+        unsubscribe = onAuthStateChanged(auth, 
+            async (currentUser) => {
+                setUser(currentUser);
+                if (currentUser) {
+                    // בדיקה ראשונית מהירה לפי כתובת המייל כדי להציג כפתור ניהול מיד
+                    const emailIsAdmin = currentUser.email?.toLowerCase().includes('admin');
+                    
+                    // בדיקה מעמיקה יותר מול בסיס הנתונים (למקרה שיש תפקיד מוגדר)
+                    getUserProfile(currentUser.uid).then(profile => {
+                        if (emailIsAdmin || profile?.role === 'admin') {
+                            setIsAdmin(true);
+                        } else {
+                            setIsAdmin(false);
+                        }
+                    }).catch(() => {
+                        // במקרה של שגיאה בשליפה (למשל אם הפרופיל עדיין לא נוצר), נסתמך על המייל
+                        setIsAdmin(!!emailIsAdmin);
+                    });
+                } else {
+                    setIsAdmin(false);
+                }
+                setAuthLoading(false);
+            },
+            (error) => {
+                console.error("Firebase Auth Error (falling back to simple mode):", error);
+                setInitError(true);
+                setAuthLoading(false);
             }
-        }).catch(() => {
-            // במקרה של שגיאה בשליפה (למשל אם הפרופיל עדיין לא נוצר), נסתמך על המייל
-            setIsAdmin(!!emailIsAdmin);
-        });
-      } else {
-          setIsAdmin(false);
-      }
-      setAuthLoading(false);
-    });
+        );
+    } catch (e) {
+        console.error("Failed to initialize auth listener:", e);
+        setInitError(true);
+        setAuthLoading(false);
+    }
+
     return () => unsubscribe();
   }, []);
 
@@ -117,6 +143,11 @@ const App: React.FC = () => {
       handleReset();
   };
 
+  // Fallback to SimpleApp if auth failed significantly
+  if (initError) {
+      return <SimpleApp />;
+  }
+
   // Render Logic
   if (authLoading) {
       return <div className="min-h-screen flex items-center justify-center text-white">טוען מערכת...</div>;
@@ -169,6 +200,11 @@ const App: React.FC = () => {
       </div>
     </div>
   );
+};
+
+// Main App Component - Chooses between Simple and Authenticated based on config
+const App: React.FC = () => {
+  return USE_FIREBASE_MODE ? <AuthenticatedApp /> : <SimpleApp />;
 };
 
 export default App;
