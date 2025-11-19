@@ -63,11 +63,13 @@ const handler: Handler = async (event: HandlerEvent) => {
     const green = safeScore(scores?.b) + safeScore(scores?.d);
     const blue = safeScore(scores?.b) + safeScore(scores?.c);
     
+    // Sort colors by value to determine hierarchy
+    // Naming updated to reflect Jungian energies rather than DISC
     const sorted = [
-        { name: 'Red (Dominant)', val: red },
-        { name: 'Yellow (Influential)', val: yellow },
-        { name: 'Green (Steady)', val: green },
-        { name: 'Blue (Compliant)', val: blue }
+        { name: 'Red (Goal-Oriented / Driving)', val: red },
+        { name: 'Yellow (Enthusiastic / Expressive)', val: yellow },
+        { name: 'Green (Supportive / Amiable)', val: green },
+        { name: 'Blue (Analytical / Precise)', val: blue }
     ].sort((x, y) => y.val - x.val);
 
     const dominant = sorted[0].name;
@@ -76,18 +78,22 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 3. Initialize AI
     const ai = new GoogleGenAI({ apiKey });
 
-    // 4. System Instruction - Updated for deeper analysis and no length limit
-    const systemInstruction = `You are an expert DISC communication coach based on Jungian psychology.
+    // 4. System Instruction - Updated for Jungian Model, Deep Answers, and No Confusing Numbers
+    const systemInstruction = `You are an expert communication coach based on the Jungian Color Model (similar to Insights Discovery).
+    
     User Profile Analysis:
-    - Dominant Style: ${dominant}
-    - Secondary Style: ${secondary}
-    - Raw Scores: Red=${red}, Yellow=${yellow}, Green=${green}, Blue=${blue}
+    - Primary Color Energy: ${dominant}
+    - Secondary Color Energy: ${secondary}
+    - Contextual intensities (internal use only): Red=${red}, Yellow=${yellow}, Green=${green}, Blue=${blue}
     
     Task: Provide comprehensive, deep, and insightful advice to the user's question.
     Language: Hebrew only.
     Tone: Professional, empathetic, practical, and thorough.
     
     Guidelines:
+    - This is NOT DISC. Do not use DISC terminology (Dominance, Influence, Steadiness, Compliance).
+    - Focus on the "Color Energies" (Red, Yellow, Green, Blue) as described in Jungian typology.
+    - Do NOT mention the specific raw score numbers (e.g., "Your score is 45") in your final response, as these raw numbers may confuse the user who sees percentages on their chart. Use terms like "High", "Moderate", or "Low" instead.
     - Analyze the user's situation deeply through the lens of their specific color blend.
     - Provide concrete, actionable steps or strategies.
     - Use specific examples to illustrate your points.
