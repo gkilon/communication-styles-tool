@@ -8,7 +8,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { PasswordScreen } from './components/PasswordScreen';
 import { Scores } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
-import { auth } from './firebaseConfig';
+import { auth, isFirebaseInitialized } from './firebaseConfig';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { saveUserResults, getUserProfile } from './services/firebaseService';
 import { USE_FIREBASE_MODE } from './config';
@@ -150,9 +150,16 @@ const SimpleApp: React.FC = () => {
     setStep('questionnaire');
   };
 
+  // Switch to Team Mode Handler
+  const switchToTeamMode = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', 'team');
+    window.location.href = url.toString();
+  };
+
   return (
-    <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans flex flex-col">
+      <div className="max-w-4xl mx-auto w-full flex-grow">
         <header className="text-center mb-8 relative">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-cyan-400 tracking-wide">שאלון סגנונות תקשורת</h1>
           <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
@@ -180,6 +187,12 @@ const SimpleApp: React.FC = () => {
             )}
         </main>
       </div>
+      
+      <footer className="mt-12 text-center text-xs text-gray-600 border-t border-gray-800 pt-4">
+        <p>גרסה אישית | <button onClick={switchToTeamMode} className="text-gray-500 hover:text-cyan-400 underline ml-1">
+           האם אתה מנהל צוות? עבור לגרסת ארגון
+        </button></p>
+      </footer>
     </div>
   );
 };
@@ -191,6 +204,7 @@ const AuthenticatedApp: React.FC = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [initError, setInitError] = useState(false);
+  const [forceSimpleMode, setForceSimpleMode] = useState(false);
 
   const [step, setStep] = useState<AppStep>('intro');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
@@ -201,8 +215,19 @@ const AuthenticatedApp: React.FC = () => {
     let unsubscribe = () => {};
     
     try {
+        // Safety Check 1: Did Firebase init succeed?
+        if (!isFirebaseInitialized) {
+            throw new Error("Firebase initialization failed or keys are missing.");
+        }
+
+        // Safety Check 2: Is the auth object valid?
         if (!auth) {
-            throw new Error("Auth object is null");
+            throw new Error("Auth object is not initialized");
+        }
+        
+        // Safety Check 3: Check SDK availability
+        if (typeof onAuthStateChanged !== 'function') {
+            throw new Error("Firebase Auth functions are not available");
         }
 
         unsubscribe = onAuthStateChanged(auth, 
@@ -226,7 +251,7 @@ const AuthenticatedApp: React.FC = () => {
                 setAuthLoading(false);
             },
             (error) => {
-                console.error("Firebase Auth Error (falling back to simple mode):", error);
+                console.error("Firebase Auth Error:", error);
                 setInitError(true);
                 setAuthLoading(false);
             }
@@ -308,12 +333,55 @@ const AuthenticatedApp: React.FC = () => {
       handleReset();
   };
 
-  if (initError) {
+  // Switch back to Personal Mode
+  const switchToPersonalMode = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('mode');
+    window.location.href = url.toString();
+  };
+
+  if (forceSimpleMode) {
       return <SimpleApp />;
   }
 
+  // תצוגת שגיאה אם Firebase לא הוגדר כראוי אך המצב מופעל
+  if (initError) {
+      return (
+          <div className="min-h-screen flex flex-col items-center justify-center text-white p-6 font-sans" dir="rtl">
+              <div className="bg-gray-800 p-8 rounded-lg shadow-2xl border border-red-500 max-w-lg text-center">
+                  <h2 className="text-3xl font-bold text-red-500 mb-4">נדרשת הגדרת מערכת</h2>
+                  <p className="text-lg mb-4">
+                      המערכת מוגדרת למצב "מלא" (Login & Database), אך החיבור ל-Firebase נכשל.
+                  </p>
+                  <div className="bg-gray-900 p-4 rounded text-left text-sm text-gray-300 mb-6 font-mono ltr-text overflow-x-auto">
+                      <p className="mb-2 border-b border-gray-700 pb-1">Status:</p>
+                      Firebase Init Failed.<br/>
+                      Please check VITE_FIREBASE_API_KEY in Netlify settings.
+                  </div>
+                  <p className="text-gray-400 mb-6 text-sm">
+                      בינתיים, ניתן להשתמש במערכת במצב אישי.
+                  </p>
+                  <div className="flex gap-4 justify-center">
+                    <button 
+                        onClick={() => setForceSimpleMode(true)}
+                        className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full transition-colors border border-gray-500"
+                    >
+                        הפעל במצב אישי
+                    </button>
+                     <button 
+                        onClick={switchToPersonalMode}
+                        className="bg-cyan-700 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-full transition-colors"
+                    >
+                        חזור לכתובת הרגילה
+                    </button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
   if (authLoading) {
-      return <div className="min-h-screen flex items-center justify-center text-white">טוען מערכת...</div>;
+      return <div className="min-h-screen flex items-center justify-center text-white">טוען נתוני משתמש...</div>;
   }
 
   if (step === 'admin') {
@@ -321,11 +389,12 @@ const AuthenticatedApp: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans flex flex-col">
+      <div className="max-w-4xl mx-auto w-full flex-grow">
         <header className="text-center mb-8 relative">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-cyan-400 tracking-wide">שאלון סגנונות תקשורת</h1>
           <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
+          <p className="text-cyan-600 text-sm font-bold mt-1 bg-cyan-900/20 inline-block px-3 py-1 rounded-full border border-cyan-900/50">גרסת ארגון</p>
           
           {user && (
              <div className="absolute top-0 left-0 flex gap-2 text-sm items-center">
@@ -361,6 +430,11 @@ const AuthenticatedApp: React.FC = () => {
           )}
         </main>
       </div>
+       <footer className="mt-12 text-center text-xs text-gray-600 border-t border-gray-800 pt-4">
+        <p>גרסת ארגון | <button onClick={switchToPersonalMode} className="text-gray-500 hover:text-cyan-400 underline ml-1">
+           עבור לגרסה אישית (ללא שמירת נתונים)
+        </button></p>
+      </footer>
     </div>
   );
 };

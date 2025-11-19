@@ -21,6 +21,7 @@ const firebaseConfig = {
 // Initialize with a minimal mock to prevent immediate crashes if accessed before init
 let auth: Auth = { currentUser: null } as unknown as Auth;
 let db: Firestore = {} as Firestore;
+let isFirebaseInitialized = false;
 
 // פונקציית עזר לבדיקת תקינות בסיסית של המפתח
 const isApiKeyValid = (key: string | undefined) => {
@@ -35,12 +36,15 @@ if (isApiKeyValid(firebaseConfig.apiKey)) {
         const app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
+        isFirebaseInitialized = true;
     } catch (error) {
         console.error("Failed to initialize Firebase:", error);
+        isFirebaseInitialized = false;
     }
 } else {
     console.warn("Firebase config keys are missing or invalid. App running in offline/simple mode.");
+    isFirebaseInitialized = false;
 }
 
 // ייצוא שירותי האימות והמסד נתונים לשימוש בשאר האפליקציה
-export { auth, db };
+export { auth, db, isFirebaseInitialized };

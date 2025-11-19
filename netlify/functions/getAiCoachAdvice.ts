@@ -85,6 +85,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     Task: Provide insightful, practical advice to the user's question in Hebrew.
     
     Guidelines:
+    - **CRITICAL: Do NOT start with a greeting (like "Shalom", "Hi", "Hello"). Start directly with the answer/advice.**
     - Be concise and direct (max 3 paragraphs).
     - Focus on "Color Energies" (Red, Yellow, Green, Blue).
     - Do NOT mention raw numbers.
