@@ -1,7 +1,9 @@
 
 import { db, auth } from '../firebaseConfig';
-import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { Scores, UserProfile } from '../types';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, increment } from 'firebase/firestore';
+import { Scores, UserProfile, Team } from '../types';
+
+// --- USERS & RESULTS ---
 
 // שמירת תוצאות המשתמש בבסיס הנתונים
 export const saveUserResults = async (scores: Scores) => {
@@ -14,7 +16,7 @@ export const saveUserResults = async (scores: Scores) => {
     await setDoc(userRef, {
       scores: scores,
       completedAt: new Date().toISOString()
-    }, { merge: true }); // merge=true אומר שאנחנו רק מעדכנים ולא דורסים את השם/צוות
+    }, { merge: true });
     console.log("Results saved successfully");
   } catch (error) {
     console.error("Error saving results:", error);
@@ -22,7 +24,7 @@ export const saveUserResults = async (scores: Scores) => {
   }
 };
 
-// יצירת משתמש חדש בבסיס הנתונים (פרטים אישיים וצוות)
+// יצירת משתמש חדש בבסיס הנתונים
 export const createUserProfile = async (uid: string, data: { email: string; displayName: string; team: string; role?: 'user' | 'admin' }) => {
   const userRef = doc(db, "users", uid);
   await setDoc(userRef, {
@@ -30,7 +32,7 @@ export const createUserProfile = async (uid: string, data: { email: string; disp
     email: data.email,
     displayName: data.displayName,
     team: data.team,
-    role: data.role || 'user', // ברירת מחדל למשתמש רגיל
+    role: data.role || 'user',
     createdAt: new Date().toISOString()
   });
 };
@@ -67,4 +69,33 @@ export const getAllUsers = async () => {
       users.push(doc.data() as UserProfile);
     });
     return users;
+};
+
+// --- TEAMS MANAGEMENT ---
+
+export const createTeam = async (teamName: string) => {
+    // Check if team exists first (by name) - simplified check
+    const teamsRef = collection(db, "teams");
+    const q = query(teamsRef, where("name", "==", teamName));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+        throw new Error("שם הצוות כבר קיים במערכת");
+    }
+
+    await addDoc(teamsRef, {
+        name: teamName,
+        createdAt: new Date().toISOString(),
+        memberCount: 0
+    });
+};
+
+export const getTeams = async (): Promise<Team[]> => {
+    const teamsRef = collection(db, "teams");
+    const querySnapshot = await getDocs(teamsRef);
+    const teams: Team[] = [];
+    querySnapshot.forEach((doc) => {
+        teams.push({ id: doc.id, ...doc.data() } as Team);
+    });
+    return teams;
 };
