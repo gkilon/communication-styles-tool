@@ -46,10 +46,18 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
   };
 
   const toggleMode = () => {
-      setIsAdminMode(!isAdminMode);
+      const newMode = !isAdminMode;
+      setIsAdminMode(newMode);
       setError('');
-      setPassword('');
-      setEmail('');
+      
+      if (newMode) {
+          // Hardcoded Admin Credentials as requested
+          setEmail('admin@manager.com');
+          setPassword('123456');
+      } else {
+          setEmail('');
+          setPassword('');
+      }
   };
 
   return (
@@ -59,7 +67,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
       </h2>
       <p className="text-gray-400 mb-6 text-sm">
         {isAdminMode 
-            ? 'הזן פרטי מנהל לצפייה בנתונים' 
+            ? 'הפרטים הקבועים מולאו עבורך' 
             : 'הזן את סיסמת הגישה כדי להתחיל'}
       </p>
       
@@ -73,7 +81,6 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
                 className="w-full bg-gray-700 border border-gray-600 rounded-full py-3 px-4 text-white text-center placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 placeholder="אימייל מנהל"
                 dir="ltr"
-                autoFocus
             />
         )}
 
@@ -82,7 +89,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full bg-gray-700 border border-gray-600 rounded-full py-3 px-4 text-white text-center placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
-          placeholder={isAdminMode ? "סיסמה" : "הכנס סיסמה"}
+          placeholder="סיסמה"
           dir="ltr"
         />
         
@@ -93,7 +100,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
           disabled={loading}
           className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-8 rounded-full text-lg transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:scale-100"
         >
-          {loading ? 'בודק...' : (isAdminMode ? 'התחבר' : 'כניסה')}
+          {loading ? 'מתחבר...' : (isAdminMode ? 'כניסת מנהל' : 'כניסה')}
         </button>
       </form>
 
@@ -102,7 +109,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
             onClick={toggleMode}
             className="text-xs text-gray-500 hover:text-gray-300 transition-colors underline"
         >
-            {isAdminMode ? 'חזרה לכניסת משתמשים רגילה' : 'כניסת מנהל'}
+            {isAdminMode ? 'חזרה לשאלון' : 'כניסת מנהל'}
         </button>
       </div>
     </div>

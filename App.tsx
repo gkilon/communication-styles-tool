@@ -3,8 +3,8 @@ import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'rea
 import SimpleApp from './SimpleApp';
 import { AdminDashboard } from './components/AdminDashboard';
 import { auth, isFirebaseInitialized } from './firebaseConfig';
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
-import { getUserProfile } from './services/firebaseService';
+import { onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getUserProfile, createUserProfile } from './services/firebaseService';
 import { UserProfile } from './types';
 
 type AppView = 'simple' | 'admin' | 'loading';
@@ -62,7 +62,6 @@ export const App: React.FC = () => {
                     setView('admin');
                 } else {
                     // Even if logged in as user, in "Simple Mode" we mostly just show the app
-                    // But for now, let's default everyone to Simple App unless explicitly Admin
                     setView('simple');
                 }
             } catch (e) {
@@ -78,9 +77,31 @@ export const App: React.FC = () => {
   }, []);
 
   const handleAdminLogin = async (email: string, pass: string) => {
-      if (auth) {
+      if (!auth) return;
+
+      try {
           await signInWithEmailAndPassword(auth, email, pass);
           // The auth listener will switch the view to 'admin' automatically
+      } catch (error: any) {
+          console.log("Login failed, checking if hardcoded admin needs creation...", error.code);
+          // Special Case: If it's the hardcoded admin and it doesn't exist yet, create it.
+          if ((error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') && email === 'admin@manager.com') {
+              try {
+                  const cred = await createUserWithEmailAndPassword(auth, email, pass);
+                  await createUserProfile(cred.user.uid, {
+                      email,
+                      displayName: 'System Admin',
+                      team: 'Management',
+                      role: 'admin'
+                  });
+                  console.log("Admin user created automatically.");
+              } catch (createError) {
+                  console.error("Failed to auto-create admin", createError);
+                  alert("שגיאה ביצירת משתמש מנהל ראשוני.");
+              }
+          } else {
+              alert("פרטי התחברות שגויים.");
+          }
       }
   };
 
