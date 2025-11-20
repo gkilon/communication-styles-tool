@@ -118,6 +118,14 @@ export const App: React.FC = () => {
                           msg += "\n1. כנס ל-Build -> Authentication";
                           msg += "\n2. בחר ב-Sign-in method";
                           msg += "\n3. הפעל את 'Email/Password' (לחץ על Enable)";
+                      } else if (createError.code === 'permission-denied' || (createError.message && createError.message.includes('permission-denied'))) {
+                          msg += "\n\n🛑 שגיאת הרשאות מסד נתונים (Firestore):";
+                          msg += "\nהמסד נתונים מוגדר כ'נעול' (Production Mode).";
+                          msg += "\n\nכיצד לתקן:";
+                          msg += "\n1. כנס ל-Firebase Console -> Firestore Database";
+                          msg += "\n2. עבור ללשונית 'Rules'";
+                          msg += "\n3. שנה את 'allow read, write: if false;' ל-'if true;'";
+                          msg += "\n4. לחץ Publish";
                       } else if (createError.code === 'auth/invalid-api-key') {
                           msg += "\n\nסיבה: מפתח ה-API של Firebase אינו תקין (בדוק את firebaseConfig.ts).";
                       } else if (createError.code === 'auth/network-request-failed') {
