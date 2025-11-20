@@ -42,6 +42,35 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
+// Helper to generate friendly error messages
+const getFriendlyErrorMessage = (error: any): string => {
+    const code = error.code || '';
+    const message = error.message || '';
+    
+    if (code === 'permission-denied' || message.includes('permission-denied')) {
+        return `🛑 שגיאת הרשאות מסד נתונים (Firestore):
+המסד נתונים מוגדר כ'נעול' (Production Mode).
+
+כיצד לתקן:
+1. כנס ל-Firebase Console -> Firestore Database
+2. עבור ללשונית 'Rules'
+3. שנה את 'allow read, write: if false;' ל-'if true;'
+4. לחץ Publish`;
+    }
+    
+    if (code === 'auth/email-already-in-use') return "המייל הזה כבר קיים במערכת.";
+    if (code === 'auth/wrong-password') return "סיסמה שגויה.";
+    if (code === 'auth/user-not-found') return "משתמש לא נמצא.";
+    if (code === 'auth/operation-not-allowed') {
+        return `🛑 פעולה נדרשת ב-Firebase Console:
+1. כנס ל-Build -> Authentication
+2. בחר ב-Sign-in method
+3. הפעל את 'Email/Password' (לחץ על Enable)`;
+    }
+
+    return `שגיאה כללית: ${code || message}`;
+};
+
 export const App: React.FC = () => {
   const [view, setView] = useState<AppView>('loading');
   const [user, setUser] = useState<any>(null);
@@ -64,8 +93,12 @@ export const App: React.FC = () => {
                     // Even if logged in as user, in "Simple Mode" we mostly just show the app
                     setView('simple');
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.error("Error fetching profile", e);
+                // If permission denied happens in the background (e.g. after refresh), alert the user
+                if (e.code === 'permission-denied' || e.message?.includes('permission-denied')) {
+                     alert(getFriendlyErrorMessage(e));
+                }
                 setView('simple');
             }
         } else {
@@ -81,63 +114,63 @@ export const App: React.FC = () => {
       const normalizedEmail = email.toLowerCase().trim();
 
       try {
-          // Attempt standard login
-          await signInWithEmailAndPassword(auth, normalizedEmail, pass);
-          // The auth listener will switch the view to 'admin' automatically if successful
-      } catch (error: any) {
-          console.log("Login attempt failed, checking for admin auto-creation...", error.code);
+          // 1. Attempt standard login
+          const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, pass);
           
-          // Special Backdoor: If it's the specific admin email, try to CREATE it if it doesn't exist.
-          // This covers the case where the user was deleted or hasn't been initialized yet.
-          if (normalizedEmail === 'admin@manager.com') {
+          // 2. VALIDATE FIRESTORE ACCESS IMMEDIATELY
+          // This ensures we catch 'permission-denied' right here and now, 
+          // instead of waiting for onAuthStateChanged which fails silently.
+          try {
+              const profile = await getUserProfile(userCredential.user.uid);
+              
+              // REPAIR LOGIC: If admin logs in successfully but has no profile, create it.
+              if (!profile && normalizedEmail === 'admin@manager.com') {
+                  await createUserProfile(userCredential.user.uid, {
+                      email: normalizedEmail,
+                      displayName: 'System Admin',
+                      team: 'Management',
+                      role: 'admin'
+                  });
+                  console.log("Admin profile repaired/created.");
+              }
+          } catch (dbError: any) {
+              // If we get permission denied here, THROW it so the outer catch block handles it
+              if (dbError.code === 'permission-denied' || dbError.message?.includes('permission-denied')) {
+                  throw dbError;
+              }
+              console.warn("Profile check failed but continuing:", dbError);
+          }
+
+      } catch (error: any) {
+          console.log("Login process error:", error.code);
+          
+          // If it's a permission error (from step 2), show the fix instructions
+          if (error.code === 'permission-denied' || error.message?.includes('permission-denied')) {
+              alert(getFriendlyErrorMessage(error));
+              return;
+          }
+
+          // If the error is that the user doesn't exist, try to create them (Admin Backdoor)
+          const isUserNotFound = error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential';
+          
+          if (isUserNotFound && normalizedEmail === 'admin@manager.com') {
               try {
-                  // Try to register this user
+                  console.log("Admin user not found, attempting to create...");
                   const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pass);
                   
-                  // If successful, immediately make them an admin
                   await createUserProfile(cred.user.uid, {
                       email: normalizedEmail,
                       displayName: 'System Admin',
                       team: 'Management',
                       role: 'admin'
                   });
-                  console.log("Admin user created automatically.");
-                  // Auth listener will pick this up
+                  
               } catch (createError: any) {
-                  // If create failed because user exists (auth/email-already-in-use), 
-                  // it means the initial signIn failed due to WRONG PASSWORD.
-                  if (createError.code === 'auth/email-already-in-use') {
-                      alert("סיסמה שגויה למנהל המערכת.");
-                  } else {
-                      console.error("Failed to auto-create admin", createError);
-                      // Show descriptive error to help user configure Firebase
-                      let msg = "שגיאה ביצירת משתמש מנהל ראשוני.";
-                      
-                      if (createError.code === 'auth/operation-not-allowed') {
-                          msg += "\n\n🛑 פעולה נדרשת ב-Firebase Console:";
-                          msg += "\n1. כנס ל-Build -> Authentication";
-                          msg += "\n2. בחר ב-Sign-in method";
-                          msg += "\n3. הפעל את 'Email/Password' (לחץ על Enable)";
-                      } else if (createError.code === 'permission-denied' || (createError.message && createError.message.includes('permission-denied'))) {
-                          msg += "\n\n🛑 שגיאת הרשאות מסד נתונים (Firestore):";
-                          msg += "\nהמסד נתונים מוגדר כ'נעול' (Production Mode).";
-                          msg += "\n\nכיצד לתקן:";
-                          msg += "\n1. כנס ל-Firebase Console -> Firestore Database";
-                          msg += "\n2. עבור ללשונית 'Rules'";
-                          msg += "\n3. שנה את 'allow read, write: if false;' ל-'if true;'";
-                          msg += "\n4. לחץ Publish";
-                      } else if (createError.code === 'auth/invalid-api-key') {
-                          msg += "\n\nסיבה: מפתח ה-API של Firebase אינו תקין (בדוק את firebaseConfig.ts).";
-                      } else if (createError.code === 'auth/network-request-failed') {
-                          msg += "\n\nסיבה: בעיית תקשורת. בדוק את החיבור לאינטרנט.";
-                      } else {
-                          msg += `\n\nקוד שגיאה: ${createError.code || createError.message}`;
-                      }
-                      alert(msg);
-                  }
+                  console.error("Failed to auto-create admin", createError);
+                  alert(getFriendlyErrorMessage(createError));
               }
           } else {
-              alert("פרטי התחברות שגויים (או שאינך מנהל).");
+              alert("שגיאה בהתחברות: " + (error.code === 'auth/wrong-password' ? 'סיסמה שגויה' : error.message));
           }
       }
   };
