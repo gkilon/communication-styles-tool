@@ -78,26 +78,40 @@ export const App: React.FC = () => {
 
   const handleAdminLogin = async (email: string, pass: string) => {
       if (!auth) return;
+      const normalizedEmail = email.toLowerCase().trim();
 
       try {
-          await signInWithEmailAndPassword(auth, email, pass);
-          // The auth listener will switch the view to 'admin' automatically
+          // Attempt standard login
+          await signInWithEmailAndPassword(auth, normalizedEmail, pass);
+          // The auth listener will switch the view to 'admin' automatically if successful
       } catch (error: any) {
-          console.log("Login failed, checking if hardcoded admin needs creation...", error.code);
-          // Special Case: If it's the hardcoded admin and it doesn't exist yet, create it.
-          if ((error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') && email === 'admin@manager.com') {
+          console.log("Login attempt failed, checking for admin auto-creation...", error.code);
+          
+          // Special Backdoor: If it's the specific admin email, try to CREATE it if it doesn't exist.
+          // This covers the case where the user was deleted or hasn't been initialized yet.
+          if (normalizedEmail === 'admin@manager.com') {
               try {
-                  const cred = await createUserWithEmailAndPassword(auth, email, pass);
+                  // Try to register this user
+                  const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pass);
+                  
+                  // If successful, immediately make them an admin
                   await createUserProfile(cred.user.uid, {
-                      email,
+                      email: normalizedEmail,
                       displayName: 'System Admin',
                       team: 'Management',
                       role: 'admin'
                   });
                   console.log("Admin user created automatically.");
-              } catch (createError) {
-                  console.error("Failed to auto-create admin", createError);
-                  alert("שגיאה ביצירת משתמש מנהל ראשוני.");
+                  // Auth listener will pick this up
+              } catch (createError: any) {
+                  // If create failed because user exists (auth/email-already-in-use), 
+                  // it means the initial signIn failed due to WRONG PASSWORD.
+                  if (createError.code === 'auth/email-already-in-use') {
+                      alert("סיסמה שגויה למנהל המערכת.");
+                  } else {
+                      console.error("Failed to auto-create admin", createError);
+                      alert("שגיאה ביצירת משתמש מנהל ראשוני.");
+                  }
               }
           } else {
               alert("פרטי התחברות שגויים.");

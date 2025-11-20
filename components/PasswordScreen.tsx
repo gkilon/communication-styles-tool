@@ -50,14 +50,9 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
       setIsAdminMode(newMode);
       setError('');
       
-      if (newMode) {
-          // Hardcoded Admin Credentials as requested
-          setEmail('admin@manager.com');
-          setPassword('123456');
-      } else {
-          setEmail('');
-          setPassword('');
-      }
+      // Clear fields when switching modes
+      setEmail('');
+      setPassword('');
   };
 
   return (
@@ -67,7 +62,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
       </h2>
       <p className="text-gray-400 mb-6 text-sm">
         {isAdminMode 
-            ? 'הפרטים הקבועים מולאו עבורך' 
+            ? 'הזן פרטי מנהל (אימייל וסיסמה)' 
             : 'הזן את סיסמת הגישה כדי להתחיל'}
       </p>
       
