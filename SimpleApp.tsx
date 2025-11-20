@@ -4,73 +4,48 @@ import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { PasswordScreen } from './components/PasswordScreen';
-import { Scores, UserProfile } from './types';
+import { Scores } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
-import { saveUserResults } from './services/firebaseService';
-import { isFirebaseInitialized } from './firebaseConfig';
 
 interface SimpleAppProps {
-  isTeamMode: boolean;
-  userProfile?: UserProfile;
-  onSwitchToTeamLogin?: () => void;
-  onSignOut?: () => void;
+  onAdminLoginAttempt: (email: string, pass: string) => Promise<void>;
+  user?: any;
 }
 
-const SimpleApp: React.FC<SimpleAppProps> = ({ 
-  isTeamMode, 
-  userProfile, 
-  onSwitchToTeamLogin, 
-  onSignOut 
-}) => {
+const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
+  // State for "Shared Password" authentication
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
   const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>('intro');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
 
-  // Effect to handle mode switching
-  useEffect(() => {
-    if (isTeamMode) {
-        setIsAuthenticated(true);
-    } else {
-        setIsAuthenticated(false);
-    }
-    // Reset state when mode changes
-    setStep('intro');
-    setAnswers({});
-    setCurrentQuestionIndex(0);
-  }, [isTeamMode]);
+  // If firebase user is already logged in (e.g. Admin who clicked "Back"), allow access?
+  // For simplicity, let's keep the password requirement unless we want to skip it.
+  // For now: Strict simple mode -> always ask for password unless locally authenticated.
 
-  // Initialize default answers safely once
   useEffect(() => {
      const defaultAnswers: Record<string, number> = {};
-     if (QUESTION_PAIRS && Array.isArray(QUESTION_PAIRS)) {
-         QUESTION_PAIRS.forEach(q => {
-           defaultAnswers[q.id] = 4;
-         });
+     if (QUESTION_PAIRS) {
+         QUESTION_PAIRS.forEach(q => { defaultAnswers[q.id] = 4; });
          setAnswers(prev => Object.keys(prev).length === 0 ? defaultAnswers : prev);
      }
   }, []);
   
-  // Calculate scores
   const scores = useMemo<Scores | null>(() => {
     if (step !== 'results') return null;
-
     const newScores: Scores = { a: 0, b: 0, c: 0, d: 0 };
     QUESTION_PAIRS.forEach(q => {
       const value = answers[q.id] ?? 4;
       const [col1, col2] = q.columns;
-      
-      const score1 = 6 - value; 
-      const score2 = value - 1;
-      
-      newScores[col1] += score1;
-      newScores[col2] += score2;
+      newScores[col1] += (6 - value); 
+      newScores[col2] += (value - 1);
     });
     return newScores;
   }, [step, answers]);
 
-  const handleAuthenticate = (password: string) => {
-    // Simple password check
+  const handleSimpleAuthenticate = (password: string) => {
+    // The Simple Password
     if (password.toLowerCase() === 'inspire') {
       setIsAuthenticated(true);
       return true;
@@ -79,39 +54,13 @@ const SimpleApp: React.FC<SimpleAppProps> = ({
   };
 
   const handleStart = () => setStep('questionnaire');
+  const handleSubmit = () => setStep('results');
   
-  const handleSubmit = async () => {
-    setStep('results');
-    
-    // Calculate scores locally for immediate saving
-    const finalScores: Scores = { a: 0, b: 0, c: 0, d: 0 };
-    QUESTION_PAIRS.forEach(q => {
-      const value = answers[q.id] ?? 4;
-      const [col1, col2] = q.columns;
-      
-      const score1 = 6 - value; 
-      const score2 = value - 1;
-      
-      finalScores[col1] += score1;
-      finalScores[col2] += score2;
-    });
-
-    // Save to Firebase if in team mode and firebase is ready
-    if (isTeamMode && isFirebaseInitialized) {
-      try {
-        await saveUserResults(finalScores);
-      } catch (e) {
-        console.error("Failed to save results automatically", e);
-      }
-    }
-  };
-
   const handleReset = () => {
-    const resetAnswers: Record<string, number> = {};
-    QUESTION_PAIRS.forEach(q => {
-      resetAnswers[q.id] = 4; 
-    });
-    setAnswers(resetAnswers);
+    setAnswers({});
+    const defaultAnswers: Record<string, number> = {};
+    QUESTION_PAIRS.forEach(q => { defaultAnswers[q.id] = 4; });
+    setAnswers(defaultAnswers);
     setCurrentQuestionIndex(0);
     setStep('intro');
   };
@@ -121,14 +70,9 @@ const SimpleApp: React.FC<SimpleAppProps> = ({
     setStep('questionnaire');
   };
 
-  // New function to handle logging out or returning to password screen
   const handleLogout = () => {
-    if (isTeamMode && onSignOut) {
-        onSignOut();
-    } else {
-        setIsAuthenticated(false);
-        handleReset();
-    }
+    setIsAuthenticated(false);
+    handleReset();
   };
 
   return (
@@ -140,20 +84,12 @@ const SimpleApp: React.FC<SimpleAppProps> = ({
           </div>
           <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
           
-          {isTeamMode && userProfile && (
-            <div className="mt-4 bg-cyan-900/30 inline-block px-4 py-1 rounded-full border border-cyan-700/50 animate-fade-in-up">
-                <span className="text-cyan-300 text-sm ml-2">מחובר כ: {userProfile.displayName}</span>
-                <span className="text-gray-400 text-sm">| צוות: {userProfile.team}</span>
-            </div>
-          )}
-          
-          {/* Logout button - Visible if authenticated (in Simple Mode) or logged in (Team Mode) */}
-          {(isAuthenticated || (isTeamMode && onSignOut)) && (
+          {isAuthenticated && (
             <button 
               onClick={handleLogout}
               className="absolute top-0 left-0 text-xs sm:text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded px-3 py-1 transition-all"
             >
-              {isTeamMode ? 'יציאה' : 'יציאה / ניהול'}
+              יציאה
             </button>
           )}
         </header>
@@ -161,8 +97,8 @@ const SimpleApp: React.FC<SimpleAppProps> = ({
         <main>
             {!isAuthenticated ? (
                 <PasswordScreen 
-                  onAuthenticate={handleAuthenticate} 
-                  onSwitchToTeamLogin={onSwitchToTeamLogin}
+                  onAuthenticate={handleSimpleAuthenticate} 
+                  onAdminLogin={onAdminLoginAttempt}
                 />
             ) : (
                 <>
