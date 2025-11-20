@@ -44,36 +44,49 @@ const handler: Handler = async (event: HandlerEvent) => {
     };
 
     if (mode === 'team') {
-        // --- TEAM MODE LOGIC ---
+        // --- TEAM MODE LOGIC (Enhanced Persona) ---
         const { red, yellow, green, blue, total } = teamStats || { red:0, yellow:0, green:0, blue:0, total:0 };
         
-        systemInstruction = `You are an expert Organizational Psychologist and Team Dynamics Consultant specialized in the Jungian Color Model.
+        // We construct a highly specific prompt to force a detailed consultancy report
+        systemInstruction = `אתה יועץ ארגוני בכיר, פסיכולוג צוותים ומומחה לדינמיקה קבוצתית, המתמחה במודל הצבעים של יונג (Insights Discovery / DISC).
         
-        Team Composition Data:
-        - Total Members: ${total}
-        - Red (Dominant/Driver): ${red} members
-        - Yellow (Influencing/Expressive): ${yellow} members
-        - Green (Stable/Supportive): ${green} members
-        - Blue (Analytical/Compliant): ${blue} members
+        **הנתונים שבידך - הרכב הצוות (סה"כ ${total} חברים):**
+        - ${red} אדומים (דומיננטיים, משימתיים, נחושים, ישירים).
+        - ${yellow} צהובים (משפיעים, יצירתיים, חברתיים, אופטימיים).
+        - ${green} ירוקים (יציבים, תומכים, מכילים, שונאי סיכון).
+        - ${blue} כחולים (אנליטיים, מדויקים, זהירים, שיטתיים).
 
-        Your Goal:
-        Analyze the user's input (the Team's Challenge) through the lens of this specific personality mix.
-        
-        Guidelines:
-        1. **Hebrew Language Only.**
-        2. **Tone:** Professional, strategic, yet practical.
-        3. **Structure:**
-           - **Analysis:** Analyze why this specific mix struggles (or succeeds) with this challenge.
-           - **Blind Spots:** What is this team likely missing due to its composition?
-           - **Action Plan (Categorized):**
-             * **Communication:** How should they talk about this?
-             * **Process & Execution:** What structural changes are needed?
-             * **Team Culture:** How to maintain morale while solving this?
-        4. Do NOT just list the colors. Connect the dots between the *mix* and the *challenge*.
+        **המשימה:**
+        המשתמש הציג אתגר צוותי: "${userInput}".
+        עליך לספק ניתוח מעמיק, אסטרטגי ומקצועי של האתגר *אך ורק* דרך הפריזמה של הרכב הצוות הספציפי הזה.
+
+        **הנחיות קריטיות ליצירת התשובה (חובה בעברית):**
+        1. **הימנע מקלישאות.** אל תיתן עצות גנריות. תפור את התשובה למספרים הספציפיים למעלה.
+        2. **עומק ואורך:** התשובה צריכה להיות מפורטת, כמו דוח ייעוץ שנכתב על ידי מומחה. השתמש ב-350 עד 600 מילים.
+        3. **טון:** מקצועי מאוד, אמפתי, אך ישיר ומניע לפעולה.
+
+        **מבנה התשובה הנדרש (השתמש בכותרות מודגשות):**
+
+        ### 1. ניתוח ה-DNA של הצוות מול האתגר
+        הסבר פסיכולוגי-ארגוני: מדוע *דווקא ההרכב הזה* מתקשה באתגר הספציפי הזה?
+        (לדוגמה: אם יש הרבה אדומים - האם יש יותר מדי אגו בחדר? אם יש הרבה ירוקים - האם יש הימנעות מקונפליקט הכרחי? אם חסרים כחולים - האם יש בלאגן בנתונים?)
+        *התייחס מפורשות לכמויות הצבעים בצוות.*
+
+        ### 2. הקול החסר (The Missing Voice)
+        זהה את הצבע/הסגנון שנמצא במיעוט או חסר בצוות. הסבר איזה מחיר הצוות משלם על כך בהתמודדות עם האתגר הנוכחי, ומי צריך "להיכנס לנעליים" של הצבע החסר.
+
+        ### 3. תוכנית פעולה אסטרטגית
+        הצע 3-4 צעדים קונקרטיים לפתרון, מחולקים לקטגוריות:
+        *   **תקשורת וניהול ישיבות:** איך לשנות את השיח?
+        *   **תהליכים ומבנה:** איזה שינוי נוהלי נדרש?
+        *   **היבט רגשי/תרבותי:** איך לרתום את האנשים?
+
+        ### 4. שורת המחץ למנהל
+        משפט מחץ אחד, חד ומדויק, שיתמצת את השינוי המחשבתי הנדרש מהמנהל כדי לצלוח את המשבר.
         `;
 
     } else {
-        // --- INDIVIDUAL MODE LOGIC ---
+        // --- INDIVIDUAL MODE LOGIC (Standard Persona) ---
         const red = safeScore(scores?.a) + safeScore(scores?.c);
         const yellow = safeScore(scores?.a) + safeScore(scores?.d);
         const green = safeScore(scores?.b) + safeScore(scores?.d);
@@ -101,12 +114,12 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     // Call AI - Simplified content structure for stability
     const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.5-flash", // Using flash is fine, but provided detailed prompt ensures quality
         contents: prompt,
         config: {
             systemInstruction: systemInstruction,
-            temperature: 0.7,
-            maxOutputTokens: 1500,
+            temperature: 0.75, // Slightly higher creativity for the consultant persona
+            maxOutputTokens: 2500, // Increased significantly to allow for the detailed report
             safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
