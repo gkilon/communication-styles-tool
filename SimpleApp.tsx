@@ -4,8 +4,11 @@ import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { PasswordScreen } from './components/PasswordScreen';
+import { AuthScreen } from './components/AuthScreen';
 import { Scores } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
+import { isFirebaseInitialized } from './firebaseConfig';
+import { saveUserResults } from './services/firebaseService';
 
 interface SimpleAppProps {
   onAdminLoginAttempt: (email: string, pass: string) => Promise<void>;
@@ -13,17 +16,26 @@ interface SimpleAppProps {
 }
 
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
-  // State for "Shared Password" authentication
+  // Authentication States
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showTeamAuth, setShowTeamAuth] = useState(false);
   
+  // App Flow States
   const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>('intro');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
 
-  // If firebase user is already logged in (e.g. Admin who clicked "Back"), allow access?
-  // For simplicity, let's keep the password requirement unless we want to skip it.
-  // For now: Strict simple mode -> always ask for password unless locally authenticated.
+  // Effect: If user is passed from parent (Firebase Auth), auto-authenticate
+  useEffect(() => {
+    if (user) {
+        setIsAuthenticated(true);
+        setShowTeamAuth(false); // Hide login screen if user just logged in
+    } else {
+        setIsAuthenticated(false);
+    }
+  }, [user]);
 
+  // Initialize answers
   useEffect(() => {
      const defaultAnswers: Record<string, number> = {};
      if (QUESTION_PAIRS) {
@@ -43,6 +55,15 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     });
     return newScores;
   }, [step, answers]);
+
+  // Effect: Save results to Firebase if user is logged in and finished
+  useEffect(() => {
+    if (step === 'results' && scores && user) {
+        saveUserResults(scores)
+            .then(() => console.log("✅ Results saved to Firebase for user:", user.email))
+            .catch(err => console.error("❌ Failed to save results:", err));
+    }
+  }, [step, scores, user]);
 
   const handleSimpleAuthenticate = (password: string) => {
     // The Simple Password
@@ -73,6 +94,11 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   const handleLogout = () => {
     setIsAuthenticated(false);
     handleReset();
+    // If using Firebase, we should sign out (App.tsx handles the actual auth state via listener)
+    import('firebase/auth').then(({ signOut, getAuth }) => {
+        const auth = getAuth();
+        if (auth.currentUser) signOut(auth);
+    });
   };
 
   return (
@@ -85,21 +111,33 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
           <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
           
           {isAuthenticated && (
-            <button 
-              onClick={handleLogout}
-              className="absolute top-0 left-0 text-xs sm:text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded px-3 py-1 transition-all"
-            >
-              יציאה
-            </button>
+            <div className="absolute top-0 left-0 flex flex-col items-end">
+                {user && <span className="text-xs text-gray-500 mb-1">{user.displayName || user.email}</span>}
+                <button 
+                onClick={handleLogout}
+                className="text-xs sm:text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded px-3 py-1 transition-all"
+                >
+                יציאה
+                </button>
+            </div>
           )}
         </header>
 
         <main>
             {!isAuthenticated ? (
-                <PasswordScreen 
-                  onAuthenticate={handleSimpleAuthenticate} 
-                  onAdminLogin={onAdminLoginAttempt}
-                />
+                showTeamAuth ? (
+                    <AuthScreen 
+                        onLoginSuccess={() => { /* Handled by App.tsx listener */ }}
+                        onBack={() => setShowTeamAuth(false)}
+                    />
+                ) : (
+                    <PasswordScreen 
+                        onAuthenticate={handleSimpleAuthenticate} 
+                        onAdminLogin={onAdminLoginAttempt}
+                        onTeamLoginClick={() => setShowTeamAuth(true)}
+                        hasDatabaseConnection={isFirebaseInitialized}
+                    />
+                )
             ) : (
                 <>
                     {step === 'intro' && <IntroScreen onStart={handleStart} />}

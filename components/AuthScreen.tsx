@@ -1,22 +1,44 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
-import { createUserProfile } from '../services/firebaseService';
+import { createUserProfile, getTeams } from '../services/firebaseService';
+import { Team } from '../types';
+import { ArrowLeftIcon } from './icons/Icons';
 
 interface AuthScreenProps {
   onLoginSuccess: () => void;
+  onBack?: () => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [team, setTeam] = useState('');
-  const [adminCode, setAdminCode] = useState(''); // New state for admin code
+  
+  // Team selection
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState('');
+  
+  const [adminCode, setAdminCode] = useState(''); 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Fetch teams on mount
+  useEffect(() => {
+    if (!isLogin) {
+        const fetchTeams = async () => {
+            try {
+                const teamsData = await getTeams();
+                setTeams(teamsData);
+            } catch (e) {
+                console.error("Failed to load teams", e);
+            }
+        };
+        fetchTeams();
+    }
+  }, [isLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,22 +51,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
         // הרשמה
-        if (!name || !team) {
-            setError("נא למלא שם מלא ושם צוות");
+        const role: 'user' | 'admin' = (adminCode === 'inspire') ? 'admin' : 'user';
+
+        // Validation for normal users
+        if (!name) {
+            setError("נא למלא שם מלא");
             setLoading(false);
             return;
         }
 
-        // קביעת תפקיד המשתמש לפי קוד המנהל
-        // שימוש בטיפוס מפורש כדי למנוע שגיאות TypeScript
-        const role: 'user' | 'admin' = (adminCode === 'inspire') ? 'admin' : 'user';
+        if (role === 'user' && !selectedTeam) {
+             setError("חובה לבחור צוות אליו אתה משתייך");
+             setLoading(false);
+             return;
+        }
+        
+        // If admin, team is optional (or "Admin Team")
+        const teamToSave = role === 'admin' ? 'Management' : selectedTeam;
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        // שמירת הפרטים הנוספים במסד הנתונים
+        
         await createUserProfile(userCredential.user.uid, {
             email,
             displayName: name,
-            team: team,
+            team: teamToSave,
             role: role
         });
       }
@@ -62,10 +92,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="bg-gray-800 p-8 rounded-lg shadow-2xl text-center max-w-md mx-auto animate-fade-in-up border border-gray-700">
-      <h2 className="text-2xl font-bold text-cyan-300 mb-6">
+    <div className="bg-gray-800 p-8 rounded-lg shadow-2xl text-center max-w-md mx-auto animate-fade-in-up border border-gray-700 w-full relative">
+      
+      {onBack && (
+        <button 
+            onClick={onBack}
+            className="absolute top-4 left-4 text-gray-400 hover:text-white transition-colors"
+        >
+            <ArrowLeftIcon className="w-5 h-5 rotate-180" />
+        </button>
+      )}
+
+      <h2 className="text-3xl font-bold text-cyan-300 mb-2">
         {isLogin ? 'כניסה למערכת' : 'הרשמה לצוות'}
       </h2>
+      <p className="text-gray-400 mb-6 text-sm">
+        {isLogin ? 'הזן את פרטי המשתמש שלך' : 'הצטרף לצוות הארגוני שלך'}
+      </p>
       
       <form onSubmit={handleSubmit} className="space-y-4 text-right">
         {!isLogin && (
@@ -81,14 +124,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                     />
                 </div>
                 <div>
-                    <label className="block text-gray-400 text-sm mb-1 pr-2">שם צוות / ארגון</label>
-                    <input
-                        type="text"
-                        value={team}
-                        onChange={(e) => setTeam(e.target.value)}
+                    <label className="block text-gray-400 text-sm mb-1 pr-2">בחר צוות</label>
+                    <select
+                        value={selectedTeam}
+                        onChange={(e) => setSelectedTeam(e.target.value)}
                         className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500"
-                        placeholder="מכירות / הנהלה / סייבר"
-                    />
+                    >
+                        <option value="" disabled>-- בחר צוות מהרשימה --</option>
+                        {teams.map(team => (
+                            <option key={team.id} value={team.name}>{team.name}</option>
+                        ))}
+                    </select>
+                    {teams.length === 0 && (
+                        <p className="text-xs text-yellow-500 mt-1 pr-2">
+                           * אין צוותים זמינים. פנה למנהל המערכת.
+                        </p>
+                    )}
                 </div>
             </>
         )}
@@ -99,7 +150,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white ltr-text focus:ring-2 focus:ring-cyan-500"
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white ltr-text focus:ring-2 focus:ring-cyan-500 text-left"
+            style={{direction: 'ltr'}}
             placeholder="your@email.com"
             required
             />
@@ -111,44 +163,45 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500"
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500 text-left"
+             style={{direction: 'ltr'}}
             placeholder="******"
             required
             />
         </div>
 
         {!isLogin && (
-            <div>
-                <label className="block text-gray-400 text-xs mb-1 pr-2">קוד מנהל (אופציונלי)</label>
-                <input
-                    type="password"
-                    value={adminCode}
-                    onChange={(e) => setAdminCode(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500 placeholder-gray-500"
-                    placeholder="הזן קוד רק אם אתה מנהל"
-                />
-                <p className="text-xs text-gray-500 pr-2 mt-1">משתמשים רגילים יכולים להשאיר שדה זה ריק.</p>
+            <div className="border-t border-gray-700 pt-2 mt-2">
+                <div className="relative">
+                    <input
+                        type="password"
+                        value={adminCode}
+                        onChange={(e) => setAdminCode(e.target.value)}
+                        className="w-full bg-gray-900/50 border border-gray-700 rounded-lg py-1 px-4 text-white text-xs focus:ring-1 focus:ring-cyan-500 placeholder-gray-600"
+                        placeholder="קוד מנהל (להקמת מערכת בלבד)"
+                    />
+                </div>
             </div>
         )}
 
-        {error && <p className="text-red-400 text-sm text-center bg-red-900/30 p-2 rounded">{error}</p>}
+        {error && <p className="text-red-400 text-sm text-center bg-red-900/30 p-2 rounded border border-red-800">{error}</p>}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-all shadow-lg mt-4 disabled:opacity-50"
+          className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-all shadow-lg mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? 'טוען...' : (isLogin ? 'התחבר' : 'הירשם והתחל')}
+          {loading ? 'מעבד...' : (isLogin ? 'התחבר' : 'הירשם')}
         </button>
       </form>
 
-      <div className="mt-6 text-sm text-gray-400">
-        {isLogin ? 'עדיין אין לך חשבון? ' : 'כבר נרשמת? '}
+      <div className="mt-6 text-sm text-gray-400 flex justify-center gap-1">
+        <span>{isLogin ? 'עדיין אין לך חשבון?' : 'כבר נרשמת?'}</span>
         <button 
             onClick={() => { setIsLogin(!isLogin); setError(''); }}
-            className="text-cyan-400 underline hover:text-cyan-300"
+            className="text-cyan-400 underline hover:text-cyan-300 font-bold"
         >
-            {isLogin ? 'הירשם כאן' : 'התחבר כאן'}
+            {isLogin ? 'הירשם לצוות' : 'התחבר'}
         </button>
       </div>
     </div>

@@ -4,9 +4,16 @@ import React, { useState } from 'react';
 interface PasswordScreenProps {
   onAuthenticate: (password: string) => boolean;
   onAdminLogin?: (email: string, pass: string) => Promise<void>;
+  onTeamLoginClick?: () => void;
+  hasDatabaseConnection?: boolean;
 }
 
-export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, onAdminLogin }) => {
+export const PasswordScreen: React.FC<PasswordScreenProps> = ({ 
+  onAuthenticate, 
+  onAdminLogin, 
+  onTeamLoginClick,
+  hasDatabaseConnection = false
+}) => {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState(''); // For admin only
@@ -101,7 +108,20 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
         </button>
       </form>
 
-      <div className="mt-8 pt-6 border-t border-gray-700">
+      {/* Team Member Login Option */}
+      {hasDatabaseConnection && !isAdminMode && (
+          <div className="mt-6 border-t border-gray-700 pt-4">
+              <p className="text-gray-400 text-xs mb-2">חלק מארגון?</p>
+              <button
+                  onClick={onTeamLoginClick}
+                  className="w-full bg-transparent border border-cyan-600 text-cyan-400 hover:bg-cyan-900/30 font-bold py-2 px-4 rounded-full text-sm transition-all"
+              >
+                  עובד חברה / חבר צוות? כנס כאן
+              </button>
+          </div>
+      )}
+
+      <div className="mt-6 pt-2">
         <button 
             onClick={toggleMode}
             className="text-xs text-gray-500 hover:text-gray-300 transition-colors underline"
