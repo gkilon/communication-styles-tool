@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
-import { SimpleApp } from './SimpleApp';
+import SimpleApp from './SimpleApp';
 import { AuthScreen } from './components/AuthScreen';
 import { AdminDashboard } from './components/AdminDashboard';
 import { auth, isFirebaseInitialized } from './firebaseConfig';

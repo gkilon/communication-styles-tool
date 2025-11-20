@@ -1,65 +1,195 @@
 
-import { initializeApp } from "firebase/app";
-import { getAuth, Auth } from "firebase/auth";
-import { getFirestore, Firestore } from "firebase/firestore";
+import React, { useState, useMemo, useEffect } from 'react';
+import { IntroScreen } from './components/IntroScreen';
+import { QuestionnaireScreen } from './components/QuestionnaireScreen';
+import { ResultsScreen } from './components/ResultsScreen';
+import { PasswordScreen } from './components/PasswordScreen';
+import { Scores, UserProfile } from './types';
+import { QUESTION_PAIRS } from './constants/questionnaireData';
+import { saveUserResults } from './services/firebaseService';
+import { isFirebaseInitialized } from './firebaseConfig';
 
-// --- הוראות ---
-// 1. גש ל-Firebase Console -> Project Settings.
-// 2. העתק את הערכים והדבק אותם בתוך המרכאות למטה.
-
-// שימוש בטוח במשתני סביבה של Vite
-const getEnv = (key: string) => {
-  try {
-    // בדיקה אם import.meta מוגדר (למניעת קריסה בסביבות מסוימות)
-    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-        return (import.meta as any).env[key];
-    }
-  } catch (e) {
-    return undefined;
-  }
-  return undefined;
-};
-
-const firebaseConfig = {
-  apiKey: getEnv("VITE_FIREBASE_API_KEY") || "AIzaSyAzP5HCS_qly0jmPT3hkdsn05NlPq1haNA",
-  authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN") || "communication-tool-4d386.firebaseapp.com",
-  projectId: getEnv("VITE_FIREBASE_PROJECT_ID") || "communication-tool-4d386",
-  storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET") || "communication-tool-4d386.firebasestorage.app",
-  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID") || "837244077464",
-  appId: getEnv("VITE_FIREBASE_APP_ID") || "1:837244077464:web:95ffac269ba42de4d457ed"
-};
-
-// --- מכאן ומטה אין צורך לשנות כלום ---
-
-let auth: Auth = { currentUser: null } as unknown as Auth;
-let db: Firestore = {} as Firestore;
-let isFirebaseInitialized = false;
-
-// בדיקה קפדנית יותר שהמפתחות הוזנו כראוי
-const isConfigValid = (config: typeof firebaseConfig) => {
-    if (!config) return false;
-    // בדיקה שאף שדה לא מכיל את המילה "הדבק"
-    const hasPlaceholder = Object.values(config).some(val => val && typeof val === 'string' && val.includes("הדבק"));
-    if (hasPlaceholder) return false;
-
-    // בדיקה שה-apiKey ארוך מספיק
-    return config.apiKey && config.apiKey.length > 20;
-};
-
-if (isConfigValid(firebaseConfig)) {
-    try {
-        const app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-        isFirebaseInitialized = true;
-        console.log("Firebase initialized successfully.");
-    } catch (error) {
-        console.error("Failed to initialize Firebase:", error);
-        isFirebaseInitialized = false;
-    }
-} else {
-    console.warn("Firebase keys are missing or invalid in firebaseConfig.ts. Running in offline mode.");
-    isFirebaseInitialized = false;
+interface SimpleAppProps {
+  isTeamMode: boolean;
+  userProfile?: UserProfile;
+  onSwitchToTeamLogin?: () => void;
+  onSignOut?: () => void;
 }
 
-export { auth, db, isFirebaseInitialized };
+const SimpleApp: React.FC<SimpleAppProps> = ({ 
+  isTeamMode, 
+  userProfile, 
+  onSwitchToTeamLogin, 
+  onSignOut 
+}) => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>('intro');
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+
+  // Effect to handle mode switching
+  useEffect(() => {
+    if (isTeamMode) {
+        setIsAuthenticated(true);
+    } else {
+        setIsAuthenticated(false);
+    }
+    // Reset state when mode changes
+    setStep('intro');
+    setAnswers({});
+    setCurrentQuestionIndex(0);
+  }, [isTeamMode]);
+
+  // Initialize default answers safely once
+  useEffect(() => {
+     const defaultAnswers: Record<string, number> = {};
+     if (QUESTION_PAIRS && Array.isArray(QUESTION_PAIRS)) {
+         QUESTION_PAIRS.forEach(q => {
+           defaultAnswers[q.id] = 4;
+         });
+         setAnswers(prev => Object.keys(prev).length === 0 ? defaultAnswers : prev);
+     }
+  }, []);
+  
+  // Calculate scores
+  const scores = useMemo<Scores | null>(() => {
+    if (step !== 'results') return null;
+
+    const newScores: Scores = { a: 0, b: 0, c: 0, d: 0 };
+    QUESTION_PAIRS.forEach(q => {
+      const value = answers[q.id] ?? 4;
+      const [col1, col2] = q.columns;
+      
+      const score1 = 6 - value; 
+      const score2 = value - 1;
+      
+      newScores[col1] += score1;
+      newScores[col2] += score2;
+    });
+    return newScores;
+  }, [step, answers]);
+
+  const handleAuthenticate = (password: string) => {
+    // Simple password check
+    if (password.toLowerCase() === 'inspire') {
+      setIsAuthenticated(true);
+      return true;
+    }
+    return false;
+  };
+
+  const handleStart = () => setStep('questionnaire');
+  
+  const handleSubmit = async () => {
+    setStep('results');
+    
+    // Calculate scores locally for immediate saving
+    const finalScores: Scores = { a: 0, b: 0, c: 0, d: 0 };
+    QUESTION_PAIRS.forEach(q => {
+      const value = answers[q.id] ?? 4;
+      const [col1, col2] = q.columns;
+      
+      const score1 = 6 - value; 
+      const score2 = value - 1;
+      
+      finalScores[col1] += score1;
+      finalScores[col2] += score2;
+    });
+
+    // Save to Firebase if in team mode and firebase is ready
+    if (isTeamMode && isFirebaseInitialized) {
+      try {
+        await saveUserResults(finalScores);
+      } catch (e) {
+        console.error("Failed to save results automatically", e);
+      }
+    }
+  };
+
+  const handleReset = () => {
+    const resetAnswers: Record<string, number> = {};
+    QUESTION_PAIRS.forEach(q => {
+      resetAnswers[q.id] = 4; 
+    });
+    setAnswers(resetAnswers);
+    setCurrentQuestionIndex(0);
+    setStep('intro');
+  };
+
+  const handleEditAnswers = () => {
+    setCurrentQuestionIndex(0);
+    setStep('questionnaire');
+  };
+
+  // New function to handle logging out or returning to password screen
+  const handleLogout = () => {
+    if (isTeamMode && onSignOut) {
+        onSignOut();
+    } else {
+        setIsAuthenticated(false);
+        handleReset();
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans dir-rtl">
+      <div className="max-w-4xl mx-auto">
+        <header className="text-center mb-8 relative">
+          <div className="flex justify-center items-center relative">
+             <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-cyan-400 tracking-wide">שאלון סגנונות תקשורת</h1>
+          </div>
+          <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
+          
+          {isTeamMode && userProfile && (
+            <div className="mt-4 bg-cyan-900/30 inline-block px-4 py-1 rounded-full border border-cyan-700/50 animate-fade-in-up">
+                <span className="text-cyan-300 text-sm ml-2">מחובר כ: {userProfile.displayName}</span>
+                <span className="text-gray-400 text-sm">| צוות: {userProfile.team}</span>
+            </div>
+          )}
+          
+          {/* Logout button - Visible if authenticated (in Simple Mode) or logged in (Team Mode) */}
+          {(isAuthenticated || (isTeamMode && onSignOut)) && (
+            <button 
+              onClick={handleLogout}
+              className="absolute top-0 left-0 text-xs sm:text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded px-3 py-1 transition-all"
+            >
+              {isTeamMode ? 'יציאה' : 'יציאה / ניהול'}
+            </button>
+          )}
+        </header>
+
+        <main>
+            {!isAuthenticated ? (
+                <PasswordScreen 
+                  onAuthenticate={handleAuthenticate} 
+                  onSwitchToTeamLogin={onSwitchToTeamLogin}
+                />
+            ) : (
+                <>
+                    {step === 'intro' && <IntroScreen onStart={handleStart} />}
+                    {step === 'questionnaire' && (
+                        <QuestionnaireScreen 
+                            answers={answers} 
+                            setAnswers={setAnswers} 
+                            onSubmit={handleSubmit}
+                            currentQuestionIndex={currentQuestionIndex}
+                            setCurrentQuestionIndex={setCurrentQuestionIndex}
+                        />
+                    )}
+                    {step === 'results' && scores && (
+                        <ResultsScreen 
+                          scores={scores} 
+                          onReset={handleReset} 
+                          onEdit={handleEditAnswers}
+                          onLogout={handleLogout}
+                        />
+                    )}
+                </>
+            )}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default SimpleApp;
