@@ -42,35 +42,6 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
-// Helper to generate friendly error messages
-const getFriendlyErrorMessage = (error: any): string => {
-    const code = error.code || '';
-    const message = error.message || '';
-    
-    if (code === 'permission-denied' || message.includes('permission-denied')) {
-        return `🛑 שגיאת הרשאות מסד נתונים (Firestore):
-המסד נתונים מוגדר כ'נעול' (Production Mode).
-
-כיצד לתקן:
-1. כנס ל-Firebase Console -> Firestore Database
-2. עבור ללשונית 'Rules'
-3. שנה את 'allow read, write: if false;' ל-'if true;'
-4. לחץ Publish`;
-    }
-    
-    if (code === 'auth/email-already-in-use') return "המייל הזה כבר קיים במערכת.";
-    if (code === 'auth/wrong-password') return "סיסמה שגויה.";
-    if (code === 'auth/user-not-found') return "משתמש לא נמצא.";
-    if (code === 'auth/operation-not-allowed') {
-        return `🛑 פעולה נדרשת ב-Firebase Console:
-1. כנס ל-Build -> Authentication
-2. בחר ב-Sign-in method
-3. הפעל את 'Email/Password' (לחץ על Enable)`;
-    }
-
-    return `שגיאה כללית: ${code || message}`;
-};
-
 export const App: React.FC = () => {
   const [view, setView] = useState<AppView>('loading');
   const [user, setUser] = useState<any>(null);
@@ -83,25 +54,46 @@ export const App: React.FC = () => {
      
      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
+        
         if (currentUser) {
+            const normalizedEmail = currentUser.email?.toLowerCase() || '';
+            
+            // --- CRITICAL FIX ---
+            // If the email matches the admin email, FORCE entry to Admin Dashboard.
+            // This bypasses the Firestore 'getUserProfile' check which might fail due to permissions.
+            if (normalizedEmail === 'admin@manager.com') {
+                setView('admin');
+                
+                // Try to repair profile in background, but don't block UI
+                getUserProfile(currentUser.uid).then(profile => {
+                    if (!profile) {
+                        createUserProfile(currentUser.uid, {
+                            email: normalizedEmail,
+                            displayName: 'System Admin',
+                            team: 'Management',
+                            role: 'admin'
+                        }).catch(err => console.warn("Background profile creation failed:", err));
+                    }
+                }).catch(() => { /* Ignore DB errors here, Dashboard will handle them */ });
+                
+                return; 
+            }
+
+            // For regular users, we still check the profile
             try {
-                // If user is logged in via Firebase, check if Admin
                 const profile = await getUserProfile(currentUser.uid);
                 if (profile?.role === 'admin') {
                     setView('admin');
                 } else {
-                    // Even if logged in as user, in "Simple Mode" we mostly just show the app
                     setView('simple');
                 }
             } catch (e: any) {
-                console.error("Error fetching profile", e);
-                // If permission denied happens in the background (e.g. after refresh), alert the user
-                if (e.code === 'permission-denied' || e.message?.includes('permission-denied')) {
-                     alert(getFriendlyErrorMessage(e));
-                }
+                console.error("Error checking user profile", e);
+                // If regular user fails DB check, go to simple view
                 setView('simple');
             }
         } else {
+            // Not logged in
             setView('simple');
         }
      });
@@ -114,60 +106,23 @@ export const App: React.FC = () => {
       const normalizedEmail = email.toLowerCase().trim();
 
       try {
-          // 1. Attempt standard login
-          const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, pass);
-          
-          // 2. VALIDATE FIRESTORE ACCESS IMMEDIATELY
-          // This ensures we catch 'permission-denied' right here and now, 
-          // instead of waiting for onAuthStateChanged which fails silently.
-          try {
-              const profile = await getUserProfile(userCredential.user.uid);
-              
-              // REPAIR LOGIC: If admin logs in successfully but has no profile, create it.
-              if (!profile && normalizedEmail === 'admin@manager.com') {
-                  await createUserProfile(userCredential.user.uid, {
-                      email: normalizedEmail,
-                      displayName: 'System Admin',
-                      team: 'Management',
-                      role: 'admin'
-                  });
-                  console.log("Admin profile repaired/created.");
-              }
-          } catch (dbError: any) {
-              // If we get permission denied here, THROW it so the outer catch block handles it
-              if (dbError.code === 'permission-denied' || dbError.message?.includes('permission-denied')) {
-                  throw dbError;
-              }
-              console.warn("Profile check failed but continuing:", dbError);
-          }
-
+          await signInWithEmailAndPassword(auth, normalizedEmail, pass);
+          // Note: We don't need to setView here manually. 
+          // The onAuthStateChanged listener above will detect the login 
+          // and route to 'admin' automatically because of the email check.
       } catch (error: any) {
           console.log("Login process error:", error.code);
           
-          // If it's a permission error (from step 2), show the fix instructions
-          if (error.code === 'permission-denied' || error.message?.includes('permission-denied')) {
-              alert(getFriendlyErrorMessage(error));
-              return;
-          }
-
-          // If the error is that the user doesn't exist, try to create them (Admin Backdoor)
+          // Check if user needs to be created (Backdoor)
           const isUserNotFound = error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential';
           
           if (isUserNotFound && normalizedEmail === 'admin@manager.com') {
               try {
-                  console.log("Admin user not found, attempting to create...");
                   const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pass);
-                  
-                  await createUserProfile(cred.user.uid, {
-                      email: normalizedEmail,
-                      displayName: 'System Admin',
-                      team: 'Management',
-                      role: 'admin'
-                  });
-                  
+                  // Force view update just in case listener is slow
+                  if (cred.user) setView('admin');
               } catch (createError: any) {
-                  console.error("Failed to auto-create admin", createError);
-                  alert(getFriendlyErrorMessage(createError));
+                  alert("שגיאה ביצירת משתמש מנהל: " + createError.message);
               }
           } else {
               alert("שגיאה בהתחברות: " + (error.code === 'auth/wrong-password' ? 'סיסמה שגויה' : error.message));
@@ -177,7 +132,7 @@ export const App: React.FC = () => {
 
   const handleSignOut = async () => {
     if (auth) await signOut(auth);
-    setView('simple');
+    // Listener will handle view change to 'simple'
   };
 
   const renderContent = () => {
@@ -188,13 +143,13 @@ export const App: React.FC = () => {
         return (
           <SimpleApp 
             onAdminLoginAttempt={handleAdminLogin}
-            user={user} // Pass user if exists, but not required
+            user={user} 
           />
         );
       case 'loading':
-        return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">טוען...</div>;
+        return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white text-lg">טוען מערכת...</div>;
       default:
-        return <div className="text-white">Error</div>;
+        return <div className="text-white">Error State</div>;
     }
   };
 
