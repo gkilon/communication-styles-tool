@@ -33,9 +33,19 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
             red: 0, yellow: 0, green: 0, blue: 0, total: 0
         };
 
+        // Helper to ensure values are numbers
+        const safe = (v: any) => {
+            const n = Number(v);
+            return isNaN(n) ? 0 : n;
+        };
+
         users.forEach(u => {
             if (!u.scores) return;
-            const { a, b, c, d } = u.scores;
+            const a = safe(u.scores.a);
+            const b = safe(u.scores.b);
+            const c = safe(u.scores.c);
+            const d = safe(u.scores.d);
+
             // Simple logic to determine dominant color for the AI context
             const red = a + c;
             const yellow = a + d;

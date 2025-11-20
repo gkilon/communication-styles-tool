@@ -13,6 +13,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
+    console.error("API Key missing in environment variables.");
     return {
       statusCode: 200, 
       body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר." }),
@@ -34,11 +35,16 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     const ai = new GoogleGenAI({ apiKey });
     let systemInstruction = "";
-    let prompt = "";
+    let prompt = userInput;
+    
+    // Helper to ensure numbers are actually numbers
+    const safeScore = (val: any) => {
+        const num = Number(val);
+        return isNaN(num) ? 0 : num;
+    };
 
     if (mode === 'team') {
         // --- TEAM MODE LOGIC ---
-        // This logic is strictly isolated for the Team Dashboard analysis
         const { red, yellow, green, blue, total } = teamStats || { red:0, yellow:0, green:0, blue:0, total:0 };
         
         systemInstruction = `You are an expert Organizational Psychologist and Team Dynamics Consultant specialized in the Jungian Color Model.
@@ -65,13 +71,9 @@ const handler: Handler = async (event: HandlerEvent) => {
              * **Team Culture:** How to maintain morale while solving this?
         4. Do NOT just list the colors. Connect the dots between the *mix* and the *challenge*.
         `;
-        
-        prompt = userInput;
 
     } else {
         // --- INDIVIDUAL MODE LOGIC ---
-        // This preserves the original functionality for the Personal AI Coach
-        const safeScore = (val: any) => typeof val === 'number' ? val : Number(val) || 0;
         const red = safeScore(scores?.a) + safeScore(scores?.c);
         const yellow = safeScore(scores?.a) + safeScore(scores?.d);
         const green = safeScore(scores?.b) + safeScore(scores?.d);
@@ -95,18 +97,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         - Max 3 paragraphs.
         - Focus on Color Energies.
         - Professional yet encouraging tone.`;
-        
-        prompt = userInput;
     }
 
-    // Call AI
+    // Call AI - Simplified content structure for stability
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: { parts: [{ text: prompt }] },
+        contents: prompt,
         config: {
             systemInstruction: systemInstruction,
             temperature: 0.7,
-            maxOutputTokens: 1000, // Increased to allow for detailed categorized team advice
+            maxOutputTokens: 1500,
             safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
@@ -124,7 +124,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     console.error("Gemini API Error:", error);
     return {
       statusCode: 200, // Return 200 to handle gracefully on client
-      body: JSON.stringify({ text: "שגיאה זמנית בשרת ה-AI." }),
+      body: JSON.stringify({ text: "שגיאה זמנית בשרת ה-AI. אנא נסה שוב." }),
       headers: { 'Content-Type': 'application/json' },
     };
   }

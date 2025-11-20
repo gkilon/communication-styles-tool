@@ -32,8 +32,37 @@ export const TeamAiCoach: React.FC<TeamAiCoachProps> = ({ users, teamName }) => 
 
   const renderResponse = (text: string) => {
       if (!text) return null;
+      
+      let htmlContent = '';
       const marked = (window as any).marked;
-      const htmlContent = marked ? marked.parse(text) : text.replace(/\n/g, '<br/>');
+
+      try {
+        // Check if marked is available and is a function
+        if (marked && typeof marked.parse === 'function') {
+            const result = marked.parse(text);
+            // Ensure we got a string back (some versions might return a Promise if async is enabled)
+            if (typeof result === 'string') {
+                htmlContent = result;
+            } else {
+                // Fallback for Promise/unexpected return
+                htmlContent = text.replace(/\n/g, '<br />');
+            }
+        } else if (marked && typeof marked === 'function') {
+            // Older marked versions
+            const result = marked(text);
+            if (typeof result === 'string') {
+                 htmlContent = result;
+            } else {
+                 htmlContent = text.replace(/\n/g, '<br />');
+            }
+        } else {
+            // Marked not loaded
+            htmlContent = text.replace(/\n/g, '<br />');
+        }
+      } catch (error) {
+        console.warn("Error parsing markdown:", error);
+        htmlContent = text.replace(/\n/g, '<br />');
+      }
       
       return (
           <div className="prose prose-invert prose-p:text-gray-300 prose-headings:text-cyan-400 prose-li:text-gray-300 max-w-none">
