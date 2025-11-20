@@ -66,7 +66,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
             : 'הזן את סיסמת הגישה כדי להתחיל'}
       </p>
       
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
         
         {isAdminMode && (
             <input
@@ -76,6 +76,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
                 className="w-full bg-gray-700 border border-gray-600 rounded-full py-3 px-4 text-white text-center placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 placeholder="אימייל מנהל"
                 dir="ltr"
+                autoComplete="off"
             />
         )}
 
@@ -86,6 +87,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({ onAuthenticate, 
           className="w-full bg-gray-700 border border-gray-600 rounded-full py-3 px-4 text-white text-center placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
           placeholder="סיסמה"
           dir="ltr"
+          autoComplete="new-password"
         />
         
         {error && <p className="text-red-400 text-sm">{error}</p>}

@@ -110,11 +110,26 @@ export const App: React.FC = () => {
                       alert("סיסמה שגויה למנהל המערכת.");
                   } else {
                       console.error("Failed to auto-create admin", createError);
-                      alert("שגיאה ביצירת משתמש מנהל ראשוני.");
+                      // Show descriptive error to help user configure Firebase
+                      let msg = "שגיאה ביצירת משתמש מנהל ראשוני.";
+                      
+                      if (createError.code === 'auth/operation-not-allowed') {
+                          msg += "\n\n🛑 פעולה נדרשת ב-Firebase Console:";
+                          msg += "\n1. כנס ל-Build -> Authentication";
+                          msg += "\n2. בחר ב-Sign-in method";
+                          msg += "\n3. הפעל את 'Email/Password' (לחץ על Enable)";
+                      } else if (createError.code === 'auth/invalid-api-key') {
+                          msg += "\n\nסיבה: מפתח ה-API של Firebase אינו תקין (בדוק את firebaseConfig.ts).";
+                      } else if (createError.code === 'auth/network-request-failed') {
+                          msg += "\n\nסיבה: בעיית תקשורת. בדוק את החיבור לאינטרנט.";
+                      } else {
+                          msg += `\n\nקוד שגיאה: ${createError.code || createError.message}`;
+                      }
+                      alert(msg);
                   }
               }
           } else {
-              alert("פרטי התחברות שגויים.");
+              alert("פרטי התחברות שגויים (או שאינך מנהל).");
           }
       }
   };
