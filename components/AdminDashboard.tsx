@@ -4,6 +4,7 @@ import { auth } from '../firebaseConfig';
 import { getAllUsers, createTeam, getTeams } from '../services/firebaseService';
 import { UserProfile, Team, Scores } from '../types';
 import { ArrowLeftIcon } from './icons/Icons';
+import { TeamAiCoach } from './TeamAiCoach';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -182,15 +183,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                       const totalX = (a + b) || 1;
                       const totalY = (c + d) || 1;
                       
-                      // X Calculation: A is Extrovert (Right)
-                      // 0 = Full Introvert, 100 = Full Extrovert
                       const xPos = (a / totalX) * 100;
-
-                      // Y Calculation: D is People (Bottom)
-                      // 0 = Full Task (Top), 100 = Full People (Bottom)
                       const yPos = (d / totalY) * 100;
 
-                      // Clamp to prevent overflow (keep within 5%-95% area)
                       const clampedX = Math.max(5, Math.min(95, xPos));
                       const clampedY = Math.max(5, Math.min(95, yPos));
 
@@ -204,12 +199,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                             className={`absolute w-5 h-5 rounded-full border-2 ${borderColor} shadow-lg transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer ${dotColor} hover:scale-150 hover:z-50 transition-all z-10`}
                             style={{ left: `${clampedX}%`, top: `${clampedY}%` }}
                           >
-                              {/* Initial: First letter */}
                               <div className="flex items-center justify-center w-full h-full text-[8px] font-bold text-black/70 select-none">
                                   {u.displayName.charAt(0)}
                               </div>
 
-                              {/* Hover Tooltip */}
                               <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs py-1 px-2 rounded whitespace-nowrap shadow-xl border border-gray-600 z-50">
                                   <div className="font-bold text-center">{u.displayName}</div>
                                   <div className="text-[10px] opacity-80 text-center" dir="ltr">
@@ -220,9 +213,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                       );
                   })}
               </div>
-              <div className="text-center mt-4 text-gray-400 text-sm max-w-lg mx-auto">
-                  <p>הנקודות משקפות את הנטייה הטבעית של כל חבר צוות.<br/>קרבה למרכז מעידה על גמישות או איזון, בעוד שקרבה לקצוות מעידה על סגנון מובהק.</p>
-              </div>
+              
+              {/* AI TEAM COACH INTEGRATION */}
+              <TeamAiCoach users={filteredUsers} teamName={filterTeam} />
+
           </div>
       )
   };

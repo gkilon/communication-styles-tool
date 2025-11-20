@@ -1,5 +1,5 @@
 
-import { Scores } from '../types';
+import { Scores, UserProfile } from '../types';
 
 /**
  * Calls the secure Netlify serverless function to get advice from the AI coach.
@@ -10,16 +10,67 @@ import { Scores } from '../types';
  */
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
-    // The direct endpoint for our Netlify function.
     const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // Send the necessary data to the serverless function.
-      body: JSON.stringify({ scores, userInput }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'individual', scores, userInput }),
     });
 
+    return handleResponse(response);
+  } catch (error) {
+    console.error("Network Error calling AI service:", error);
+    return "מצטער, ישנה בעיית חיבור לאינטרנט או שהשרת אינו זמין כרגע.";
+  }
+};
+
+/**
+ * Calls the AI to analyze team dynamics based on the aggregate composition of the team.
+ */
+export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): Promise<string> => {
+    try {
+        // Calculate Team Stats
+        const teamStats = {
+            red: 0, yellow: 0, green: 0, blue: 0, total: 0
+        };
+
+        users.forEach(u => {
+            if (!u.scores) return;
+            const { a, b, c, d } = u.scores;
+            // Simple logic to determine dominant color for the AI context
+            const red = a + c;
+            const yellow = a + d;
+            const green = b + d;
+            const blue = b + c;
+            
+            const max = Math.max(red, yellow, green, blue);
+            if (max === red) teamStats.red++;
+            else if (max === yellow) teamStats.yellow++;
+            else if (max === green) teamStats.green++;
+            else if (max === blue) teamStats.blue++;
+            
+            teamStats.total++;
+        });
+
+        const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                mode: 'team', 
+                teamStats, 
+                userInput: challenge 
+            }),
+        });
+
+        return handleResponse(response);
+
+    } catch (error) {
+        console.error("Network Error calling Team AI:", error);
+        return "שגיאה בניתוח הצוות.";
+    }
+}
+
+// Helper to handle the fetch response parsing
+async function handleResponse(response: Response): Promise<string> {
     if (!response.ok) {
         let detailedError = `Error ${response.status}`;
         try {
@@ -28,42 +79,26 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
                 const errorData = await response.json();
                 detailedError = errorData.error || errorData.text || detailedError;
             } else {
-                // If not JSON (likely HTML error page from Netlify/timeout), read text
                 const textData = await response.text();
-                console.error("Non-JSON error response:", textData.substring(0, 200)); // Log first 200 chars
+                console.error("Non-JSON error response:", textData.substring(0, 200));
                 if (response.status === 502 || response.status === 504) {
-                   return "תקלת תקשורת: השרת לא הגיב בזמן (Timeout). נסה לשאול שאלה קצרה יותר או לנסות שוב.";
+                   return "תקלת תקשורת: השרת לא הגיב בזמן (Timeout). נסה שנית.";
                 }
             }
-        } catch (e) {
-            // Ignore parsing errors
-        }
+        } catch (e) { /* Ignore */ }
         
         console.error(`Server Error (${response.status}):`, detailedError);
-        
-        if (response.status === 404) {
-            return "שגיאה: לא ניתן למצוא את שירות ה-AI (404). ייתכן שהאתר לא נפרס במלואו.";
-        }
         return `תקלת שרת: ${detailedError}`;
     }
     
-    // If response is OK, it should be valid JSON.
     try {
         const data = await response.json();
-        // Validate that we actually got text back
         if (data && typeof data.text === 'string') {
             return data.text;
         } else {
-            console.error("Invalid response format from server:", data);
             return "מצטער, התקבלה תשובה לא תקינה מהשרת.";
         }
     } catch (e) {
-        console.error("Failed to parse JSON response (likely HTML received):", e);
-        return "תקלת תקשורת: התקבלה תשובה לא ברורה מהשרת. ייתכן שהיה ניתוק רגעי.";
+        return "תקלת תקשורת: התקבלה תשובה לא ברורה מהשרת.";
     }
-
-  } catch (error) {
-    console.error("Network Error calling AI service:", error);
-    return "מצטער, ישנה בעיית חיבור לאינטרנט או שהשרת אינו זמין כרגע.";
-  }
-};
+}

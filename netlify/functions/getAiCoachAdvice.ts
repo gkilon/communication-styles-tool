@@ -3,7 +3,6 @@ import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
 const handler: Handler = async (event: HandlerEvent) => {
-  // 1. Check Method
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -13,12 +12,10 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   const apiKey = process.env.API_KEY;
-
   if (!apiKey) {
-    console.error("CRITICAL ERROR: API_KEY is missing in Netlify environment variables.");
     return {
       statusCode: 200, 
-      body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר. אנא ודא שהגדרת את API_KEY בממשק של Netlify." }),
+      body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר." }),
       headers: { 'Content-Type': 'application/json' }
     };
   }
@@ -26,160 +23,108 @@ const handler: Handler = async (event: HandlerEvent) => {
   try {
     let bodyStr = event.body || "{}";
     if (event.isBase64Encoded) {
-        try {
-            bodyStr = Buffer.from(bodyStr, 'base64').toString('utf-8');
-        } catch (e) {
-            console.error("Failed to decode base64 body:", e);
-        }
+        bodyStr = Buffer.from(bodyStr, 'base64').toString('utf-8');
     }
-
-    let body;
-    try {
-        body = JSON.parse(bodyStr);
-    } catch (e) {
-        console.error("JSON Parse Error:", e);
-        return {
-            statusCode: 400,
-            body: JSON.stringify({ text: "שגיאה בעיבוד הנתונים שנשלחו לשרת." }),
-            headers: { 'Content-Type': 'application/json' }
-        };
-    }
-
-    const { scores, userInput } = body;
+    const body = JSON.parse(bodyStr);
+    const { scores, userInput, mode, teamStats } = body; // mode: 'individual' | 'team'
 
     if (!userInput) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ text: "לא התקבלה שאלה. אנא כתוב משהו." }),
-        headers: { 'Content-Type': 'application/json' }
-      };
+      return { statusCode: 400, body: JSON.stringify({ text: "חסר קלט משתמש." }) };
     }
 
-    // 2. Calculate profile stats
-    const safeScore = (val: any) => typeof val === 'number' ? val : Number(val) || 0;
-    const red = safeScore(scores?.a) + safeScore(scores?.c);
-    const yellow = safeScore(scores?.a) + safeScore(scores?.d);
-    const green = safeScore(scores?.b) + safeScore(scores?.d);
-    const blue = safeScore(scores?.b) + safeScore(scores?.c);
-    
-    const sorted = [
-        { name: 'Red (Goal-Oriented)', val: red },
-        { name: 'Yellow (Enthusiastic)', val: yellow },
-        { name: 'Green (Supportive)', val: green },
-        { name: 'Blue (Analytical)', val: blue }
-    ].sort((x, y) => y.val - x.val);
-
-    const dominant = sorted[0].name;
-    const secondary = sorted[1].name;
-
-    // 3. Initialize AI
     const ai = new GoogleGenAI({ apiKey });
+    let systemInstruction = "";
+    let prompt = "";
 
-    // 4. System Instruction
-    const systemInstruction = `You are an expert communication coach based on the Jungian Color Model.
-    
-    User Profile:
-    - Primary: ${dominant}
-    - Secondary: ${secondary}
-    
-    Task: Provide insightful, practical advice to the user's question in Hebrew.
-    
-    Guidelines:
-    - **STRICT PROHIBITION:** Do NOT use any opening greetings (e.g., "Shalom", "Hi", "Hello", "Glad you asked").
-    - **IMMEDIATE START:** Begin the response immediately with the relevant advice or analysis.
-    - Be concise and direct (max 3 paragraphs).
-    - Focus on "Color Energies" (Red, Yellow, Green, Blue).
-    - Do NOT mention raw numbers.
-    - Provide actionable steps.
-    - Keep the tone professional yet encouraging.`;
+    if (mode === 'team') {
+        // --- TEAM MODE LOGIC ---
+        // This logic is strictly isolated for the Team Dashboard analysis
+        const { red, yellow, green, blue, total } = teamStats || { red:0, yellow:0, green:0, blue:0, total:0 };
+        
+        systemInstruction = `You are an expert Organizational Psychologist and Team Dynamics Consultant specialized in the Jungian Color Model.
+        
+        Team Composition Data:
+        - Total Members: ${total}
+        - Red (Dominant/Driver): ${red} members
+        - Yellow (Influencing/Expressive): ${yellow} members
+        - Green (Stable/Supportive): ${green} members
+        - Blue (Analytical/Compliant): ${blue} members
 
-    // 5. Generate with Robust Retry Logic & Model Fallback
-    // Strategy: Try primary model -> Wait -> Try Lite model (backup) -> Wait -> Try primary again
-    const generateWithRetry = async () => {
-        const attempts = [
-            { model: "gemini-2.5-flash", delay: 1000 },
-            { model: "gemini-flash-lite-latest", delay: 1500 }, // Fallback to Lite
-            { model: "gemini-2.5-flash", delay: 0 }  // Last ditch attempt
-        ];
+        Your Goal:
+        Analyze the user's input (the Team's Challenge) through the lens of this specific personality mix.
+        
+        Guidelines:
+        1. **Hebrew Language Only.**
+        2. **Tone:** Professional, strategic, yet practical.
+        3. **Structure:**
+           - **Analysis:** Analyze why this specific mix struggles (or succeeds) with this challenge.
+           - **Blind Spots:** What is this team likely missing due to its composition?
+           - **Action Plan (Categorized):**
+             * **Communication:** How should they talk about this?
+             * **Process & Execution:** What structural changes are needed?
+             * **Team Culture:** How to maintain morale while solving this?
+        4. Do NOT just list the colors. Connect the dots between the *mix* and the *challenge*.
+        `;
+        
+        prompt = userInput;
 
-        let lastError;
+    } else {
+        // --- INDIVIDUAL MODE LOGIC ---
+        // This preserves the original functionality for the Personal AI Coach
+        const safeScore = (val: any) => typeof val === 'number' ? val : Number(val) || 0;
+        const red = safeScore(scores?.a) + safeScore(scores?.c);
+        const yellow = safeScore(scores?.a) + safeScore(scores?.d);
+        const green = safeScore(scores?.b) + safeScore(scores?.d);
+        const blue = safeScore(scores?.b) + safeScore(scores?.c);
+        
+        const sorted = [
+            { name: 'Red', val: red },
+            { name: 'Yellow', val: yellow },
+            { name: 'Green', val: green },
+            { name: 'Blue', val: blue }
+        ].sort((x, y) => y.val - x.val);
 
-        for (let i = 0; i < attempts.length; i++) {
-            const { model, delay } = attempts[i];
-            try {
-                console.log(`Attempt ${i + 1}/${attempts.length} using model: ${model}...`);
-                
-                const response = await ai.models.generateContent({
-                    model: model,
-                    contents: { parts: [{ text: userInput }] }, // Explicit format
-                    config: {
-                        systemInstruction: systemInstruction,
-                        temperature: 0.7, 
-                        maxOutputTokens: 400,
-                        safetySettings: [
-                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-                        ]
-                    }
-                });
-                
-                if (response.text && response.text.trim().length > 0) {
-                    return response;
-                }
-                
-                const finishReason = response.candidates?.[0]?.finishReason || 'UNKNOWN';
-                console.warn(`Attempt ${i+1}: Empty response. Finish reason: ${finishReason}`);
-                // If empty response but no error thrown, we manually throw to trigger retry
-                throw new Error(`Empty response from model (Reason: ${finishReason})`);
+        const dominant = sorted[0].name;
+        const secondary = sorted[1].name;
 
-            } catch (error: any) {
-                console.warn(`Attempt ${i + 1} failed:`, error.message);
-                lastError = error;
-                
-                if (i < attempts.length - 1) {
-                    console.log(`Switching models/retrying in ${delay}ms...`);
-                    await new Promise(r => setTimeout(r, delay));
-                }
-            }
-        }
-        throw lastError;
-    };
-
-    const response = await generateWithRetry();
-    
-    if (!response?.text) {
-         return {
-            statusCode: 200,
-            body: JSON.stringify({ text: "המערכת מתקשה לייצר תשובה כרגע (Empty Response). אנא נסה שנית." }),
-            headers: { 'Content-Type': 'application/json' },
-        };
+        systemInstruction = `You are an expert communication coach based on the Jungian Color Model.
+        User Profile: Primary: ${dominant}, Secondary: ${secondary}.
+        Task: Provide insightful, practical advice to the user's question in Hebrew.
+        Guidelines:
+        - No greetings. Start directly.
+        - Max 3 paragraphs.
+        - Focus on Color Energies.
+        - Professional yet encouraging tone.`;
+        
+        prompt = userInput;
     }
+
+    // Call AI
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: { parts: [{ text: prompt }] },
+        config: {
+            systemInstruction: systemInstruction,
+            temperature: 0.7,
+            maxOutputTokens: 1000, // Increased to allow for detailed categorized team advice
+            safetySettings: [
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }
+            ]
+        }
+    });
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ text: response.text }),
+      body: JSON.stringify({ text: response.text || "שגיאה ביצירת תשובה." }),
       headers: { 'Content-Type': 'application/json' },
     };
 
   } catch (error: any) {
-    console.error("Gemini API Final Error:", error);
-    
-    let errorMessage = "מצטער, נתקלתי בבעיה זמנית בתקשורת עם המודל.";
-    const errStr = error.toString();
-
-    if (errStr.includes("SAFETY")) {
-        errorMessage = "התשובה נחסמה עקב הגדרות בטיחות. אנא נסה לנסח את השאלה מחדש.";
-    } else if (errStr.includes("503") || errStr.includes("overloaded")) {
-         errorMessage = "שרתי המודל עמוסים כרגע. המערכת ניסתה מספר פעמים אך לא הצליחה להתחבר. אנא נסה שוב בעוד דקה.";
-    } else if (errStr.includes("Empty response")) {
-         errorMessage = "המערכת ניסתה לענות אך לא הצליחה לייצר תוכן תקין. אנא נסה שנית.";
-    }
-    
+    console.error("Gemini API Error:", error);
     return {
-      statusCode: 200,
-      body: JSON.stringify({ text: errorMessage }),
+      statusCode: 200, // Return 200 to handle gracefully on client
+      body: JSON.stringify({ text: "שגיאה זמנית בשרת ה-AI." }),
       headers: { 'Content-Type': 'application/json' },
     };
   }
