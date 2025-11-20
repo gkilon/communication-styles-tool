@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useRef } from 'react';
 import { Scores } from '../types';
 import { ResultsChart } from './ResultsChart';
@@ -18,9 +19,10 @@ interface ResultsScreenProps {
   scores: Scores;
   onReset: () => void;
   onEdit: () => void;
+  onLogout?: () => void;
 }
 
-export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, onEdit }) => {
+export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, onEdit, onLogout }) => {
   const profileAnalysis = useMemo(() => generateProfileAnalysis(scores), [scores]);
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -122,6 +124,15 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
         >
           התחל מחדש
         </button>
+        
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="bg-red-900/50 hover:bg-red-800 text-red-200 font-bold py-2 px-6 rounded-full text-lg transition-transform transform hover:scale-105 duration-300 border border-red-700"
+          >
+            יציאה
+          </button>
+        )}
       </div>
     </div>
   );
