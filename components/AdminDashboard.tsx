@@ -148,7 +148,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   </div>
               </div>
 
-              <div className="relative w-full max-w-lg mx-auto aspect-square bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl">
+              {/* dir="ltr" forces the grid to render Left-to-Right regardless of the app's RTL setting.
+                  This ensures the quadrants match the coordinate system:
+                  Left = Introvert (Blue/Green), Right = Extrovert (Red/Yellow) */}
+              <div className="relative w-full max-w-lg mx-auto aspect-square bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl" dir="ltr">
                   
                   {/* Background Quadrants */}
                   <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
