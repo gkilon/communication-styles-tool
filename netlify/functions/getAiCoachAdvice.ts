@@ -114,12 +114,12 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     // Call AI - Simplified content structure for stability
     const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash", // Using flash is fine, but provided detailed prompt ensures quality
+        model: "gemini-2.5-flash", 
         contents: prompt,
         config: {
             systemInstruction: systemInstruction,
-            temperature: 0.75, // Slightly higher creativity for the consultant persona
-            maxOutputTokens: 2500, // Increased significantly to allow for the detailed report
+            temperature: 0.8, // Higher creativity for the consultant persona
+            maxOutputTokens: 4000, // Increased significantly to allow for the detailed report
             safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }

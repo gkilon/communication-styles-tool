@@ -148,25 +148,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   </div>
               </div>
 
-              {/* dir="ltr" forces the grid to render Left-to-Right regardless of the app's RTL setting.
+              {/* dir="ltr" forces the coordinates to render Left-to-Right regardless of the app's RTL setting.
                   This ensures the quadrants match the coordinate system:
                   Left = Introvert (Blue/Green), Right = Extrovert (Red/Yellow) */}
               <div className="relative w-full max-w-lg mx-auto aspect-square bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl" dir="ltr">
                   
                   {/* Background Quadrants */}
-                  <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
-                      <div className="bg-indigo-900/20 border-r border-b border-gray-700/50 flex justify-start items-start p-2">
-                         <span className="text-indigo-300/30 font-bold text-4xl">C</span>
-                      </div>
-                      <div className="bg-rose-900/20 border-b border-gray-700/50 flex justify-end items-start p-2">
-                         <span className="text-rose-300/30 font-bold text-4xl">D</span>
-                      </div>
-                      <div className="bg-green-900/20 border-r border-gray-700/50 flex justify-start items-end p-2">
-                         <span className="text-green-300/30 font-bold text-4xl">S</span>
-                      </div>
-                      <div className="bg-yellow-900/20 flex justify-end items-end p-2">
-                         <span className="text-yellow-300/30 font-bold text-4xl">I</span>
-                      </div>
+                  {/* Explicit positioning to ignore RTL/LTR ambiguities in Grid */}
+                  
+                  {/* Top Left: Blue/Indigo (Introvert + Task) */}
+                  <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-indigo-900/20 border-r border-b border-gray-700/50 flex justify-start items-start p-2">
+                     <span className="text-indigo-300/30 font-bold text-4xl">C</span>
+                  </div>
+                  
+                  {/* Top Right: Red/Rose (Extrovert + Task) */}
+                  <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-rose-900/20 border-b border-gray-700/50 flex justify-end items-start p-2">
+                     <span className="text-rose-300/30 font-bold text-4xl">D</span>
+                  </div>
+                  
+                  {/* Bottom Left: Green (Introvert + People) */}
+                  <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-green-900/20 border-r border-gray-700/50 flex justify-start items-end p-2">
+                     <span className="text-green-300/30 font-bold text-4xl">S</span>
+                  </div>
+                  
+                  {/* Bottom Right: Yellow (Extrovert + People) */}
+                  <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-yellow-900/20 flex justify-end items-end p-2">
+                     <span className="text-yellow-300/30 font-bold text-4xl">I</span>
                   </div>
 
                   {/* Axes Lines */}
