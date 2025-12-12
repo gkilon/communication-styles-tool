@@ -21,7 +21,7 @@ const getEnv = (key: string) => {
 };
 
 const firebaseConfig = {
-  apiKey: getEnv("VITE_FIREBASE_API_KEY") || "AIzaSyAzP5HCS_qly0jmPT3hkdsn05NlPq1haNA",
+  apiKey: getEnv("VITE_FIREBASE_API_KEY") || "AIzaSyDgjGk6q8BUieAGCybYdTOBpiUIxm8JXw0",
   authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN") || "communication-tool-4d386.firebaseapp.com",
   projectId: getEnv("VITE_FIREBASE_PROJECT_ID") || "communication-tool-4d386",
   storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET") || "communication-tool-4d386.firebasestorage.app",
