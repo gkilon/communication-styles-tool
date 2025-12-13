@@ -104,13 +104,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
           return;
       }
 
+      // If registering (not logging in), enforce Team selection for regular users
+      if (!isLogin && !selectedTeam) {
+          setError("להרשמה דרך גוגל, חובה לבחור צוות מהרשימה תחילה.");
+          setLoading(false);
+          return;
+      }
+
       try {
           const provider = new GoogleAuthProvider();
           const result = await signInWithPopup(auth, provider);
           
-          // בדיקה אם למשתמש יש פרופיל, אם לא - צור אחד
-          // אם המשתמש כבר בחר צוות (בתהליך הרשמה) נשתמש בזה, אחרת ברירת מחדל 'כללי'
-          const teamToUse = selectedTeam || 'General';
+          // אם זה משתמש חדש, הוא ייווצר עם הצוות שנבחר ב-Dropdown
+          // אם המשתמש כבר קיים, הצוות לא ישתנה (הפונקציה ensure בודקת אם קיים)
+          const teamToUse = (!isLogin && selectedTeam) ? selectedTeam : 'General';
+          
           await ensureGoogleUserProfile(result.user, teamToUse);
           
           onLoginSuccess();
@@ -147,9 +155,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
       <h2 className="text-3xl md:text-4xl font-bold text-cyan-300 mb-3">
         {isLogin ? 'כניסה למערכת' : 'הרשמה לצוות'}
       </h2>
-      <p className="text-gray-400 mb-8 text-lg">
+      <p className="text-gray-400 mb-6 text-lg">
         {isLogin ? 'הזן את פרטי המשתמש שלך' : 'הצטרף לצוות הארגוני שלך'}
       </p>
+
+      {/* TEAM SELECTION - MOVED UP FOR REGISTRATION */}
+      {!isLogin && (
+        <div className="mb-6 text-right">
+            <label className="block text-gray-300 text-base mb-2 pr-1 font-bold">לאיזה צוות את/ה שייך?</label>
+            <select
+                value={selectedTeam}
+                onChange={(e) => {
+                    setSelectedTeam(e.target.value);
+                    setError('');
+                }}
+                className="w-full bg-gray-700 border border-cyan-500/50 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500 shadow-md"
+            >
+                <option value="" disabled>-- בחר צוות מהרשימה --</option>
+                {teams.map(team => (
+                    <option key={team.id} value={team.name}>{team.name}</option>
+                ))}
+            </select>
+        </div>
+      )}
 
       {/* Google Login Button */}
       <button 
@@ -162,7 +190,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
           ) : (
             <>
               <GoogleIcon className="w-6 h-6" />
-              <span>התחבר באמצעות Google</span>
+              <span>{isLogin ? 'התחבר עם Google' : 'הירשם עם Google (לצוות שנבחר)'}</span>
             </>
           )}
       </button>
@@ -175,31 +203,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
       
       <form onSubmit={handleSubmit} className="space-y-5 text-right">
         {!isLogin && (
-            <>
-                <div>
-                    <label className="block text-gray-300 text-base mb-2 pr-1">שם מלא</label>
-                    <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500"
-                        placeholder="ישראל ישראלי"
-                    />
-                </div>
-                <div>
-                    <label className="block text-gray-300 text-base mb-2 pr-1">בחר צוות</label>
-                    <select
-                        value={selectedTeam}
-                        onChange={(e) => setSelectedTeam(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500"
-                    >
-                        <option value="" disabled>-- בחר צוות מהרשימה --</option>
-                        {teams.map(team => (
-                            <option key={team.id} value={team.name}>{team.name}</option>
-                        ))}
-                    </select>
-                </div>
-            </>
+            <div>
+                <label className="block text-gray-300 text-base mb-2 pr-1">שם מלא (להרשמה במייל)</label>
+                <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500"
+                    placeholder="ישראל ישראלי"
+                />
+            </div>
         )}
 
         <div>
