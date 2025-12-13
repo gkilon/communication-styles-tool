@@ -1,6 +1,7 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { Buffer } from "buffer";
 
 const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
@@ -119,7 +120,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         config: {
             systemInstruction: systemInstruction,
             temperature: 0.8, // Higher creativity for the consultant persona
-            maxOutputTokens: 4000, // Increased significantly to allow for the detailed report
             safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE }

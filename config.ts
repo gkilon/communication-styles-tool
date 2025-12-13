@@ -3,7 +3,7 @@
 // או במצב "פשוט" (כמו הגרסה המקורית).
 
 // פונקציה בטוחה לשליפת משתנים שלא תקרוס גם אם הסביבה לא מוגדרת כשורה
-const getEnv = () => {
+const getEnv = (): any => {
   try {
     // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env) {

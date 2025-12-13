@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
-import { createUserProfile, getTeams } from '../services/firebaseService';
+import { createUserProfile, getTeams, ensureGoogleUserProfile } from '../services/firebaseService';
 import { Team } from '../types';
-import { ArrowLeftIcon } from './icons/Icons';
+import { ArrowLeftIcon, GoogleIcon } from './icons/Icons';
 
 interface AuthScreenProps {
   onLoginSuccess: () => void;
@@ -27,18 +27,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
 
   // Fetch teams on mount
   useEffect(() => {
-    if (!isLogin) {
-        const fetchTeams = async () => {
-            try {
-                const teamsData = await getTeams();
-                setTeams(teamsData);
-            } catch (e) {
-                console.error("Failed to load teams", e);
-            }
-        };
-        fetchTeams();
-    }
-  }, [isLogin]);
+     const fetchTeams = async () => {
+        try {
+            const teamsData = await getTeams();
+            setTeams(teamsData);
+        } catch (e) {
+            console.error("Failed to load teams", e);
+        }
+    };
+    fetchTeams();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +51,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
         // הרשמה
         const role: 'user' | 'admin' = (adminCode === 'inspire') ? 'admin' : 'user';
 
-        // Validation for normal users
         if (!name) {
             setError("נא למלא שם מלא");
             setLoading(false);
@@ -66,7 +63,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
              return;
         }
         
-        // If admin, team is optional (or "Admin Team")
         const teamToSave = role === 'admin' ? 'Management' : selectedTeam;
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -91,6 +87,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
     }
   };
 
+  const handleGoogleLogin = async () => {
+      setError('');
+      setLoading(true);
+      try {
+          const provider = new GoogleAuthProvider();
+          const result = await signInWithPopup(auth, provider);
+          
+          // בדיקה אם למשתמש יש פרופיל, אם לא - צור אחד
+          // אם המשתמש כבר בחר צוות (בתהליך הרשמה) נשתמש בזה, אחרת ברירת מחדל 'כללי'
+          const teamToUse = selectedTeam || 'General';
+          await ensureGoogleUserProfile(result.user, teamToUse);
+          
+          onLoginSuccess();
+      } catch (err: any) {
+          console.error("Google login error", err);
+          setError("שגיאה בהתחברות עם Google.");
+          if (err.code === 'auth/popup-closed-by-user') {
+              setError("ההתחברות בוטלה.");
+          }
+      } finally {
+          setLoading(false);
+      }
+  };
+
   return (
     <div className="bg-gray-800 p-8 rounded-lg shadow-2xl text-center max-w-md mx-auto animate-fade-in-up border border-gray-700 w-full relative">
       
@@ -109,6 +129,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
       <p className="text-gray-400 mb-6 text-sm">
         {isLogin ? 'הזן את פרטי המשתמש שלך' : 'הצטרף לצוות הארגוני שלך'}
       </p>
+
+      {/* Google Login Button */}
+      <button 
+        onClick={handleGoogleLogin}
+        disabled={loading}
+        className="w-full bg-white text-gray-700 hover:bg-gray-100 font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors mb-6 shadow-md"
+      >
+          {loading ? (
+             <span className="w-5 h-5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></span>
+          ) : (
+            <>
+              <GoogleIcon className="w-5 h-5" />
+              <span>התחבר באמצעות Google</span>
+            </>
+          )}
+      </button>
+
+      <div className="flex items-center gap-4 mb-6">
+          <div className="h-px bg-gray-600 flex-1"></div>
+          <span className="text-gray-500 text-xs">או במייל</span>
+          <div className="h-px bg-gray-600 flex-1"></div>
+      </div>
       
       <form onSubmit={handleSubmit} className="space-y-4 text-right">
         {!isLogin && (
@@ -135,11 +177,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
                             <option key={team.id} value={team.name}>{team.name}</option>
                         ))}
                     </select>
-                    {teams.length === 0 && (
-                        <p className="text-xs text-yellow-500 mt-1 pr-2">
-                           * אין צוותים זמינים. פנה למנהל המערכת.
-                        </p>
-                    )}
                 </div>
             </>
         )}
@@ -153,7 +190,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
             className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white ltr-text focus:ring-2 focus:ring-cyan-500 text-left"
             style={{direction: 'ltr'}}
             placeholder="your@email.com"
-            required
             />
         </div>
 
@@ -166,7 +202,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
             className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500 text-left"
              style={{direction: 'ltr'}}
             placeholder="******"
-            required
             />
         </div>
 

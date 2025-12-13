@@ -148,31 +148,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   </div>
               </div>
 
-              {/* dir="ltr" forces the coordinates to render Left-to-Right regardless of the app's RTL setting.
-                  This ensures the quadrants match the coordinate system:
-                  Left = Introvert (Blue/Green), Right = Extrovert (Red/Yellow) */}
+              {/* 
+                  RTL Map Implementation:
+                  Horizontal Axis: Extrovert (Left) <-> Introvert (Right)
+                  Vertical Axis: Task (Top) <-> People (Bottom)
+                  
+                  Container forces LTR logic but we position elements specifically to achieve RTL layout
+              */}
               <div className="relative w-full max-w-lg mx-auto aspect-square bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl" dir="ltr">
                   
-                  {/* Background Quadrants */}
-                  {/* Explicit positioning to ignore RTL/LTR ambiguities in Grid */}
+                  {/* Background Quadrants - RTL FLIPPED POSITIONS */}
                   
-                  {/* Top Left: Blue/Indigo (Introvert + Task) */}
-                  <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-indigo-900/20 border-r border-b border-gray-700/50 flex justify-start items-start p-2">
+                  {/* Top Right: Blue/Indigo (Introvert + Task) */}
+                  <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-indigo-900/20 border-b border-l border-gray-700/50 flex justify-end items-start p-2">
                      <span className="text-indigo-300/30 font-bold text-4xl">C</span>
                   </div>
                   
-                  {/* Top Right: Red/Rose (Extrovert + Task) */}
-                  <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-rose-900/20 border-b border-gray-700/50 flex justify-end items-start p-2">
+                  {/* Top Left: Red/Rose (Extrovert + Task) */}
+                  <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-rose-900/20 border-b border-gray-700/50 flex justify-start items-start p-2">
                      <span className="text-rose-300/30 font-bold text-4xl">D</span>
                   </div>
                   
-                  {/* Bottom Left: Green (Introvert + People) */}
-                  <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-green-900/20 border-r border-gray-700/50 flex justify-start items-end p-2">
+                  {/* Bottom Right: Green (Introvert + People) */}
+                  <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-green-900/20 border-l border-gray-700/50 flex justify-end items-end p-2">
                      <span className="text-green-300/30 font-bold text-4xl">S</span>
                   </div>
                   
-                  {/* Bottom Right: Yellow (Extrovert + People) */}
-                  <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-yellow-900/20 flex justify-end items-end p-2">
+                  {/* Bottom Left: Yellow (Extrovert + People) */}
+                  <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-yellow-900/20 flex justify-start items-end p-2">
                      <span className="text-yellow-300/30 font-bold text-4xl">I</span>
                   </div>
 
@@ -180,11 +183,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-gray-500/60 transform -translate-x-1/2 z-0"></div>
                   <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-gray-500/60 transform -translate-y-1/2 z-0"></div>
 
-                  {/* Labels */}
+                  {/* Labels - RTL FLIPPED */}
                   <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-xs font-bold text-gray-400 bg-gray-900/80 px-2 rounded">משימתי</div>
                   <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs font-bold text-gray-400 bg-gray-900/80 px-2 rounded">אנשים</div>
-                  <div className="absolute top-1/2 left-2 transform -translate-y-1/2 text-xs font-bold text-gray-400 bg-gray-900/80 px-2 rounded rotate-90 origin-center">מופנם</div>
-                  <div className="absolute top-1/2 right-2 transform -translate-y-1/2 text-xs font-bold text-gray-400 bg-gray-900/80 px-2 rounded -rotate-90 origin-center">מוחצן</div>
+                  
+                  {/* Introvert (Right side now) */}
+                  <div className="absolute top-1/2 right-2 transform -translate-y-1/2 text-xs font-bold text-gray-400 bg-gray-900/80 px-2 rounded -rotate-90 origin-center">מופנם</div>
+                  
+                  {/* Extrovert (Left side now) */}
+                  <div className="absolute top-1/2 left-2 transform -translate-y-1/2 text-xs font-bold text-gray-400 bg-gray-900/80 px-2 rounded rotate-90 origin-center">מוחצן</div>
 
                   {/* Users Plot */}
                   {filteredUsers.map((u) => {
@@ -206,8 +213,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                       return (
                           <div 
                             key={u.uid}
-                            className={`absolute w-5 h-5 rounded-full border-2 ${borderColor} shadow-lg transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer ${dotColor} hover:scale-150 hover:z-50 transition-all z-10`}
-                            style={{ left: `${clampedX}%`, top: `${clampedY}%` }}
+                            // Using right: x% effectively flips the horizontal axis. 
+                            // High Extrovert (100%) -> right: 100% -> Left side (Red).
+                            // Low Extrovert (0%) -> right: 0% -> Right side (Blue).
+                            className={`absolute w-5 h-5 rounded-full border-2 ${borderColor} shadow-lg transform translate-x-1/2 -translate-y-1/2 group cursor-pointer ${dotColor} hover:scale-150 hover:z-50 transition-all z-10`}
+                            style={{ right: `${clampedX}%`, top: `${clampedY}%` }}
                           >
                               <div className="flex items-center justify-center w-full h-full text-[8px] font-bold text-black/70 select-none">
                                   {u.displayName.charAt(0)}

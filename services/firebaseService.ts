@@ -1,7 +1,8 @@
 
 import { db, auth } from '../firebaseConfig';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { Scores, UserProfile, Team } from '../types';
+import { User } from 'firebase/auth';
 
 // --- USERS & RESULTS ---
 
@@ -24,7 +25,7 @@ export const saveUserResults = async (scores: Scores) => {
   }
 };
 
-// יצירת משתמש חדש בבסיס הנתונים
+// יצירת משתמש חדש בבסיס הנתונים (להרשמה במייל)
 export const createUserProfile = async (uid: string, data: { email: string; displayName: string; team: string; role?: 'user' | 'admin' }) => {
   const userRef = doc(db, "users", uid);
   await setDoc(userRef, {
@@ -35,6 +36,28 @@ export const createUserProfile = async (uid: string, data: { email: string; disp
     role: data.role || 'user',
     createdAt: new Date().toISOString()
   });
+};
+
+// **חדש** - טיפול בהתחברות מגוגל
+// אם המשתמש לא קיים במסד הנתונים, יוצר לו פרופיל בסיסי
+export const ensureGoogleUserProfile = async (firebaseUser: User, teamName: string = 'General') => {
+    const userRef = doc(db, "users", firebaseUser.uid);
+    const snap = await getDoc(userRef);
+    
+    if (!snap.exists()) {
+        // Create new profile automatically
+        await setDoc(userRef, {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            displayName: firebaseUser.displayName || 'Google User',
+            team: teamName, // Default team or selected one if logic permits
+            role: 'user',
+            createdAt: new Date().toISOString(),
+            photoURL: firebaseUser.photoURL
+        });
+        return true; // Created new
+    }
+    return false; // Existed
 };
 
 // קבלת פרופיל המשתמש הנוכחי
@@ -74,7 +97,6 @@ export const getAllUsers = async () => {
 // --- TEAMS MANAGEMENT ---
 
 export const createTeam = async (teamName: string) => {
-    // Check if team exists first (by name) - simplified check
     const teamsRef = collection(db, "teams");
     const q = query(teamsRef, where("name", "==", teamName));
     const querySnapshot = await getDocs(q);

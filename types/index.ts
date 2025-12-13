@@ -24,8 +24,16 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
-  team: string;
+  team: string; // This will now refer to the Team Name
+  teamId?: string;
   role: 'user' | 'admin';
   completedAt?: string; // ISO Date string
   scores?: Scores;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  createdAt: string;
+  memberCount: number;
 }
