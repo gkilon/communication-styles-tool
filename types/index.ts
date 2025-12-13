@@ -2,6 +2,7 @@
 export interface QuestionPair {
   id: string;
   pair: [string, string];
+  descriptions: [string, string]; // New field for short definitions
   columns: [keyof Scores, keyof Scores];
 }
 

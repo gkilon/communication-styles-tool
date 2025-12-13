@@ -23,6 +23,8 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   // App Flow States
   const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>('intro');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
+  
+  // NOTE: Initialized as empty object to ensure user physically selects an answer
   const [answers, setAnswers] = useState<Record<string, number>>({});
 
   // Effect: If user is passed from parent (Firebase Auth), auto-authenticate
@@ -35,14 +37,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     }
   }, [user]);
 
-  // Initialize answers
-  useEffect(() => {
-     const defaultAnswers: Record<string, number> = {};
-     if (QUESTION_PAIRS) {
-         QUESTION_PAIRS.forEach(q => { defaultAnswers[q.id] = 4; });
-         setAnswers(prev => Object.keys(prev).length === 0 ? defaultAnswers : prev);
-     }
-  }, []);
+  // Removed the useEffect that auto-populated default answers.
   
   const scores = useMemo<Scores | null>(() => {
     if (step !== 'results') return null;
@@ -79,9 +74,6 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   
   const handleReset = () => {
     setAnswers({});
-    const defaultAnswers: Record<string, number> = {};
-    QUESTION_PAIRS.forEach(q => { defaultAnswers[q.id] = 4; });
-    setAnswers(defaultAnswers);
     setCurrentQuestionIndex(0);
     setStep('intro');
   };

@@ -34,12 +34,17 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
 
   const totalQuestions = QUESTION_PAIRS.length;
   const currentQuestion = QUESTION_PAIRS[currentQuestionIndex];
+  
+  // Check if current question has a valid answer
+  const isAnswered = answers[currentQuestion.id] !== undefined && answers[currentQuestion.id] > 0;
 
   const handleAnswerChange = (id: string, value: number) => {
     setAnswers(prev => ({ ...prev, [id]: value }));
   };
 
   const handleNext = () => {
+    if (!isAnswered) return; // Prevent next if not answered
+
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
@@ -63,7 +68,8 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
       <div key={currentQuestion.id} className="animate-fade-in-up my-12">
         <QuestionSlider
           question={currentQuestion}
-          value={answers[currentQuestion.id] ?? 4}
+          // Pass 0 if undefined to indicate "not answered" to the slider
+          value={answers[currentQuestion.id] || 0}
           onChange={(value) => handleAnswerChange(currentQuestion.id, value)}
         />
       </div>
@@ -77,13 +83,24 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
           <ArrowRightIcon className="w-6 h-6" />
           <span>הקודם</span>
         </button>
-        <button
-          onClick={handleNext}
-          className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg text-lg"
-        >
-          <span>{currentQuestionIndex === totalQuestions - 1 ? 'צפה בתוצאות' : 'הבא'}</span>
-          <ArrowLeftIcon className="w-6 h-6" />
-        </button>
+        
+        <div className="flex flex-col items-center">
+             <button
+              onClick={handleNext}
+              disabled={!isAnswered}
+              className={`flex items-center gap-2 font-bold py-3 px-8 rounded-full transition-all duration-300 transform shadow-lg text-lg ${
+                  isAnswered 
+                  ? 'bg-cyan-600 hover:bg-cyan-500 hover:scale-105 text-white cursor-pointer' 
+                  : 'bg-gray-600 text-gray-400 opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <span>{currentQuestionIndex === totalQuestions - 1 ? 'צפה בתוצאות' : 'הבא'}</span>
+              <ArrowLeftIcon className="w-6 h-6" />
+            </button>
+            {!isAnswered && (
+                <span className="text-red-400 text-sm mt-2 font-medium animate-pulse">נא לבחור תשובה כדי להמשיך</span>
+            )}
+        </div>
       </div>
     </div>
   );
