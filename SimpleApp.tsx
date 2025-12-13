@@ -102,20 +102,24 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   };
 
   return (
-    <div className="min-h-screen bg-transparent text-white p-4 sm:p-6 md:p-8 font-sans dir-rtl">
-      <div className="max-w-4xl mx-auto">
-        <header className="text-center mb-8 relative">
-          <div className="flex justify-center items-center relative">
-             <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-cyan-400 tracking-wide">שאלון סגנונות תקשורת</h1>
+    <div className="min-h-screen bg-transparent text-white p-4 sm:p-8 font-sans dir-rtl flex flex-col items-center">
+      {/* Increased max-width for larger desktop feel */}
+      <div className="w-full max-w-6xl mx-auto">
+        <header className="text-center mb-12 relative">
+          <div className="flex justify-center items-center relative py-4">
+             {/* Increased header size */}
+             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-cyan-400 tracking-wide drop-shadow-lg">
+                שאלון סגנונות תקשורת
+             </h1>
           </div>
-          <p className="text-gray-400 mt-2 text-lg">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
+          <p className="text-gray-300 mt-2 text-xl sm:text-2xl font-light">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
           
           {isAuthenticated && (
             <div className="absolute top-0 left-0 flex flex-col items-end">
-                {user && <span className="text-xs text-gray-500 mb-1">{user.displayName || user.email}</span>}
+                {user && <span className="text-sm text-gray-400 mb-1 font-medium">{user.displayName || user.email}</span>}
                 <button 
                 onClick={handleLogout}
-                className="text-xs sm:text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded px-3 py-1 transition-all"
+                className="text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded px-4 py-2 transition-all bg-gray-800/50"
                 >
                 יציאה
                 </button>
@@ -123,7 +127,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
           )}
         </header>
 
-        <main>
+        <main className="w-full flex justify-center">
             {!isAuthenticated ? (
                 showTeamAuth ? (
                     <AuthScreen 
@@ -139,7 +143,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                     />
                 )
             ) : (
-                <>
+                <div className="w-full">
                     {step === 'intro' && <IntroScreen onStart={handleStart} />}
                     {step === 'questionnaire' && (
                         <QuestionnaireScreen 
@@ -158,7 +162,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                           onLogout={handleLogout}
                         />
                     )}
-                </>
+                </div>
             )}
         </main>
       </div>

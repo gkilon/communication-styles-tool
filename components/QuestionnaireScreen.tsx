@@ -15,9 +15,9 @@ interface QuestionnaireScreenProps {
 const ProgressBar: React.FC<{ current: number; total: number }> = ({ current, total }) => {
   const percentage = (current / total) * 100;
   return (
-    <div className="w-full bg-gray-700 rounded-full h-2.5 my-4">
+    <div className="w-full bg-gray-700 rounded-full h-4 my-6">
       <div
-        className="bg-cyan-500 h-2.5 rounded-full transition-all duration-500 ease-out"
+        className="bg-cyan-500 h-4 rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(6,182,212,0.5)]"
         style={{ width: `${percentage}%` }}
       ></div>
     </div>
@@ -54,13 +54,13 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
   };
 
   return (
-    <div className="bg-gray-800 p-6 sm:p-8 rounded-lg shadow-2xl max-w-2xl mx-auto">
-      <div className="text-center mb-4">
-        <p className="text-sm text-gray-400">שאלה {currentQuestionIndex + 1} מתוך {totalQuestions}</p>
+    <div className="bg-gray-800 p-8 md:p-12 lg:p-16 rounded-2xl shadow-2xl max-w-5xl mx-auto border border-gray-700">
+      <div className="text-center mb-8">
+        <p className="text-lg text-gray-400 font-medium">שאלה {currentQuestionIndex + 1} מתוך {totalQuestions}</p>
         <ProgressBar current={currentQuestionIndex + 1} total={totalQuestions} />
       </div>
 
-      <div key={currentQuestion.id} className="animate-fade-in-up my-8">
+      <div key={currentQuestion.id} className="animate-fade-in-up my-12">
         <QuestionSlider
           question={currentQuestion}
           value={answers[currentQuestion.id] ?? 4}
@@ -68,21 +68,21 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
         />
       </div>
 
-      <div className="flex justify-between items-center mt-8">
+      <div className="flex justify-between items-center mt-12">
         <button
           onClick={handlePrev}
           disabled={currentQuestionIndex === 0}
-          className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold py-3 px-6 rounded-full transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed text-lg"
         >
-          <ArrowRightIcon className="w-5 h-5" />
+          <ArrowRightIcon className="w-6 h-6" />
           <span>הקודם</span>
         </button>
         <button
           onClick={handleNext}
-          className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-full transition-all duration-300 transform hover:scale-105"
+          className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg text-lg"
         >
           <span>{currentQuestionIndex === totalQuestions - 1 ? 'צפה בתוצאות' : 'הבא'}</span>
-          <ArrowLeftIcon className="w-5 h-5" />
+          <ArrowLeftIcon className="w-6 h-6" />
         </button>
       </div>
     </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from '../firebaseConfig';
+import { auth, isFirebaseInitialized } from '../firebaseConfig';
 import { createUserProfile, getTeams, ensureGoogleUserProfile } from '../services/firebaseService';
 import { Team } from '../types';
 import { ArrowLeftIcon, GoogleIcon } from './icons/Icons';
@@ -28,6 +28,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
   // Fetch teams on mount
   useEffect(() => {
      const fetchTeams = async () => {
+        if (!isFirebaseInitialized) return;
         try {
             const teamsData = await getTeams();
             setTeams(teamsData);
@@ -42,6 +43,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    if (!isFirebaseInitialized) {
+        setError("שגיאה: הגדרות Firebase חסרות. לא ניתן להתחבר.");
+        setLoading(false);
+        return;
+    }
 
     try {
       if (isLogin) {
@@ -90,6 +97,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
   const handleGoogleLogin = async () => {
       setError('');
       setLoading(true);
+
+      if (!isFirebaseInitialized) {
+          setError("החיבור נכשל: המערכת לא הוגדרה כראוי (משתני סביבה חסרים).");
+          setLoading(false);
+          return;
+      }
+
       try {
           const provider = new GoogleAuthProvider();
           const result = await signInWithPopup(auth, provider);
@@ -101,32 +115,39 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
           
           onLoginSuccess();
       } catch (err: any) {
-          console.error("Google login error", err);
-          setError("שגיאה בהתחברות עם Google.");
+          console.error("Google login error details:", err);
+          let msg = "שגיאה בהתחברות עם Google.";
+          
           if (err.code === 'auth/popup-closed-by-user') {
-              setError("ההתחברות בוטלה.");
+              msg = "ההתחברות בוטלה על ידי המשתמש.";
+          } else if (err.code === 'auth/unauthorized-domain') {
+              msg = "הדומיין הנוכחי אינו מורשה ב-Firebase Console.";
+          } else if (err.message) {
+              msg += " (" + err.message + ")";
           }
+
+          setError(msg);
       } finally {
           setLoading(false);
       }
   };
 
   return (
-    <div className="bg-gray-800 p-8 rounded-lg shadow-2xl text-center max-w-md mx-auto animate-fade-in-up border border-gray-700 w-full relative">
+    <div className="bg-gray-800 p-8 md:p-12 rounded-xl shadow-2xl text-center max-w-lg w-full mx-auto animate-fade-in-up border border-gray-700 relative">
       
       {onBack && (
         <button 
             onClick={onBack}
-            className="absolute top-4 left-4 text-gray-400 hover:text-white transition-colors"
+            className="absolute top-6 left-6 text-gray-400 hover:text-white transition-colors"
         >
-            <ArrowLeftIcon className="w-5 h-5 rotate-180" />
+            <ArrowLeftIcon className="w-6 h-6 rotate-180" />
         </button>
       )}
 
-      <h2 className="text-3xl font-bold text-cyan-300 mb-2">
+      <h2 className="text-3xl md:text-4xl font-bold text-cyan-300 mb-3">
         {isLogin ? 'כניסה למערכת' : 'הרשמה לצוות'}
       </h2>
-      <p className="text-gray-400 mb-6 text-sm">
+      <p className="text-gray-400 mb-8 text-lg">
         {isLogin ? 'הזן את פרטי המשתמש שלך' : 'הצטרף לצוות הארגוני שלך'}
       </p>
 
@@ -134,43 +155,43 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
       <button 
         onClick={handleGoogleLogin}
         disabled={loading}
-        className="w-full bg-white text-gray-700 hover:bg-gray-100 font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-3 transition-colors mb-6 shadow-md"
+        className="w-full bg-white text-gray-800 hover:bg-gray-100 font-bold text-lg py-4 px-6 rounded-xl flex items-center justify-center gap-3 transition-colors mb-8 shadow-md"
       >
           {loading ? (
-             <span className="w-5 h-5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></span>
+             <span className="w-6 h-6 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></span>
           ) : (
             <>
-              <GoogleIcon className="w-5 h-5" />
+              <GoogleIcon className="w-6 h-6" />
               <span>התחבר באמצעות Google</span>
             </>
           )}
       </button>
 
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-4 mb-8">
           <div className="h-px bg-gray-600 flex-1"></div>
-          <span className="text-gray-500 text-xs">או במייל</span>
+          <span className="text-gray-500 text-sm font-medium">או במייל</span>
           <div className="h-px bg-gray-600 flex-1"></div>
       </div>
       
-      <form onSubmit={handleSubmit} className="space-y-4 text-right">
+      <form onSubmit={handleSubmit} className="space-y-5 text-right">
         {!isLogin && (
             <>
                 <div>
-                    <label className="block text-gray-400 text-sm mb-1 pr-2">שם מלא</label>
+                    <label className="block text-gray-300 text-base mb-2 pr-1">שם מלא</label>
                     <input
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500"
+                        className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500"
                         placeholder="ישראל ישראלי"
                     />
                 </div>
                 <div>
-                    <label className="block text-gray-400 text-sm mb-1 pr-2">בחר צוות</label>
+                    <label className="block text-gray-300 text-base mb-2 pr-1">בחר צוות</label>
                     <select
                         value={selectedTeam}
                         onChange={(e) => setSelectedTeam(e.target.value)}
-                        className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500"
+                        className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500"
                     >
                         <option value="" disabled>-- בחר צוות מהרשימה --</option>
                         {teams.map(team => (
@@ -182,55 +203,55 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
         )}
 
         <div>
-            <label className="block text-gray-400 text-sm mb-1 pr-2">אימייל</label>
+            <label className="block text-gray-300 text-base mb-2 pr-1">אימייל</label>
             <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white ltr-text focus:ring-2 focus:ring-cyan-500 text-left"
+            className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg ltr-text focus:ring-2 focus:ring-cyan-500 text-left"
             style={{direction: 'ltr'}}
             placeholder="your@email.com"
             />
         </div>
 
         <div>
-            <label className="block text-gray-400 text-sm mb-1 pr-2">סיסמה</label>
+            <label className="block text-gray-300 text-base mb-2 pr-1">סיסמה</label>
             <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 px-4 text-white focus:ring-2 focus:ring-cyan-500 text-left"
+            className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500 text-left"
              style={{direction: 'ltr'}}
             placeholder="******"
             />
         </div>
 
         {!isLogin && (
-            <div className="border-t border-gray-700 pt-2 mt-2">
+            <div className="border-t border-gray-700 pt-4 mt-4">
                 <div className="relative">
                     <input
                         type="password"
                         value={adminCode}
                         onChange={(e) => setAdminCode(e.target.value)}
-                        className="w-full bg-gray-900/50 border border-gray-700 rounded-lg py-1 px-4 text-white text-xs focus:ring-1 focus:ring-cyan-500 placeholder-gray-600"
+                        className="w-full bg-gray-900/50 border border-gray-700 rounded-lg py-2 px-4 text-white text-sm focus:ring-1 focus:ring-cyan-500 placeholder-gray-600"
                         placeholder="קוד מנהל (להקמת מערכת בלבד)"
                     />
                 </div>
             </div>
         )}
 
-        {error && <p className="text-red-400 text-sm text-center bg-red-900/30 p-2 rounded border border-red-800">{error}</p>}
+        {error && <p className="text-red-300 text-base text-center bg-red-900/40 p-3 rounded-lg border border-red-800/50">{error}</p>}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 px-8 rounded-lg text-lg transition-all shadow-lg mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl transition-all shadow-lg mt-8 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'מעבד...' : (isLogin ? 'התחבר' : 'הירשם')}
         </button>
       </form>
 
-      <div className="mt-6 text-sm text-gray-400 flex justify-center gap-1">
+      <div className="mt-8 text-base text-gray-400 flex justify-center gap-2">
         <span>{isLogin ? 'עדיין אין לך חשבון?' : 'כבר נרשמת?'}</span>
         <button 
             onClick={() => { setIsLogin(!isLogin); setError(''); }}
