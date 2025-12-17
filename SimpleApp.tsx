@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
@@ -39,22 +38,29 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
       const val = answers[q.id];
       if (val !== undefined && val > 0) {
         const [col1, col2] = q.columns;
-        // Accurate 1-6 scoring:
-        // Value 1 (max col1): 5 pts to col1, 0 pts to col2
-        // Value 6 (max col2): 0 pts to col1, 5 pts to col2
+        // Total points available per question is 5.
+        // Scale 1-6 mapping to points:
+        // 1 -> 5:0
+        // 2 -> 4:1
+        // 3 -> 3:2
+        // 4 -> 2:3
+        // 5 -> 1:4
+        // 6 -> 0:5
         newScores[col1] += (6 - val); 
         newScores[col2] += (val - 1);
         totalQuestions++;
       }
     });
 
-    if (totalQuestions === 0) return { a: 1, b: 1, c: 1, d: 1 };
+    // If no data, provide a completely neutral starting point
+    if (totalQuestions === 0) return { a: 0, b: 0, c: 0, d: 0 };
+    
     return newScores;
   }, [step, answers]);
 
   useEffect(() => {
     if (step === 'results' && scores && user) {
-        saveUserResults(scores).catch(console.error);
+        saveUserResults(scores).catch(err => console.error("Firebase save error:", err));
     }
   }, [step, scores, user]);
 
@@ -68,8 +74,16 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
 
   const handleStart = () => setStep('questionnaire');
   const handleSubmit = () => setStep('results');
-  const handleReset = () => { setAnswers({}); setCurrentQuestionIndex(0); setStep('intro'); };
-  const handleEditAnswers = () => { setStep('questionnaire'); };
+  
+  const handleReset = () => {
+    setAnswers({});
+    setCurrentQuestionIndex(0);
+    setStep('intro');
+  };
+
+  const handleEditAnswers = () => {
+    setStep('questionnaire');
+  };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
@@ -91,7 +105,12 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
           
           {isAuthenticated && (
             <div className="absolute top-0 left-0 flex flex-col items-end">
-                <button onClick={handleLogout} className="text-sm text-gray-400 hover:text-white border border-gray-600 rounded px-4 py-2 bg-gray-800/50">יציאה</button>
+                <button 
+                  onClick={handleLogout} 
+                  className="text-sm text-gray-400 hover:text-white border border-gray-600 rounded px-4 py-2 bg-gray-800/50 transition-colors"
+                >
+                  יציאה
+                </button>
             </div>
           )}
         </header>
@@ -113,14 +132,20 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                     {step === 'intro' && <IntroScreen onStart={handleStart} />}
                     {step === 'questionnaire' && (
                         <QuestionnaireScreen 
-                            answers={answers} setAnswers={setAnswers} 
+                            answers={answers} 
+                            setAnswers={setAnswers} 
                             onSubmit={handleSubmit}
                             currentQuestionIndex={currentQuestionIndex}
                             setCurrentQuestionIndex={setCurrentQuestionIndex}
                         />
                     )}
                     {step === 'results' && scores && (
-                        <ResultsScreen scores={scores} onReset={handleReset} onEdit={handleEditAnswers} onLogout={handleLogout} />
+                        <ResultsScreen 
+                          scores={scores} 
+                          onReset={handleReset} 
+                          onEdit={handleEditAnswers} 
+                          onLogout={handleLogout} 
+                        />
                     )}
                 </div>
             )}

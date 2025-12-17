@@ -1,73 +1,57 @@
-
-import { GoogleGenAI } from "@google/genai";
 import { Scores, UserProfile } from '../types';
 
-// Client-side AI initialization
-const getAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
-};
-
 /**
- * Get advice from AI coach directly via Gemini SDK
+ * Calls the Netlify function to get advice from the AI coach.
+ * This is safer as the API key stays on the server.
  */
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
-    const ai = getAiClient();
-    
-    const red = scores.a + scores.c;
-    const yellow = scores.a + scores.d;
-    const green = scores.b + scores.d;
-    const blue = scores.b + scores.c;
-    
-    const sorted = [
-        { name: 'אדום', val: red },
-        { name: 'צהוב', val: yellow },
-        { name: 'ירוק', val: green },
-        { name: 'כחול', val: blue }
-    ].sort((x, y) => y.val - x.val);
-
-    const dominant = sorted[0].name;
-    const secondary = sorted[1].name;
-
-    const systemInstruction = `אתה מאמן תקשורת מומחה המבוסס על מודל הצבעים של יונג.
-    פרופיל המשתמש הנוכחי: צבע דומיננטי: ${dominant}, צבע משני: ${secondary}.
-    המשימה: ספק ייעוץ תובנתי ופרקטי לשאלת המשתמש בעברית.
-    הנחיות:
-    - התחל ישירות בתשובה, ללא ברכות שלום.
-    - השתמש בשפה מקצועית ומעודדת.
-    - התייחס לדינמיקה בין הצבעים של המשתמש לסיטואציה שתיאר.`;
-
-    const result = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ parts: [{ text: userInput }] }],
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.7,
-      },
+    const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        scores, 
+        userInput, 
+        mode: 'individual' 
+      }),
     });
 
-    return result.text || "לא הצלחתי לגבש תשובה כרגע. נסה שוב.";
-  } catch (error) {
+    if (!response.ok) {
+        let errorMsg = 'Failed to fetch from AI service';
+        try {
+            const errData = await response.json();
+            errorMsg = errData.text || errorMsg;
+        } catch (e) {
+            // ignore parse error
+        }
+        throw new Error(errorMsg);
+    }
+
+    const data = await response.json();
+    return data.text || "לא הצלחתי לגבש תשובה כרגע. נסה שוב.";
+  } catch (error: any) {
     console.error("AI Service Error:", error);
-    return "חלה שגיאה בחיבור למנוע ה-AI. אנא וודא שמפתח ה-API מוגדר כראוי.";
+    return `מצטער, חלה שגיאה בחיבור לשרת ה-AI (${error.message}). אנא וודא שחיבור האינטרנט תקין ונסה שוב.`;
   }
 };
 
 /**
- * Get team analysis via Gemini SDK
+ * Calls the Netlify function for team dynamics analysis.
  */
 export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): Promise<string> => {
     try {
-        const ai = getAiClient();
-        
         const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
         users.forEach(u => {
             if (!u.scores) return;
-            const r = u.scores.a + u.scores.c;
-            const y = u.scores.a + u.scores.d;
-            const g = u.scores.b + u.scores.d;
-            const b = u.scores.b + u.scores.c;
+            // Calculating standard color scores from the 4 primary axes
+            const r = (u.scores.a || 0) + (u.scores.c || 0);
+            const y = (u.scores.a || 0) + (u.scores.d || 0);
+            const g = (u.scores.b || 0) + (u.scores.d || 0);
+            const b = (u.scores.b || 0) + (u.scores.c || 0);
+            
             const max = Math.max(r, y, g, b);
+            
+            // Assign to the most dominant color for statistical summary
             if (max === r) teamStats.red++;
             else if (max === y) teamStats.yellow++;
             else if (max === g) teamStats.green++;
@@ -75,22 +59,31 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
             teamStats.total++;
         });
 
-        const systemInstruction = `אתה יועץ ארגוני בכיר המנתח צוות של ${teamStats.total} חברים.
-        הרכב הצוות: ${teamStats.red} אדומים, ${teamStats.yellow} צהובים, ${teamStats.green} ירוקים, ${teamStats.blue} כחולים.
-        נתח את האתגר: "${challenge}" וספק פתרונות אסטרטגיים בעברית המבוססים על הרכב הצבעים הזה.`;
-
-        const result = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: [{ parts: [{ text: challenge }] }],
-            config: {
-                systemInstruction: systemInstruction,
-                temperature: 0.8,
-            }
+        const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                userInput: challenge, 
+                mode: 'team',
+                teamStats
+            }),
         });
 
-        return result.text || "לא ניתן היה לנתח את הצוות כרגע.";
-    } catch (error) {
+        if (!response.ok) {
+            let errorMsg = 'Failed to analyze team';
+            try {
+                const errData = await response.json();
+                errorMsg = errData.text || errorMsg;
+            } catch (e) {
+                // ignore
+            }
+            throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+        return data.text || "לא ניתן היה לנתח את הצוות כרגע.";
+    } catch (error: any) {
         console.error("Team AI Error:", error);
-        return "שגיאה בניתוח הצוות.";
+        return `שגיאה בחיבור לשרת הניתוח (${error.message}). אנא נסה שוב.`;
     }
 }

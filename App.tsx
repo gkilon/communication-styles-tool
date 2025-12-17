@@ -18,9 +18,10 @@ interface ErrorBoundaryState {
 }
 
 // Fixed ErrorBoundary: Explicitly extend Component and declare state to ensure 'this.state' and 'this.props' are recognized
+// Removing 'override' keywords as they are causing compilation errors in this environment
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   // Explicitly declaring state as a class property for better TypeScript compatibility
-  override state: ErrorBoundaryState = { hasError: false };
+  state: ErrorBoundaryState = { hasError: false };
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -30,11 +31,11 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     return { hasError: true };
   }
 
-  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("App Crash:", error, errorInfo);
   }
 
-  override render() {
+  render() {
     // Correctly accessing state and props
     if (this.state.hasError) {
       return (
