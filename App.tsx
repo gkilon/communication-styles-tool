@@ -9,43 +9,51 @@ import { getUserProfile } from './services/firebaseService';
 type AppView = 'simple' | 'admin' | 'loading';
 
 interface ErrorBoundaryProps {
-  // Making children optional to resolve TypeScript "missing children" errors in complex conditional JSX
   children?: ReactNode;
 }
 
 interface ErrorBoundaryState {
   hasError: boolean;
+  error?: Error;
 }
 
-// Fixed ErrorBoundary: Explicitly extend Component and declare state to ensure 'this.state' and 'this.props' are recognized
-// Removing 'override' keywords as they are causing compilation errors in this environment
+// Fix: Destructure props in render and use explicit Component import to resolve TypeScript "property does not exist" errors
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly declaring state as a class property for better TypeScript compatibility
-  state: ErrorBoundaryState = { hasError: false };
+  public state: ErrorBoundaryState = { hasError: false };
 
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("App Crash:", error, errorInfo);
+    console.error("App Component Crash:", error, errorInfo);
   }
 
   render() {
-    // Correctly accessing state and props
-    if (this.state.hasError) {
+    const { hasError, error } = this.state;
+    // Destructure children from props explicitly
+    const { children } = this.props;
+
+    if (hasError) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-6 text-center">
-          <h1 className="text-2xl font-bold text-red-500 mb-4">אירעה שגיאה בטעינה</h1>
-          <button onClick={() => window.location.reload()} className="bg-cyan-600 px-6 py-2 rounded-full">נסה שוב</button>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-6 text-center" dir="rtl">
+          <div className="bg-gray-800 p-8 rounded-2xl border-2 border-red-500 shadow-2xl max-w-md">
+              <h1 className="text-3xl font-bold text-red-500 mb-4">אופס! משהו השתבש</h1>
+              <p className="text-gray-300 mb-6">חלה שגיאה בטעינת האפליקציה. ייתכן שקובץ חסר או פגום.</p>
+              <pre className="bg-black/50 p-4 rounded text-xs text-red-300 overflow-auto mb-6 text-left" dir="ltr">
+                  {error?.message}
+              </pre>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-8 py-3 rounded-full transition-all"
+              >
+                נסה לטעון מחדש
+              </button>
+          </div>
         </div>
       );
     }
-    return this.props.children;
+    return children;
   }
 }
 
@@ -54,10 +62,10 @@ export const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-     // Failsafe: if Firebase isn't initialized or stuck, show simple app after 2 seconds
+     // Failsafe timer to exit loading state even if Firebase is slow
      const timer = setTimeout(() => {
        if (view === 'loading') setView('simple');
-     }, 2000);
+     }, 3000);
 
      if (!isFirebaseInitialized) {
          setView('simple');
@@ -76,6 +84,7 @@ export const App: React.FC = () => {
                     setView('simple');
                 }
             } catch (e) {
+                console.error("Profile load error:", e);
                 setView('simple');
             }
         } else {
@@ -100,21 +109,29 @@ export const App: React.FC = () => {
 
   const handleSignOut = async () => {
     if (auth) await signOut(auth);
+    setUser(null);
     setView('simple');
   };
 
   return (
-    // Fixed: ErrorBoundary usage now compatible with children prop requirements
     <ErrorBoundary>
        {view === 'admin' ? (
          <AdminDashboard onBack={handleSignOut} />
        ) : view === 'simple' ? (
          <SimpleApp onAdminLoginAttempt={handleAdminLogin} user={user} />
        ) : (
-         <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
-           <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="animate-pulse">טוען מערכת...</p>
+         <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white" dir="rtl">
+           <div className="flex flex-col items-center gap-6">
+              <div className="relative">
+                <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-8 h-8 bg-cyan-500 rounded-full animate-pulse opacity-50"></div>
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-cyan-400 animate-pulse mb-1">טוען מערכת...</p>
+                <p className="text-sm text-gray-500">אנחנו מכינים את הסביבה שלך</p>
+              </div>
            </div>
          </div>
        )}

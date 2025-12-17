@@ -1,37 +1,35 @@
+
 import { Scores, UserProfile } from '../types';
 
 /**
+ * Safely parse JSON from a response.
+ */
+const safeParseJson = async (response: Response) => {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        return { text: `שגיאה בפענוח תשובת השרת: ${text.substring(0, 100)}` };
+    }
+};
+
+/**
  * Calls the Netlify function to get advice from the AI coach.
- * This is safer as the API key stays on the server.
  */
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
     const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        scores, 
-        userInput, 
-        mode: 'individual' 
-      }),
+      body: JSON.stringify({ scores, userInput, mode: 'individual' }),
     });
 
-    if (!response.ok) {
-        let errorMsg = 'Failed to fetch from AI service';
-        try {
-            const errData = await response.json();
-            errorMsg = errData.text || errorMsg;
-        } catch (e) {
-            // ignore parse error
-        }
-        throw new Error(errorMsg);
-    }
-
-    const data = await response.json();
-    return data.text || "לא הצלחתי לגבש תשובה כרגע. נסה שוב.";
+    const data = await safeParseJson(response);
+    if (!response.ok) throw new Error(data.text || "שגיאה בחיבור לשרת ה-AI");
+    return data.text || "לא התקבלה תשובה.";
   } catch (error: any) {
     console.error("AI Service Error:", error);
-    return `מצטער, חלה שגיאה בחיבור לשרת ה-AI (${error.message}). אנא וודא שחיבור האינטרנט תקין ונסה שוב.`;
+    return `שגיאה: ${error.message}`;
   }
 };
 
@@ -40,18 +38,20 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
  */
 export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): Promise<string> => {
     try {
+        if (!challenge.trim()) return "נא להזין אתגר לניתוח.";
+        
+        const validUsers = users.filter(u => u.scores);
+        if (validUsers.length === 0) return "אין מספיק נתוני משתמשים עם תוצאות לביצוע ניתוח צוותי.";
+
         const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
-        users.forEach(u => {
-            if (!u.scores) return;
-            // Calculating standard color scores from the 4 primary axes
-            const r = (u.scores.a || 0) + (u.scores.c || 0);
-            const y = (u.scores.a || 0) + (u.scores.d || 0);
-            const g = (u.scores.b || 0) + (u.scores.d || 0);
-            const b = (u.scores.b || 0) + (u.scores.c || 0);
+        validUsers.forEach(u => {
+            const s = u.scores!;
+            const r = (s.a || 0) + (s.c || 0);
+            const y = (s.a || 0) + (s.d || 0);
+            const g = (s.b || 0) + (s.d || 0);
+            const b = (s.b || 0) + (s.c || 0);
             
             const max = Math.max(r, y, g, b);
-            
-            // Assign to the most dominant color for statistical summary
             if (max === r) teamStats.red++;
             else if (max === y) teamStats.yellow++;
             else if (max === g) teamStats.green++;
@@ -69,21 +69,12 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
             }),
         });
 
-        if (!response.ok) {
-            let errorMsg = 'Failed to analyze team';
-            try {
-                const errData = await response.json();
-                errorMsg = errData.text || errorMsg;
-            } catch (e) {
-                // ignore
-            }
-            throw new Error(errorMsg);
-        }
-
-        const data = await response.json();
-        return data.text || "לא ניתן היה לנתח את הצוות כרגע.";
+        const data = await safeParseJson(response);
+        if (!response.ok) throw new Error(data.text || "ניתוח הצוות נכשל בשרת.");
+        
+        return data.text || "לא התקבל ניתוח.";
     } catch (error: any) {
         console.error("Team AI Error:", error);
-        return `שגיאה בחיבור לשרת הניתוח (${error.message}). אנא נסה שוב.`;
+        return `שגיאה בניתוח הצוות: ${error.message}`;
     }
 }

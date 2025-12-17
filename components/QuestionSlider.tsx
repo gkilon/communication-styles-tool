@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { QuestionPair } from '../types';
 
@@ -59,23 +58,27 @@ export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value,
             }
             input[type=range]::-webkit-slider-thumb {
                 -webkit-appearance: none;
-                height: 28px;
-                width: 28px;
+                height: 32px;
+                width: 32px;
                 border-radius: 50%;
                 background: #06b6d4;
                 cursor: pointer;
-                margin-top: -12px; 
-                box-shadow: 0 0 10px rgba(6,182,212, 0.8);
-                border: 2px solid white;
+                margin-top: -14px; 
+                box-shadow: 0 0 15px rgba(6,182,212, 0.8);
+                border: 3px solid white;
+                transition: transform 0.1s ease;
+            }
+            input[type=range]::-webkit-slider-thumb:hover {
+                transform: scale(1.1);
             }
             input[type=range]::-moz-range-thumb {
-                height: 28px;
-                width: 28px;
+                height: 32px;
+                width: 32px;
                 border-radius: 50%;
                 background: #06b6d4;
                 cursor: pointer;
-                border: 2px solid white;
-                box-shadow: 0 0 10px rgba(6,182,212, 0.8);
+                border: 3px solid white;
+                box-shadow: 0 0 15px rgba(6,182,212, 0.8);
             }
             /* Hide thumb if unanswered */
             .slider-unanswered::-webkit-slider-thumb { opacity: 0; }
@@ -84,12 +87,12 @@ export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value,
         </style>
 
         {/* Visual Track Line */}
-        <div className="absolute left-0 right-0 h-1 bg-gray-600 rounded-full z-0 top-1/2 transform -translate-y-1/2"></div>
+        <div className="absolute left-0 right-0 h-1.5 bg-gray-700 rounded-full z-0 top-1/2 transform -translate-y-1/2"></div>
 
         {/* Visual Dots on Track */}
-        <div className="absolute left-0 right-0 top-1/2 transform -translate-y-1/2 flex justify-between px-[10px] sm:px-[12px] z-0 pointer-events-none">
+        <div className="absolute left-0 right-0 top-1/2 transform -translate-y-1/2 flex justify-between px-[12px] z-0 pointer-events-none">
             {[1, 2, 3, 4, 5, 6].map((num) => (
-                <div key={num} className={`w-3 h-3 rounded-full transition-colors duration-300 ${value >= num ? 'bg-cyan-500/50' : 'bg-gray-500'}`}></div>
+                <div key={num} className={`w-3.5 h-3.5 rounded-full transition-colors duration-300 border border-gray-600 ${value === num ? 'bg-cyan-400 scale-125 shadow-[0_0_8px_cyan]' : (value > 0 && Math.abs(value-num) < 1 ? 'bg-cyan-600/50' : 'bg-gray-800')}`}></div>
             ))}
         </div>
 
@@ -107,15 +110,15 @@ export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value,
       </div>
       
       {/* Clickable Numbers Below */}
-      <div className="flex justify-between mt-2 px-1">
+      <div className="flex justify-between mt-4 px-1">
           {[1, 2, 3, 4, 5, 6].map((num) => (
               <button
                 key={num}
                 onClick={() => handleNumberClick(num)}
-                className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-lg font-bold transition-all duration-200 
+                className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center text-xl font-bold transition-all duration-200 
                     ${value === num 
                         ? 'bg-cyan-600 text-white scale-110 shadow-lg ring-2 ring-cyan-300' 
-                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                        : 'bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-white border border-gray-700'
                     }`}
               >
                   {num}
@@ -123,13 +126,13 @@ export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value,
           ))}
       </div>
       
-      <div className="text-center h-8 text-cyan-400 font-medium text-lg mt-6 transition-opacity duration-300">
+      <div className="text-center h-10 flex items-center justify-center mt-8">
         {!isUnanswered ? (
-            <span className="bg-gray-900/50 px-4 py-1 rounded-full border border-cyan-900/30">
+            <div className="animate-fade-in bg-cyan-900/30 px-6 py-2 rounded-full border border-cyan-500/30 text-cyan-300 font-medium text-lg">
                 {value <= 3 ? `נוטה יותר ל"${trait1}"` : `נוטה יותר ל"${trait2}"`}
-            </span>
+            </div>
         ) : (
-            <span className="text-gray-500 text-sm">בחר מספר או הזז את הסליידר</span>
+            <div className="text-gray-500 text-sm animate-pulse">בחר מספר או הזז את הסליידר</div>
         )}
       </div>
     </div>
