@@ -1,114 +1,96 @@
 
+import { GoogleGenAI } from "@google/genai";
 import { Scores, UserProfile } from '../types';
 
+// Client-side AI initialization
+const getAiClient = () => {
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+};
+
 /**
- * Calls the secure Netlify serverless function to get advice from the AI coach.
- * This function acts as a proxy to the Gemini API, ensuring the API key is not exposed on the client-side.
- * @param scores - The user's questionnaire scores.
- * @param userInput - The user's question for the AI coach.
- * @returns A promise that resolves to the AI's response as a string.
+ * Get advice from AI coach directly via Gemini SDK
  */
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
-    const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'individual', scores, userInput }),
+    const ai = getAiClient();
+    
+    const red = scores.a + scores.c;
+    const yellow = scores.a + scores.d;
+    const green = scores.b + scores.d;
+    const blue = scores.b + scores.c;
+    
+    const sorted = [
+        { name: 'אדום', val: red },
+        { name: 'צהוב', val: yellow },
+        { name: 'ירוק', val: green },
+        { name: 'כחול', val: blue }
+    ].sort((x, y) => y.val - x.val);
+
+    const dominant = sorted[0].name;
+    const secondary = sorted[1].name;
+
+    const systemInstruction = `אתה מאמן תקשורת מומחה המבוסס על מודל הצבעים של יונג.
+    פרופיל המשתמש הנוכחי: צבע דומיננטי: ${dominant}, צבע משני: ${secondary}.
+    המשימה: ספק ייעוץ תובנתי ופרקטי לשאלת המשתמש בעברית.
+    הנחיות:
+    - התחל ישירות בתשובה, ללא ברכות שלום.
+    - השתמש בשפה מקצועית ומעודדת.
+    - התייחס לדינמיקה בין הצבעים של המשתמש לסיטואציה שתיאר.`;
+
+    const result = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: [{ parts: [{ text: userInput }] }],
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+      },
     });
 
-    return handleResponse(response);
+    return result.text || "לא הצלחתי לגבש תשובה כרגע. נסה שוב.";
   } catch (error) {
-    console.error("Network Error calling AI service:", error);
-    return "מצטער, ישנה בעיית חיבור לאינטרנט או שהשרת אינו זמין כרגע.";
+    console.error("AI Service Error:", error);
+    return "חלה שגיאה בחיבור למנוע ה-AI. אנא וודא שמפתח ה-API מוגדר כראוי.";
   }
 };
 
 /**
- * Calls the AI to analyze team dynamics based on the aggregate composition of the team.
+ * Get team analysis via Gemini SDK
  */
 export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): Promise<string> => {
     try {
-        // Calculate Team Stats
-        const teamStats = {
-            red: 0, yellow: 0, green: 0, blue: 0, total: 0
-        };
-
-        // Helper to ensure values are numbers
-        const safe = (v: any) => {
-            const n = Number(v);
-            return isNaN(n) ? 0 : n;
-        };
-
+        const ai = getAiClient();
+        
+        const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
         users.forEach(u => {
             if (!u.scores) return;
-            const a = safe(u.scores.a);
-            const b = safe(u.scores.b);
-            const c = safe(u.scores.c);
-            const d = safe(u.scores.d);
-
-            // Simple logic to determine dominant color for the AI context
-            const red = a + c;
-            const yellow = a + d;
-            const green = b + d;
-            const blue = b + c;
-            
-            const max = Math.max(red, yellow, green, blue);
-            if (max === red) teamStats.red++;
-            else if (max === yellow) teamStats.yellow++;
-            else if (max === green) teamStats.green++;
-            else if (max === blue) teamStats.blue++;
-            
+            const r = u.scores.a + u.scores.c;
+            const y = u.scores.a + u.scores.d;
+            const g = u.scores.b + u.scores.d;
+            const b = u.scores.b + u.scores.c;
+            const max = Math.max(r, y, g, b);
+            if (max === r) teamStats.red++;
+            else if (max === y) teamStats.yellow++;
+            else if (max === g) teamStats.green++;
+            else if (max === b) teamStats.blue++;
             teamStats.total++;
         });
 
-        const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                mode: 'team', 
-                teamStats, 
-                userInput: challenge 
-            }),
+        const systemInstruction = `אתה יועץ ארגוני בכיר המנתח צוות של ${teamStats.total} חברים.
+        הרכב הצוות: ${teamStats.red} אדומים, ${teamStats.yellow} צהובים, ${teamStats.green} ירוקים, ${teamStats.blue} כחולים.
+        נתח את האתגר: "${challenge}" וספק פתרונות אסטרטגיים בעברית המבוססים על הרכב הצבעים הזה.`;
+
+        const result = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: [{ parts: [{ text: challenge }] }],
+            config: {
+                systemInstruction: systemInstruction,
+                temperature: 0.8,
+            }
         });
 
-        return handleResponse(response);
-
+        return result.text || "לא ניתן היה לנתח את הצוות כרגע.";
     } catch (error) {
-        console.error("Network Error calling Team AI:", error);
+        console.error("Team AI Error:", error);
         return "שגיאה בניתוח הצוות.";
-    }
-}
-
-// Helper to handle the fetch response parsing
-async function handleResponse(response: Response): Promise<string> {
-    if (!response.ok) {
-        let detailedError = `Error ${response.status}`;
-        try {
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.indexOf("application/json") !== -1) {
-                const errorData = await response.json();
-                detailedError = errorData.error || errorData.text || detailedError;
-            } else {
-                const textData = await response.text();
-                console.error("Non-JSON error response:", textData.substring(0, 200));
-                if (response.status === 502 || response.status === 504) {
-                   return "תקלת תקשורת: השרת לא הגיב בזמן (Timeout). נסה שנית.";
-                }
-            }
-        } catch (e) { /* Ignore */ }
-        
-        console.error(`Server Error (${response.status}):`, detailedError);
-        return `תקלת שרת: ${detailedError}`;
-    }
-    
-    try {
-        const data = await response.json();
-        if (data && typeof data.text === 'string') {
-            return data.text;
-        } else {
-            return "מצטער, התקבלה תשובה לא תקינה מהשרת.";
-        }
-    } catch (e) {
-        return "תקלת תקשורת: התקבלה תשובה לא ברורה מהשרת.";
     }
 }

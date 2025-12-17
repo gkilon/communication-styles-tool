@@ -1,4 +1,3 @@
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { Buffer } from "buffer";
@@ -34,7 +33,8 @@ const handler: Handler = async (event: HandlerEvent) => {
       return { statusCode: 400, body: JSON.stringify({ text: "חסר קלט משתמש." }) };
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    // Always use new GoogleGenAI({ apiKey: process.env.API_KEY }); for client initialization.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     let systemInstruction = "";
     let prompt = userInput;
     
@@ -113,9 +113,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         - Professional yet encouraging tone.`;
     }
 
-    // Call AI - Simplified content structure for stability
+    // Fix: Updated model to 'gemini-3-pro-preview' for complex text tasks as per guidelines.
     const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash", 
+        model: "gemini-3-pro-preview", 
         contents: prompt,
         config: {
             systemInstruction: systemInstruction,
@@ -127,6 +127,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
     });
 
+    // Fix: Using the .text property to access extracted text output from GenerateContentResponse.
     return {
       statusCode: 200,
       body: JSON.stringify({ text: response.text || "שגיאה ביצירת תשובה." }),

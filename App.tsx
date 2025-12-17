@@ -1,40 +1,46 @@
 
-import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, ReactNode, ErrorInfo, Component } from 'react';
 import SimpleApp from './SimpleApp';
 import { AdminDashboard } from './components/AdminDashboard';
 import { auth, isFirebaseInitialized } from './firebaseConfig';
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { getUserProfile, createUserProfile } from './services/firebaseService';
-import { UserProfile } from './types';
+import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import { getUserProfile } from './services/firebaseService';
 
 type AppView = 'simple' | 'admin' | 'loading';
 
-// Error Boundary Component
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
-  constructor(props: { children: ReactNode }) {
+interface ErrorBoundaryProps {
+  // Making children optional to resolve TypeScript "missing children" errors in complex conditional JSX
+  children?: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+// Fixed ErrorBoundary: Explicitly extend Component and declare state to ensure 'this.state' and 'this.props' are recognized
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Explicitly declaring state as a class property for better TypeScript compatibility
+  override state: ErrorBoundaryState = { hasError: false };
+
+  constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("App Crash:", error, errorInfo);
   }
 
-  render() {
+  override render() {
+    // Correctly accessing state and props
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-6 text-center dir-rtl">
-          <h1 className="text-3xl font-bold text-red-500 mb-4">שגיאה בטעינת האפליקציה</h1>
-          <button 
-            onClick={() => window.location.reload()}
-            className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-full transition-all"
-          >
-            רענן עמוד
-          </button>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-6 text-center">
+          <h1 className="text-2xl font-bold text-red-500 mb-4">אירעה שגיאה בטעינה</h1>
+          <button onClick={() => window.location.reload()} className="bg-cyan-600 px-6 py-2 rounded-full">נסה שוב</button>
         </div>
       );
     }
@@ -47,115 +53,70 @@ export const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-     if (!isFirebaseInitialized || !auth) {
+     // Failsafe: if Firebase isn't initialized or stuck, show simple app after 2 seconds
+     const timer = setTimeout(() => {
+       if (view === 'loading') setView('simple');
+     }, 2000);
+
+     if (!isFirebaseInitialized) {
          setView('simple');
+         clearTimeout(timer);
          return;
      }
      
      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
-        
         if (currentUser) {
-            const normalizedEmail = currentUser.email?.toLowerCase() || '';
-            
-            // --- CRITICAL FIX ---
-            // If the email matches the admin email, FORCE entry to Admin Dashboard.
-            // This bypasses the Firestore 'getUserProfile' check which might fail due to permissions.
-            if (normalizedEmail === 'admin@manager.com') {
-                setView('admin');
-                
-                // Try to repair profile in background, but don't block UI
-                getUserProfile(currentUser.uid).then(profile => {
-                    if (!profile) {
-                        createUserProfile(currentUser.uid, {
-                            email: normalizedEmail,
-                            displayName: 'System Admin',
-                            team: 'Management',
-                            role: 'admin'
-                        }).catch(err => console.warn("Background profile creation failed:", err));
-                    }
-                }).catch(() => { /* Ignore DB errors here, Dashboard will handle them */ });
-                
-                return; 
-            }
-
-            // For regular users, we still check the profile
             try {
                 const profile = await getUserProfile(currentUser.uid);
-                if (profile?.role === 'admin') {
+                if (profile?.role === 'admin' || currentUser.email === 'admin@manager.com') {
                     setView('admin');
                 } else {
                     setView('simple');
                 }
-            } catch (e: any) {
-                console.error("Error checking user profile", e);
-                // If regular user fails DB check, go to simple view
+            } catch (e) {
                 setView('simple');
             }
         } else {
-            // Not logged in
             setView('simple');
         }
+        clearTimeout(timer);
      });
      
-     return () => unsubscribe();
+     return () => {
+       unsubscribe();
+       clearTimeout(timer);
+     };
   }, []);
 
   const handleAdminLogin = async (email: string, pass: string) => {
-      if (!auth) return;
-      const normalizedEmail = email.toLowerCase().trim();
-
       try {
-          await signInWithEmailAndPassword(auth, normalizedEmail, pass);
-          // Note: We don't need to setView here manually. 
-          // The onAuthStateChanged listener above will detect the login 
-          // and route to 'admin' automatically because of the email check.
+          await signInWithEmailAndPassword(auth, email, pass);
       } catch (error: any) {
-          console.log("Login process error:", error.code);
-          
-          // Check if user needs to be created (Backdoor)
-          const isUserNotFound = error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential';
-          
-          if (isUserNotFound && normalizedEmail === 'admin@manager.com') {
-              try {
-                  const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, pass);
-                  // Force view update just in case listener is slow
-                  if (cred.user) setView('admin');
-              } catch (createError: any) {
-                  alert("שגיאה ביצירת משתמש מנהל: " + createError.message);
-              }
-          } else {
-              alert("שגיאה בהתחברות: " + (error.code === 'auth/wrong-password' ? 'סיסמה שגויה' : error.message));
-          }
+          alert("שגיאה בהתחברות: " + error.message);
       }
   };
 
   const handleSignOut = async () => {
     if (auth) await signOut(auth);
-    // Listener will handle view change to 'simple'
-  };
-
-  const renderContent = () => {
-    switch (view) {
-      case 'admin':
-        return <AdminDashboard onBack={handleSignOut} />;
-      case 'simple':
-        return (
-          <SimpleApp 
-            onAdminLoginAttempt={handleAdminLogin}
-            user={user} 
-          />
-        );
-      case 'loading':
-        return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white text-lg">טוען מערכת...</div>;
-      default:
-        return <div className="text-white">Error State</div>;
-    }
+    setView('simple');
   };
 
   return (
+    // Fixed: ErrorBoundary usage now compatible with children prop requirements
     <ErrorBoundary>
-       {renderContent()}
+       {view === 'admin' ? (
+         <AdminDashboard onBack={handleSignOut} />
+       ) : view === 'simple' ? (
+         <SimpleApp onAdminLoginAttempt={handleAdminLogin} user={user} />
+       ) : (
+         <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
+           <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="animate-pulse">טוען מערכת...</p>
+           </div>
+         </div>
+       )}
     </ErrorBoundary>
   );
 };
