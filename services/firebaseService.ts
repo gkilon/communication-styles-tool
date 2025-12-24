@@ -1,6 +1,6 @@
 
 import { db, auth } from '../firebaseConfig';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc } from 'firebase/firestore';
 import { Scores, UserProfile, Team } from '../types';
 import { User } from 'firebase/auth';
 
@@ -21,6 +21,20 @@ export const saveUserResults = async (scores: Scores) => {
     console.log("Results saved successfully");
   } catch (error) {
     console.error("Error saving results:", error);
+    throw error;
+  }
+};
+
+// עדכון צוות של משתמש קיים
+export const updateUserTeam = async (uid: string, newTeamName: string) => {
+  const userRef = doc(db, "users", uid);
+  try {
+    await updateDoc(userRef, {
+      team: newTeamName
+    });
+    console.log(`User ${uid} moved to team ${newTeamName}`);
+  } catch (error) {
+    console.error("Error updating user team:", error);
     throw error;
   }
 };
