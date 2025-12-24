@@ -1,326 +1,281 @@
 
-import React, { useEffect, useState } from 'react';
-import { auth } from '../firebaseConfig';
-import { getAllUsers, createTeam, getTeams, updateUserTeam } from '../services/firebaseService';
-import { UserProfile, Team, Scores } from '../types';
-import { ArrowLeftIcon } from './icons/Icons';
-import { TeamAiCoach } from './TeamAiCoach';
+import React, { useState, useEffect } from 'react';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth, isFirebaseInitialized } from '../firebaseConfig';
+import { createUserProfile, getTeams, ensureGoogleUserProfile } from '../services/firebaseService';
+import { Team } from '../types';
+import { ArrowLeftIcon, GoogleIcon } from './icons/Icons';
 
-interface AdminDashboardProps {
-  onBack: () => void;
+interface AuthScreenProps {
+  onLoginSuccess: () => void;
+  onBack?: () => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
-  const [users, setUsers] = useState<UserProfile[]>([]);
+const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }) => {
+  // Default to Sign Up (false) as requested for workshop participants
+  const [isLogin, setIsLogin] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  
+  // Team selection
   const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState('');
+  const [isTeamLocked, setIsTeamLocked] = useState(false);
   
-  const [loading, setLoading] = useState(true);
-  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [filterTeam, setFilterTeam] = useState('');
-  const [newTeamName, setNewTeamName] = useState('');
-  const [createTeamStatus, setCreateTeamStatus] = useState<{msg: string, type: 'success' | 'error' | ''}>({msg:'', type:''});
-  
-  const [showMap, setShowMap] = useState(false);
+  const [adminCode, setAdminCode] = useState(''); 
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
+  // Fetch teams on mount
   useEffect(() => {
-    loadData();
+     const fetchTeams = async () => {
+        if (!isFirebaseInitialized) return;
+        try {
+            let teamsData = await getTeams();
+            
+            // Check for URL parameter 'team' to lock/filter view
+            const urlParams = new URLSearchParams(window.location.search);
+            const teamParam = urlParams.get('team');
+            
+            if (teamParam) {
+                const foundTeam = teamsData.find(t => t.name.toLowerCase() === teamParam.toLowerCase());
+                if (foundTeam) {
+                    // Filter list to ONLY show the target team to prevent mistakes during workshops
+                    setTeams([foundTeam]);
+                    setSelectedTeam(foundTeam.name);
+                    setIsTeamLocked(true);
+                } else {
+                    setTeams(teamsData);
+                }
+            } else {
+                setTeams(teamsData);
+            }
+        } catch (e) {
+            console.error("Failed to load teams", e);
+        }
+    };
+    fetchTeams();
   }, []);
 
-  const loadData = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
     setLoading(true);
-    setError(null);
+
+    if (!isFirebaseInitialized) {
+        setError("שגיאה: הגדרות Firebase חסרות. לא ניתן להתחבר.");
+        setLoading(false);
+        return;
+    }
+
     try {
-      const [usersData, teamsData] = await Promise.all([getAllUsers(), getTeams()]);
-      setUsers(usersData);
-      setTeams(teamsData);
-    } catch (err: any) {
-      console.error("Failed to load admin data", err);
-      if (err.code === 'permission-denied' || err.message?.includes('permission-denied')) {
-          setError('PERMISSION_DENIED');
+      if (isLogin) {
+        // התחברות
+        await signInWithEmailAndPassword(auth, email, password);
       } else {
-          setError(err.message || 'שגיאה לא ידועה בטעינת נתונים');
+        // הרשמה
+        const role: 'user' | 'admin' = (adminCode === 'inspire') ? 'admin' : 'user';
+
+        if (!name) {
+            setError("נא למלא שם מלא");
+            setLoading(false);
+            return;
+        }
+
+        if (role === 'user' && !selectedTeam) {
+             setError("חובה לבחור צוות כדי להצטרף לסדנה");
+             setLoading(false);
+             return;
+        }
+        
+        const teamToSave = role === 'admin' ? 'Management' : selectedTeam;
+
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        
+        await createUserProfile(userCredential.user.uid, {
+            email,
+            displayName: name,
+            team: teamToSave,
+            role: role
+        });
       }
+      onLoginSuccess();
+    } catch (err: any) {
+      console.error(err);
+      let msg = "אירעה שגיאה. נא לנסות שוב.";
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') msg = "פרטים שגויים.";
+      if (err.code === 'auth/email-already-in-use') msg = "המייל הזה כבר קיים במערכת. נסו להתחבר במקום להירשם.";
+      if (err.code === 'auth/weak-password') msg = "הסיסמה חייבת להכיל לפחות 6 תווים.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateTeam = async () => {
-      if (!newTeamName.trim()) return;
-      setCreateTeamStatus({msg: 'יוצר...', type: ''});
-      try {
-          await createTeam(newTeamName.trim());
-          setNewTeamName('');
-          setCreateTeamStatus({msg: 'הצוות נוצר בהצלחה!', type: 'success'});
-          loadData(); // Refresh
-          setTimeout(() => setCreateTeamStatus({msg: '', type: ''}), 3000);
-      } catch (e: any) {
-          setCreateTeamStatus({msg: e.message || 'שגיאה ביצירת הצוות', type: 'error'});
-          if (e.code === 'permission-denied') setError('PERMISSION_DENIED');
-      }
-  };
+  const handleGoogleLogin = async () => {
+      setError('');
+      setLoading(true);
 
-  const handleMoveUser = async (userId: string, newTeam: string) => {
-      if (!window.confirm(`האם להעביר את המשתמש לצוות "${newTeam}"?`)) return;
-      
-      setUpdatingUserId(userId);
+      if (!isFirebaseInitialized) {
+          setError("החיבור נכשל: המערכת לא הוגדרה כראוי.");
+          setLoading(false);
+          return;
+      }
+
+      if (!isLogin && !selectedTeam) {
+          setError("להרשמה דרך גוגל, חובה לבחור צוות תחילה.");
+          setLoading(false);
+          return;
+      }
+
       try {
-          await updateUserTeam(userId, newTeam);
-          // Update local state to reflect change without full reload
-          setUsers(prev => prev.map(u => u.uid === userId ? { ...u, team: newTeam } : u));
-      } catch (e) {
-          alert("שגיאה בהעברת המשתמש");
+          const provider = new GoogleAuthProvider();
+          const result = await signInWithPopup(auth, provider);
+          
+          const teamToUse = (!isLogin && selectedTeam) ? selectedTeam : 'General';
+          await ensureGoogleUserProfile(result.user, teamToUse);
+          
+          onLoginSuccess();
+      } catch (err: any) {
+          console.error("Google login error details:", err);
+          let msg = "שגיאה בהתחברות עם Google.";
+          if (err.code === 'auth/popup-closed-by-user') msg = "ההתחברות בוטלה.";
+          setError(msg);
       } finally {
-          setUpdatingUserId(null);
+          setLoading(false);
       }
-  };
-
-  // --- Render Helpers ---
-  const getDominantColorInfo = (scores?: Scores) => {
-    if (!scores) return null;
-    const { a, b, c, d } = scores;
-    const results = [
-        { color: 'אדום', val: (a || 0) + (c || 0), code: 'bg-rose-500', border: 'border-rose-300' },
-        { color: 'צהוב', val: (a || 0) + (d || 0), code: 'bg-yellow-400', border: 'border-yellow-200' },
-        { color: 'ירוק', val: (b || 0) + (d || 0), code: 'bg-green-500', border: 'border-green-300' },
-        { color: 'כחול', val: (b || 0) + (c || 0), code: 'bg-indigo-500', border: 'border-indigo-300' }
-    ];
-    results.sort((x, y) => y.val - x.val);
-    return results[0];
-  };
-
-  const renderDominantColorBadge = (scores?: any) => {
-      const info = getDominantColorInfo(scores);
-      if (!info) return <span className="text-gray-600 italic">לא נקבע</span>;
-      return (
-        <span className={`px-2 py-1 rounded text-xs text-white font-bold ${info.code}`}>
-            {info.color}
-        </span>
-    );
-  };
-
-  const filteredUsers = filterTeam ? users.filter(u => u.team === filterTeam) : users;
-
-  // --- ERROR VIEW: PERMISSION DENIED ---
-  if (error === 'PERMISSION_DENIED') {
-      return (
-        <div className="min-h-screen bg-gray-900 text-white p-6 dir-rtl">
-            <div className="max-w-3xl mx-auto bg-gray-800 p-8 rounded-lg shadow-2xl border-2 border-red-500">
-                <div className="flex items-center gap-4 mb-6">
-                    <span className="text-4xl">🛑</span>
-                    <h1 className="text-3xl font-bold text-red-500">מסד הנתונים נעול</h1>
-                </div>
-                <p className="text-lg mb-6">הצלחת להתחבר כמנהל, אך אין לך הרשאה לקרוא את הנתונים ב-Firebase. בדוק את ה-Rules בקונסול.</p>
-                <button onClick={loadData} className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-lg mb-4 transition-all">ביצעתי, נסה לטעון שוב ↻</button>
-                <button onClick={onBack} className="text-gray-400 hover:text-white underline text-sm block text-center w-full">יציאה</button>
-            </div>
-        </div>
-      );
-  }
-
-  // --- TEAM MAP ---
-  const TeamMap = () => {
-      if (!filterTeam || filteredUsers.length === 0) return null;
-
-      return (
-          <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8 animate-fade-in-up">
-              <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-bold text-cyan-300">מפה דינמית: {filterTeam}</h3>
-                  <div className="text-xs sm:text-sm text-gray-400 flex flex-wrap gap-3">
-                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-indigo-500 rounded-full"></span> כחול</div>
-                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-rose-500 rounded-full"></span> אדום</div>
-                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded-full"></span> ירוק</div>
-                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 rounded-full"></span> צהוב</div>
-                  </div>
-              </div>
-
-              <div className="relative w-full max-w-lg mx-auto aspect-square bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl" dir="ltr">
-                  <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-indigo-900/10 border-b border-l border-gray-700/50"></div>
-                  <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-rose-900/10 border-b border-gray-700/50"></div>
-                  <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-green-900/10 border-l border-gray-700/50"></div>
-                  <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-yellow-900/10"></div>
-                  <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-gray-500/60 transform -translate-x-1/2"></div>
-                  <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-gray-500/60 transform -translate-y-1/2"></div>
-
-                  {filteredUsers.map((u) => {
-                      if (!u.scores) return null;
-                      const { a, b, c, d } = u.scores;
-                      const totalX = (a + b) || 1;
-                      const totalY = (c + d) || 1;
-                      const xPos = (a / totalX) * 100;
-                      const yPos = (d / totalY) * 100;
-                      const clampedX = Math.max(5, Math.min(95, xPos));
-                      const clampedY = Math.max(5, Math.min(95, yPos));
-                      const domInfo = getDominantColorInfo(u.scores);
-                      const dotColor = domInfo ? domInfo.code : 'bg-gray-400';
-                      const borderColor = domInfo ? domInfo.border : 'border-white';
-
-                      return (
-                          <div 
-                            key={u.uid}
-                            className={`absolute w-5 h-5 rounded-full border-2 ${borderColor} shadow-lg transform translate-x-1/2 -translate-y-1/2 group cursor-pointer ${dotColor} hover:scale-150 transition-all z-10`}
-                            style={{ right: `${clampedX}%`, top: `${clampedY}%` }}
-                          >
-                              <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs py-1 px-2 rounded whitespace-nowrap shadow-xl border border-gray-600 z-50">
-                                  {u.displayName}
-                              </div>
-                          </div>
-                      );
-                  })}
-              </div>
-              <TeamAiCoach users={filteredUsers} teamName={filterTeam} />
-          </div>
-      )
   };
 
   return (
-    <div className="bg-gray-900 p-4 sm:p-8 min-h-screen animate-fade-in dir-rtl text-right">
-        <div className="max-w-6xl mx-auto">
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-                <div>
-                    <h2 className="text-3xl font-bold text-cyan-300">ניהול סדנאות וצוותים</h2>
-                    <p className="text-gray-400 text-sm mt-1 italic">צפה בתוצאות, נתח צוותים ונהל משתתפים</p>
-                </div>
-                <button onClick={onBack} className="flex items-center gap-2 text-gray-300 hover:text-white border border-gray-600 px-4 py-2 rounded-lg text-sm bg-gray-800">
-                    <ArrowLeftIcon className="w-4 h-4 rotate-180" />
-                    <span>חזרה</span>
-                </button>
-            </div>
+    <div className="bg-gray-800 p-8 md:p-12 rounded-3xl shadow-2xl text-center max-w-lg w-full mx-auto animate-fade-in-up border border-gray-700 relative">
+      
+      {onBack && (
+        <button 
+            onClick={onBack}
+            className="absolute top-6 left-6 text-gray-400 hover:text-white transition-colors"
+        >
+            <ArrowLeftIcon className="w-6 h-6 rotate-180" />
+        </button>
+      )}
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-cyan-500">
-                    <div className="text-gray-400 text-sm mb-1">סה"כ רשומים</div>
-                    <div className="text-4xl font-black text-white">{loading ? '...' : users.length}</div>
-                </div>
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-purple-500">
-                    <div className="text-gray-400 text-sm mb-1">סיימו שאלון</div>
-                    <div className="text-4xl font-black text-white">{loading ? '...' : users.filter(u => u.scores).length}</div>
-                </div>
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-green-500">
-                    <div className="text-gray-400 text-sm mb-1">צוותים פעילים</div>
-                    <div className="text-4xl font-black text-white">{loading ? '...' : teams.length}</div>
-                </div>
-            </div>
+      <h2 className="text-3xl md:text-4xl font-extrabold text-cyan-300 mb-2">
+        {isLogin ? 'ברוכים השבים' : 'משתמש חדש? בוא נתחיל'}
+      </h2>
+      <p className="text-gray-400 mb-8 text-lg">
+        {isLogin ? 'התחברות לחשבון קיים' : 'יצירת חשבון והצטרפות לצוות'}
+      </p>
 
-            {/* Create Team Section */}
-            <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-gray-700">
-                <h3 className="text-lg font-bold text-white mb-4">פתיחת צוות / סדנה חדשה</h3>
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                    <input 
-                        type="text" 
-                        value={newTeamName}
-                        onChange={(e) => setNewTeamName(e.target.value)}
-                        placeholder="שם הצוות (לדוגמה: הנהלה בכירה)"
-                        className="flex-1 bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    />
-                    <button 
-                        onClick={handleCreateTeam}
-                        disabled={!newTeamName.trim() || loading}
-                        className="bg-cyan-600 hover:bg-cyan-500 text-white font-black py-3 px-8 rounded-xl disabled:opacity-50 transition-all shadow-lg"
-                    >
-                        צור צוות
-                    </button>
-                </div>
-                {createTeamStatus.msg && (
-                    <p className={`mt-3 text-sm font-bold ${createTeamStatus.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>
-                        {createTeamStatus.msg}
-                    </p>
-                )}
-            </div>
-
-            {/* Data Table & Map */}
-            <div className="bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border border-gray-700">
-                <div className="p-6 border-b border-gray-700 flex flex-col sm:flex-row gap-4 items-center justify-between bg-gray-750">
-                    <div className="flex items-center gap-4">
-                        <h3 className="text-xl font-bold text-white">סינון וניתוח:</h3>
-                        <select 
-                            value={filterTeam} 
-                            onChange={(e) => { setFilterTeam(e.target.value); setShowMap(!!e.target.value); }}
-                            className="bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-2 focus:outline-none focus:border-cyan-500 font-medium"
-                        >
-                            <option value="">-- כל המשתמשים --</option>
-                            {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-                        </select>
-                    </div>
-                    {filterTeam && (
-                        <button 
-                            onClick={() => setShowMap(!showMap)}
-                            className={`px-6 py-2 rounded-full font-bold transition-all text-sm shadow-md ${showMap ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-cyan-400 hover:bg-gray-600'}`}
-                        >
-                            {showMap ? 'הצג רשימת שמות' : 'הצג מפת צוות'}
-                        </button>
-                    )}
-                </div>
-                
-                <div className="p-0">
-                    {loading ? (
-                        <div className="text-center py-20 text-gray-500 animate-pulse font-bold text-xl">טוען נתונים...</div>
-                    ) : showMap && filterTeam ? (
-                        <div className="p-6"><TeamMap /></div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-right border-collapse">
-                                <thead className="bg-gray-900/50 text-gray-400 text-xs font-bold uppercase tracking-wider">
-                                    <tr>
-                                        <th className="py-4 px-6">שם המשתתף</th>
-                                        <th className="py-4 px-6">צוות נוכחי (לחץ לשינוי)</th>
-                                        <th className="py-4 px-6">סטטוס שאלון</th>
-                                        <th className="py-4 px-6">תוצאה דומיננטית</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-700/50">
-                                    {filteredUsers.length === 0 ? (
-                                        <tr><td colSpan={4} className="text-center py-12 text-gray-500 font-medium">לא נמצאו משתמשים התואמים לסינון</td></tr>
-                                    ) : (
-                                        filteredUsers.map((user) => (
-                                            <tr key={user.uid} className="hover:bg-gray-700/30 transition-colors group">
-                                                <td className="py-4 px-6">
-                                                    <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">{user.displayName || 'משתמש ללא שם'}</div>
-                                                    <div className="text-[10px] text-gray-500 dir-ltr text-right">{user.email}</div>
-                                                </td>
-                                                <td className="py-4 px-6">
-                                                    <div className="flex items-center gap-2">
-                                                        <select
-                                                            value={user.team}
-                                                            onChange={(e) => handleMoveUser(user.uid, e.target.value)}
-                                                            disabled={updatingUserId === user.uid}
-                                                            className={`bg-gray-900 border border-gray-600 rounded-lg px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-cyan-500 transition-all text-cyan-200 ${updatingUserId === user.uid ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}`}
-                                                        >
-                                                            {teams.map(t => (
-                                                                <option key={t.id} value={t.name}>{t.name}</option>
-                                                            ))}
-                                                            {/* Fallback for existing legacy teams */}
-                                                            {teams.every(t => t.name !== user.team) && (
-                                                                <option value={user.team}>{user.team}</option>
-                                                            )}
-                                                        </select>
-                                                        {updatingUserId === user.uid && (
-                                                            <span className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="py-4 px-6">
-                                                    {user.scores ? 
-                                                        <span className="text-green-400 text-[10px] bg-green-900/20 px-2 py-1 rounded-full border border-green-800/50 font-bold uppercase tracking-tight">בוצע</span> : 
-                                                        <span className="text-gray-500 text-[10px] bg-gray-900/50 px-2 py-1 rounded-full border border-gray-700 font-medium uppercase tracking-tight">טרם מולא</span>
-                                                    }
-                                                </td>
-                                                <td className="py-4 px-6">
-                                                    {renderDominantColorBadge(user.scores)}
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            </div>
+      {/* TEAM SELECTION - CRITICAL FOR WORKSHOPS */}
+      {!isLogin && (
+        <div className="mb-8 text-right bg-cyan-900/10 p-5 rounded-2xl border border-cyan-500/30 shadow-inner">
+            <label className="block text-cyan-400 text-base mb-2 pr-1 font-bold">בחירת הצוות שלך:</label>
+            <select
+                value={selectedTeam}
+                onChange={(e) => {
+                    setSelectedTeam(e.target.value);
+                    setError('');
+                }}
+                disabled={isTeamLocked}
+                className={`w-full bg-gray-900 border-2 border-cyan-500/50 rounded-xl py-4 px-5 text-white text-lg focus:ring-4 focus:ring-cyan-500/20 shadow-lg transition-all ${isTeamLocked ? 'opacity-90 cursor-not-allowed' : 'cursor-pointer hover:border-cyan-400'}`}
+            >
+                {!isTeamLocked && <option value="" disabled>-- בחר צוות מהרשימה --</option>}
+                {teams.map(team => (
+                    <option key={team.id} value={team.name}>{team.name}</option>
+                ))}
+            </select>
+            {isTeamLocked && <p className="text-xs text-cyan-500/70 mt-3 text-center font-medium italic">הצוות הוגדר מראש עבור הקישור שקיבלת</p>}
         </div>
+      )}
+
+      {/* Primary Action Button Area */}
+      <div className="space-y-4 mb-8">
+          <button 
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full bg-white text-gray-900 hover:bg-gray-100 font-extrabold text-xl py-5 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 border-b-4 border-gray-300"
+          >
+              {loading ? (
+                <span className="w-6 h-6 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></span>
+              ) : (
+                <>
+                  <GoogleIcon className="w-7 h-7" />
+                  <span>{isLogin ? 'כניסה עם Google' : 'הרשמה מהירה עם Google'}</span>
+                </>
+              )}
+          </button>
+          
+          <div className="flex items-center gap-4 py-2">
+              <div className="h-px bg-gray-700 flex-1"></div>
+              <span className="text-gray-500 text-xs font-bold px-2">או ידנית עם אימייל</span>
+              <div className="h-px bg-gray-700 flex-1"></div>
+          </div>
+      </div>
+      
+      <form onSubmit={handleSubmit} className="space-y-5 text-right">
+        {!isLogin && (
+            <div>
+                <label className="block text-gray-400 text-sm mb-1 pr-1">שם מלא</label>
+                <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-xl py-4 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500"
+                    placeholder="איך קוראים לך?"
+                />
+            </div>
+        )}
+
+        <div>
+            <label className="block text-gray-400 text-sm mb-1 pr-1">כתובת אימייל</label>
+            <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full bg-gray-700 border border-gray-600 rounded-xl py-4 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500 text-left"
+            style={{direction: 'ltr'}}
+            placeholder="email@domain.com"
+            />
+        </div>
+
+        <div>
+            <label className="block text-gray-400 text-sm mb-1 pr-1">סיסמה</label>
+            <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full bg-gray-700 border border-gray-600 rounded-xl py-4 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500 text-left"
+             style={{direction: 'ltr'}}
+            placeholder="******"
+            />
+        </div>
+
+        {error && (
+            <div className="text-red-300 text-sm text-center bg-red-900/30 p-4 rounded-xl border border-red-500/30 animate-shake">
+                {error}
+            </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-600 text-white font-extrabold py-5 px-8 rounded-2xl text-2xl transition-all shadow-[0_10px_20px_rgba(6,182,212,0.3)] mt-6 disabled:opacity-50 transform hover:-translate-y-1 active:translate-y-0 border-b-4 border-blue-900"
+        >
+          {loading ? 'מעבד...' : (isLogin ? 'התחבר' : 'צור חשבון והתחל בשאלון')}
+        </button>
+      </form>
+
+      <div className="mt-10 text-lg text-gray-400 flex flex-col sm:flex-row justify-center items-center gap-2 border-t border-gray-700 pt-8">
+        <span>{isLogin ? 'משתמש חדש בסדנה?' : 'כבר רשום במערכת?'}</span>
+        <button 
+            onClick={() => { setIsLogin(!isLogin); setError(''); }}
+            className="text-cyan-400 underline hover:text-cyan-300 font-extrabold decoration-2 underline-offset-4"
+        >
+            {isLogin ? 'צור חשבון חדש' : 'התחבר מכאן'}
+        </button>
+      </div>
     </div>
   );
 };
+
+export default AuthScreen;
