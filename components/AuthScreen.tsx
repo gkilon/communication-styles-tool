@@ -20,6 +20,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
   // Team selection
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState('');
+  const [isTeamLocked, setIsTeamLocked] = useState(false);
   
   const [adminCode, setAdminCode] = useState(''); 
   const [error, setError] = useState('');
@@ -30,8 +31,25 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
      const fetchTeams = async () => {
         if (!isFirebaseInitialized) return;
         try {
-            const teamsData = await getTeams();
-            setTeams(teamsData);
+            let teamsData = await getTeams();
+            
+            // Check for URL parameter 'team' to lock/filter view
+            const urlParams = new URLSearchParams(window.location.search);
+            const teamParam = urlParams.get('team');
+            
+            if (teamParam) {
+                const foundTeam = teamsData.find(t => t.name === teamParam);
+                if (foundTeam) {
+                    // Filter list to only show the target team to prevent mistakes
+                    setTeams([foundTeam]);
+                    setSelectedTeam(foundTeam.name);
+                    setIsTeamLocked(true);
+                } else {
+                    setTeams(teamsData);
+                }
+            } else {
+                setTeams(teamsData);
+            }
         } catch (e) {
             console.error("Failed to load teams", e);
         }
@@ -115,25 +133,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
           const provider = new GoogleAuthProvider();
           const result = await signInWithPopup(auth, provider);
           
-          // אם זה משתמש חדש, הוא ייווצר עם הצוות שנבחר ב-Dropdown
-          // אם המשתמש כבר קיים, הצוות לא ישתנה (הפונקציה ensure בודקת אם קיים)
           const teamToUse = (!isLogin && selectedTeam) ? selectedTeam : 'General';
-          
           await ensureGoogleUserProfile(result.user, teamToUse);
           
           onLoginSuccess();
       } catch (err: any) {
           console.error("Google login error details:", err);
           let msg = "שגיאה בהתחברות עם Google.";
-          
-          if (err.code === 'auth/popup-closed-by-user') {
-              msg = "ההתחברות בוטלה על ידי המשתמש.";
-          } else if (err.code === 'auth/unauthorized-domain') {
-              msg = "הדומיין הנוכחי אינו מורשה ב-Firebase Console.";
-          } else if (err.message) {
-              msg += " (" + err.message + ")";
-          }
-
+          if (err.code === 'auth/popup-closed-by-user') msg = "ההתחברות בוטלה על ידי המשתמש.";
           setError(msg);
       } finally {
           setLoading(false);
@@ -141,7 +148,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
   };
 
   return (
-    <div className="bg-gray-800 p-8 md:p-12 rounded-xl shadow-2xl text-center max-w-lg w-full mx-auto animate-fade-in-up border border-gray-700 relative">
+    <div className="bg-gray-800 p-8 md:p-12 rounded-2xl shadow-2xl text-center max-w-lg w-full mx-auto animate-fade-in-up border border-gray-700 relative">
       
       {onBack && (
         <button 
@@ -152,83 +159,108 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
         </button>
       )}
 
-      <h2 className="text-3xl md:text-4xl font-bold text-cyan-300 mb-3">
-        {isLogin ? 'כניסה למערכת' : 'הרשמה לצוות'}
+      <h2 className="text-3xl md:text-4xl font-extrabold text-cyan-300 mb-2">
+        {isLogin ? 'ברוכים הבאים' : 'הצטרפות לצוות'}
       </h2>
-      <p className="text-gray-400 mb-6 text-lg">
-        {isLogin ? 'הזן את פרטי המשתמש שלך' : 'הצטרף לצוות הארגוני שלך'}
+      <p className="text-gray-400 mb-8 text-lg">
+        {isLogin ? 'התחברות למערכת הארגונית' : 'הרשמה וזיהוי צוותי'}
       </p>
 
-      {/* TEAM SELECTION - MOVED UP FOR REGISTRATION */}
+      {/* TEAM SELECTION */}
       {!isLogin && (
-        <div className="mb-6 text-right">
-            <label className="block text-gray-300 text-base mb-2 pr-1 font-bold">לאיזה צוות את/ה שייך?</label>
+        <div className="mb-8 text-right bg-gray-900/40 p-5 rounded-xl border border-cyan-500/20 shadow-inner">
+            <label className="block text-cyan-400 text-base mb-2 pr-1 font-bold">בחירת צוות {isTeamLocked ? '(נעול לסדנה)' : ''}</label>
             <select
                 value={selectedTeam}
                 onChange={(e) => {
                     setSelectedTeam(e.target.value);
                     setError('');
                 }}
-                className="w-full bg-gray-700 border border-cyan-500/50 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500 shadow-md"
+                disabled={isTeamLocked}
+                className={`w-full bg-gray-700 border border-cyan-500/50 rounded-xl py-4 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500 shadow-md transition-all ${isTeamLocked ? 'opacity-90 cursor-not-allowed bg-gray-800' : 'cursor-pointer hover:bg-gray-650'}`}
             >
-                <option value="" disabled>-- בחר צוות מהרשימה --</option>
+                {!isTeamLocked && <option value="" disabled>-- בחר את הצוות שלך --</option>}
                 {teams.map(team => (
                     <option key={team.id} value={team.name}>{team.name}</option>
                 ))}
             </select>
+            {isTeamLocked && <p className="text-[10px] text-gray-500 mt-2 text-center">הצוות הוגדר באופן אוטומטי עבור סדנה זו</p>}
         </div>
       )}
 
-      {/* Google Login Button */}
-      <button 
-        onClick={handleGoogleLogin}
-        disabled={loading}
-        className="w-full bg-white text-gray-800 hover:bg-gray-100 font-bold text-lg py-4 px-6 rounded-xl flex items-center justify-center gap-3 transition-colors mb-8 shadow-md"
-      >
-          {loading ? (
-             <span className="w-6 h-6 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></span>
-          ) : (
-            <>
-              <GoogleIcon className="w-6 h-6" />
-              <span>{isLogin ? 'התחבר עם Google' : 'הירשם עם Google (לצוות שנבחר)'}</span>
-            </>
-          )}
-      </button>
+      {/* Primary Action Button - More Prominent */}
+      {!isLogin && (
+          <div className="space-y-4 mb-8">
+              <button 
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full bg-white text-gray-800 hover:bg-gray-100 font-extrabold text-xl py-5 px-6 rounded-xl flex items-center justify-center gap-3 transition-all shadow-[0_4px_15px_rgba(255,255,255,0.1)] active:scale-95"
+              >
+                  {loading ? (
+                    <span className="w-6 h-6 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <>
+                      <GoogleIcon className="w-7 h-7" />
+                      <span>הירשם והתחל עם Google</span>
+                    </>
+                  )}
+              </button>
+              
+              <div className="flex items-center gap-4">
+                  <div className="h-px bg-gray-700 flex-1"></div>
+                  <span className="text-gray-500 text-xs font-bold px-2">או הרשמה במייל</span>
+                  <div className="h-px bg-gray-700 flex-1"></div>
+              </div>
+          </div>
+      )}
 
-      <div className="flex items-center gap-4 mb-8">
-          <div className="h-px bg-gray-600 flex-1"></div>
-          <span className="text-gray-500 text-sm font-medium">או במייל</span>
-          <div className="h-px bg-gray-600 flex-1"></div>
-      </div>
+      {isLogin && (
+          <button 
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full bg-white text-gray-800 hover:bg-gray-100 font-bold text-lg py-4 px-6 rounded-xl flex items-center justify-center gap-3 transition-colors mb-8 shadow-md"
+          >
+              <GoogleIcon className="w-6 h-6" />
+              <span>התחבר עם Google</span>
+          </button>
+      )}
+
+      {isLogin && (
+          <div className="flex items-center gap-4 mb-8">
+              <div className="h-px bg-gray-600 flex-1"></div>
+              <span className="text-gray-500 text-sm font-medium">או במייל</span>
+              <div className="h-px bg-gray-600 flex-1"></div>
+          </div>
+      )}
       
       <form onSubmit={handleSubmit} className="space-y-5 text-right">
         {!isLogin && (
             <div>
-                <label className="block text-gray-300 text-base mb-2 pr-1">שם מלא (להרשמה במייל)</label>
+                <label className="block text-gray-300 text-sm mb-1 pr-1 font-medium">שם מלא</label>
                 <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500"
-                    placeholder="ישראל ישראלי"
+                    placeholder="השם שלך"
                 />
             </div>
         )}
 
         <div>
-            <label className="block text-gray-300 text-base mb-2 pr-1">אימייל</label>
+            <label className="block text-gray-300 text-sm mb-1 pr-1 font-medium">אימייל</label>
             <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg ltr-text focus:ring-2 focus:ring-cyan-500 text-left"
+            className="w-full bg-gray-700 border border-gray-600 rounded-xl py-3 px-5 text-white text-lg focus:ring-2 focus:ring-cyan-500 text-left"
             style={{direction: 'ltr'}}
-            placeholder="your@email.com"
+            placeholder="email@company.com"
             />
         </div>
 
         <div>
-            <label className="block text-gray-300 text-base mb-2 pr-1">סיסמה</label>
+            <label className="block text-gray-300 text-sm mb-1 pr-1 font-medium">סיסמה</label>
             <input
             type="password"
             value={password}
@@ -239,38 +271,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onBack }
             />
         </div>
 
-        {!isLogin && (
-            <div className="border-t border-gray-700 pt-4 mt-4">
-                <div className="relative">
-                    <input
-                        type="password"
-                        value={adminCode}
-                        onChange={(e) => setAdminCode(e.target.value)}
-                        className="w-full bg-gray-900/50 border border-gray-700 rounded-lg py-2 px-4 text-white text-sm focus:ring-1 focus:ring-cyan-500 placeholder-gray-600"
-                        placeholder="קוד מנהל (להקמת מערכת בלבד)"
-                    />
-                </div>
-            </div>
-        )}
-
-        {error && <p className="text-red-300 text-base text-center bg-red-900/40 p-3 rounded-lg border border-red-800/50">{error}</p>}
+        {error && <p className="text-red-300 text-base text-center bg-red-900/40 p-3 rounded-lg border border-red-800/50 animate-shake">{error}</p>}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-8 rounded-xl text-xl transition-all shadow-lg mt-8 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-extrabold py-5 px-8 rounded-xl text-xl transition-all shadow-xl mt-8 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-1 active:translate-y-0"
         >
-          {loading ? 'מעבד...' : (isLogin ? 'התחבר' : 'הירשם')}
+          {loading ? 'מבצע פעולה...' : (isLogin ? 'התחבר למערכת' : 'הירשם והתחל בשאלון')}
         </button>
       </form>
 
-      <div className="mt-8 text-base text-gray-400 flex justify-center gap-2">
-        <span>{isLogin ? 'עדיין אין לך חשבון?' : 'כבר נרשמת?'}</span>
+      <div className="mt-8 text-base text-gray-400 flex justify-center gap-2 border-t border-gray-700 pt-6">
+        <span>{isLogin ? 'משתמש חדש?' : 'כבר רשום?'}</span>
         <button 
             onClick={() => { setIsLogin(!isLogin); setError(''); }}
-            className="text-cyan-400 underline hover:text-cyan-300 font-bold"
+            className="text-cyan-400 underline hover:text-cyan-300 font-extrabold"
         >
-            {isLogin ? 'הירשם לצוות' : 'התחבר'}
+            {isLogin ? 'צור חשבון והצטרף לצוות' : 'עבור להתחברות'}
         </button>
       </div>
     </div>
