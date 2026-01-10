@@ -4,7 +4,7 @@ import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { PasswordScreen } from './components/PasswordScreen';
-import AuthScreen from './components/AuthScreen';
+import { AuthScreen } from './components/AuthScreen';
 import { Scores } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
 import { isFirebaseInitialized } from './firebaseConfig';
@@ -15,12 +15,36 @@ interface SimpleAppProps {
   user?: any;
 }
 
+const STORAGE_KEY_ANSWERS = 'comm_style_answers';
+const STORAGE_KEY_STEP = 'comm_style_step';
+const STORAGE_KEY_INDEX = 'comm_style_index';
+
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showTeamAuth, setShowTeamAuth] = useState(false);
-  const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>('intro');
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  
+  // Persistence initialization
+  const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_STEP);
+    return (saved as any) || 'intro';
+  });
+  
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_INDEX);
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  const [answers, setAnswers] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_ANSWERS);
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Save progress to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_ANSWERS, JSON.stringify(answers));
+    localStorage.setItem(STORAGE_KEY_STEP, step);
+    localStorage.setItem(STORAGE_KEY_INDEX, currentQuestionIndex.toString());
+  }, [answers, step, currentQuestionIndex]);
 
   useEffect(() => {
     if (user) {
@@ -39,23 +63,13 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
       const val = answers[q.id];
       if (val !== undefined && val > 0) {
         const [col1, col2] = q.columns;
-        // Total points available per question is 5.
-        // Scale 1-6 mapping to points:
-        // 1 -> 5:0
-        // 2 -> 4:1
-        // 3 -> 3:2
-        // 4 -> 2:3
-        // 5 -> 1:4
-        // 6 -> 0:5
         newScores[col1] += (6 - val); 
         newScores[col2] += (val - 1);
         totalQuestions++;
       }
     });
 
-    // If no data, provide a completely neutral starting point
     if (totalQuestions === 0) return { a: 0, b: 0, c: 0, d: 0 };
-    
     return newScores;
   }, [step, answers]);
 
@@ -80,6 +94,9 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     setAnswers({});
     setCurrentQuestionIndex(0);
     setStep('intro');
+    localStorage.removeItem(STORAGE_KEY_ANSWERS);
+    localStorage.removeItem(STORAGE_KEY_STEP);
+    localStorage.removeItem(STORAGE_KEY_INDEX);
   };
 
   const handleEditAnswers = () => {
@@ -130,7 +147,17 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                 )
             ) : (
                 <div className="w-full">
-                    {step === 'intro' && <IntroScreen onStart={handleStart} />}
+                    {step === 'intro' && (
+                      <div className="space-y-6">
+                        {Object.keys(answers).length > 0 && (
+                          <div className="max-w-md mx-auto bg-cyan-900/20 border border-cyan-500/30 p-4 rounded-xl text-center mb-6">
+                            <p className="text-cyan-300 mb-2">נמצאו תשובות שמולאו בעבר</p>
+                            <button onClick={handleStart} className="text-white bg-cyan-600 px-4 py-1 rounded-lg text-sm font-bold">המשך מאיפה שעצרתי</button>
+                          </div>
+                        )}
+                        <IntroScreen onStart={handleStart} />
+                      </div>
+                    )}
                     {step === 'questionnaire' && (
                         <QuestionnaireScreen 
                             answers={answers} 

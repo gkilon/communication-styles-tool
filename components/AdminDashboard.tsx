@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
-import { auth } from '../firebaseConfig';
+import { db } from '../firebaseConfig';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { getAllUsers, createTeam, getTeams, updateUserTeam } from '../services/firebaseService';
 import { UserProfile, Team, Scores } from '../types';
 import { ArrowLeftIcon } from './icons/Icons';
@@ -23,10 +24,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [createTeamStatus, setCreateTeamStatus] = useState<{msg: string, type: 'success' | 'error' | ''}>({msg:'', type:''});
   
   const [showMap, setShowMap] = useState(false);
+  
+  // Questionnaire Password Management
+  const [qPassword, setQPassword] = useState('');
+  const [savePassStatus, setSavePassStatus] = useState('');
 
   useEffect(() => {
     loadData();
+    fetchCurrentPassword();
   }, []);
+
+  const fetchCurrentPassword = async () => {
+    try {
+        const snap = await getDoc(doc(db, "settings", "access"));
+        if (snap.exists()) setQPassword(snap.data().questionnairePassword || 'inspire');
+    } catch (e) {
+        console.warn("Failed to fetch current password settings");
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+      if (!qPassword.trim()) return;
+      setSavePassStatus('שומר...');
+      try {
+          await setDoc(doc(db, "settings", "access"), { questionnairePassword: qPassword.trim() }, { merge: true });
+          setSavePassStatus('הסיסמה עודכנה בהצלחה!');
+          setTimeout(() => setSavePassStatus(''), 3000);
+      } catch (e) {
+          setSavePassStatus('שגיאה בעדכון הסיסמה');
+      }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -54,7 +81,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           await createTeam(newTeamName.trim());
           setNewTeamName('');
           setCreateTeamStatus({msg: 'הצוות נוצר בהצלחה!', type: 'success'});
-          loadData(); // Refresh
+          loadData(); 
           setTimeout(() => setCreateTeamStatus({msg: '', type: ''}), 3000);
       } catch (e: any) {
           setCreateTeamStatus({msg: e.message || 'שגיאה ביצירת הצוות', type: 'error'});
@@ -68,7 +95,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       setUpdatingUserId(userId);
       try {
           await updateUserTeam(userId, newTeam);
-          // Update local state to reflect change without full reload
           setUsers(prev => prev.map(u => u.uid === userId ? { ...u, team: newTeam } : u));
       } catch (e) {
           alert("שגיאה בהעברת המשתמש");
@@ -77,7 +103,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       }
   };
 
-  // --- Render Helpers ---
   const getDominantColorInfo = (scores?: Scores) => {
     if (!scores) return null;
     const { a, b, c, d } = scores;
@@ -103,24 +128,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const filteredUsers = filterTeam ? users.filter(u => u.team === filterTeam) : users;
 
-  // --- ERROR VIEW: PERMISSION DENIED ---
   if (error === 'PERMISSION_DENIED') {
       return (
         <div className="min-h-screen bg-gray-900 text-white p-6 dir-rtl">
-            <div className="max-w-3xl mx-auto bg-gray-800 p-8 rounded-lg shadow-2xl border-2 border-red-500">
-                <div className="flex items-center gap-4 mb-6">
-                    <span className="text-4xl">🛑</span>
+            <div className="max-w-3xl mx-auto bg-gray-800 p-8 rounded-lg shadow-2xl border-2 border-red-500 text-center">
+                <div className="flex flex-col items-center gap-4 mb-6">
+                    <span className="text-6xl">🛑</span>
                     <h1 className="text-3xl font-bold text-red-500">מסד הנתונים נעול</h1>
                 </div>
                 <p className="text-lg mb-6">הצלחת להתחבר כמנהל, אך אין לך הרשאה לקרוא את הנתונים ב-Firebase. בדוק את ה-Rules בקונסול.</p>
-                <button onClick={loadData} className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-lg mb-4 transition-all">ביצעתי, נסה לטעון שוב ↻</button>
-                <button onClick={onBack} className="text-gray-400 hover:text-white underline text-sm block text-center w-full">יציאה</button>
+                <button onClick={loadData} className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-4 px-6 rounded-xl mb-4 transition-all">נסה שוב ↻</button>
+                <button onClick={onBack} className="text-gray-400 hover:text-white underline text-sm block">יציאה מהמערכת</button>
             </div>
         </div>
       );
   }
 
-  // --- TEAM MAP ---
   const TeamMap = () => {
       if (!filterTeam || filteredUsers.length === 0) return null;
 
@@ -180,28 +203,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         <div className="max-w-6xl mx-auto">
             <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-3xl font-bold text-cyan-300">ניהול סדנאות וצוותים</h2>
-                    <p className="text-gray-400 text-sm mt-1 italic">צפה בתוצאות, נתח צוותים ונהל משתתפים</p>
+                    <h2 className="text-3xl font-bold text-cyan-300">לוח בקרה מנהלים</h2>
+                    <p className="text-gray-400 text-sm mt-1 italic">ניהול משתתפים, צוותים והגדרות מערכת</p>
                 </div>
                 <button onClick={onBack} className="flex items-center gap-2 text-gray-300 hover:text-white border border-gray-600 px-4 py-2 rounded-lg text-sm bg-gray-800">
                     <ArrowLeftIcon className="w-4 h-4 rotate-180" />
-                    <span>חזרה</span>
+                    <span>יציאה למסך ראשי</span>
                 </button>
             </div>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-cyan-500">
-                    <div className="text-gray-400 text-sm mb-1">סה"כ רשומים</div>
-                    <div className="text-4xl font-black text-white">{loading ? '...' : users.length}</div>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+                {/* System Settings - Password Change */}
+                <div className="lg:col-span-1 bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-700">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <span>⚙️</span> הגדרות גישה
+                    </h3>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-gray-400 text-xs mb-1">סיסמת שאלון אישי</label>
+                            <input 
+                                type="text"
+                                value={qPassword}
+                                onChange={(e) => setQPassword(e.target.value)}
+                                className="w-full bg-gray-900 border border-gray-600 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                                placeholder="לדוגמה: inspire"
+                            />
+                        </div>
+                        <button 
+                            onClick={handleUpdatePassword}
+                            className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 rounded-xl transition-all text-sm"
+                        >
+                            עדכן סיסמה
+                        </button>
+                        {savePassStatus && <p className="text-cyan-400 text-center text-xs font-bold animate-pulse">{savePassStatus}</p>}
+                    </div>
                 </div>
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-purple-500">
-                    <div className="text-gray-400 text-sm mb-1">סיימו שאלון</div>
-                    <div className="text-4xl font-black text-white">{loading ? '...' : users.filter(u => u.scores).length}</div>
-                </div>
-                <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-green-500">
-                    <div className="text-gray-400 text-sm mb-1">צוותים פעילים</div>
-                    <div className="text-4xl font-black text-white">{loading ? '...' : teams.length}</div>
+
+                <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-cyan-500">
+                        <div className="text-gray-400 text-sm mb-1">סה"כ רשומים</div>
+                        <div className="text-4xl font-black text-white">{loading ? '...' : users.length}</div>
+                    </div>
+                    <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-purple-500">
+                        <div className="text-gray-400 text-sm mb-1">סיימו שאלון</div>
+                        <div className="text-4xl font-black text-white">{loading ? '...' : users.filter(u => u.scores).length}</div>
+                    </div>
+                    <div className="bg-gray-800 p-6 rounded-2xl shadow-lg border-r-4 border-green-500">
+                        <div className="text-gray-400 text-sm mb-1">צוותים פעילים</div>
+                        <div className="text-4xl font-black text-white">{loading ? '...' : teams.length}</div>
+                    </div>
                 </div>
             </div>
 
@@ -266,7 +316,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                 <thead className="bg-gray-900/50 text-gray-400 text-xs font-bold uppercase tracking-wider">
                                     <tr>
                                         <th className="py-4 px-6">שם המשתתף</th>
-                                        <th className="py-4 px-6">צוות נוכחי (לחץ לשינוי)</th>
+                                        <th className="py-4 px-6">צוות נוכחי</th>
                                         <th className="py-4 px-6">סטטוס שאלון</th>
                                         <th className="py-4 px-6">תוצאה דומיננטית</th>
                                     </tr>
@@ -292,7 +342,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                                             {teams.map(t => (
                                                                 <option key={t.id} value={t.name}>{t.name}</option>
                                                             ))}
-                                                            {/* Fallback for existing legacy teams */}
                                                             {teams.every(t => t.name !== user.team) && (
                                                                 <option value={user.team}>{user.team}</option>
                                                             )}

@@ -17,9 +17,12 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Destructure props in render and use explicit Component import to resolve TypeScript "property does not exist" errors
+// Fix: Ensure Component generic types are passed so 'this.props' is correctly typed
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = { hasError: false };
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -31,7 +34,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   render() {
     const { hasError, error } = this.state;
-    // Destructure children from props explicitly
+    // Fix for line 35: Accessing children from this.props now works with correct generics
     const { children } = this.props;
 
     if (hasError) {

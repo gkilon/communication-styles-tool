@@ -1,5 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db, isFirebaseInitialized } from '../firebaseConfig';
 
 interface PasswordScreenProps {
   onAuthenticate: (password: string) => boolean;
@@ -12,13 +14,22 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
   onAuthenticate, 
   onAdminLogin, 
   onTeamLoginClick,
-  hasDatabaseConnection = false
+  hasDatabaseConnection = true 
 }) => {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [password, setPassword] = useState('');
-  const [email, setEmail] = useState(''); // For admin only
+  const [email, setEmail] = useState(''); 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [remotePass, setRemotePass] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isFirebaseInitialized) {
+      getDoc(doc(db, "settings", "access")).then(snap => {
+        if (snap.exists()) setRemotePass(snap.data().questionnairePassword);
+      });
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +37,6 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
     setLoading(true);
 
     if (isAdminMode) {
-        // Admin Login (Firebase)
         if (!email || !password) {
             setError('אנא מלא אימייל וסיסמה');
             setLoading(false);
@@ -35,16 +45,21 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         if (onAdminLogin) {
             try {
                 await onAdminLogin(email, password);
-                // Success is handled by parent view switch
             } catch (err: any) {
-                console.error(err);
                 setError('פרטי התחברות שגויים');
             }
         }
     } else {
-        // Simple User Login (Shared Password)
-        const success = onAuthenticate(password);
-        if (!success) {
+        let success = false;
+        if (remotePass) {
+            success = password.toLowerCase() === remotePass.toLowerCase();
+        } else {
+            success = onAuthenticate(password);
+        }
+
+        if (success) {
+            onAuthenticate(password); 
+        } else {
           setError('סיסמה שגויה.');
           setPassword('');
         }
@@ -53,89 +68,131 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
   };
 
   const toggleMode = () => {
-      const newMode = !isAdminMode;
-      setIsAdminMode(newMode);
+      setIsAdminMode(!isAdminMode);
       setError('');
-      
-      // Clear fields when switching modes
       setEmail('');
       setPassword('');
   };
 
-  return (
-    <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl text-center max-w-md mx-auto animate-fade-in-up border border-gray-700">
-      
-      {/* Team Member Login Option - HIGHLIGHTED AS PRIMARY */}
-      {hasDatabaseConnection && !isAdminMode && (
-          <div className="mb-8 p-4 bg-cyan-900/20 rounded-xl border border-cyan-500/30">
-              <p className="text-cyan-300 text-sm mb-3 font-bold">חלק מארגון או סדנה?</p>
-              <button
-                  onClick={onTeamLoginClick}
-                  className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-extrabold py-4 px-4 rounded-xl text-lg transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(6,182,212,0.4)] animate-pulse hover:animate-none"
-              >
-                  כניסת חבר צוות / משתתף סדנה
-              </button>
-              <p className="text-gray-500 text-xs mt-2 italic">שמירת תוצאות וניתוח צוותי</p>
+  // Branding Component for reuse
+  const Branding = () => (
+    <div className="mb-10 flex flex-col items-center">
+      <a 
+        href="https://kilon-consulting.com/" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="group transition-all duration-300 transform hover:scale-105"
+      >
+        <div className="flex items-center gap-3 bg-gray-900/40 px-5 py-3 rounded-2xl border border-gray-700/50 shadow-xl">
+          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center font-black text-xl text-white group-hover:shadow-cyan-500/30 transition-all">
+            K
           </div>
-      )}
+          <div className="text-right">
+            <div className="text-white font-black text-lg leading-none">KILON</div>
+            <div className="text-cyan-400 text-[10px] font-bold tracking-[0.2em] leading-none mt-1">CONSULTING</div>
+          </div>
+        </div>
+      </a>
+    </div>
+  );
 
-      <div className="flex items-center gap-4 mb-6">
-          <div className="h-px bg-gray-700 flex-1"></div>
-          <span className="text-gray-500 text-xs font-medium">{hasDatabaseConnection && !isAdminMode ? 'או' : ''} {isAdminMode ? 'ניהול' : 'כניסה אישית'}</span>
-          <div className="h-px bg-gray-700 flex-1"></div>
+  if (isAdminMode) {
+    return (
+      <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl text-center max-w-md mx-auto animate-fade-in-up border border-gray-700">
+        <Branding />
+        <h2 className="text-2xl font-bold text-gray-200 mb-6">כניסת מנהל מערכת</h2>
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+          <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500"
+              placeholder="אימייל מנהל"
+              dir="ltr"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500"
+            placeholder="סיסמת מנהל"
+            dir="ltr"
+          />
+          {error && <p className="text-red-400 text-sm font-bold">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-8 rounded-xl transition-all"
+          >
+            {loading ? 'מתחבר...' : 'כניסת אדמין'}
+          </button>
+        </form>
+        <button onClick={toggleMode} className="mt-6 text-xs text-gray-500 hover:text-cyan-400 underline transition-colors">חזרה למסך הראשי</button>
       </div>
+    );
+  }
 
-      <h2 className="text-2xl font-bold text-gray-200 mb-2">
-          {isAdminMode ? 'כניסת מנהל מערכת' : 'כניסה מהירה'}
-      </h2>
-      <p className="text-gray-500 mb-6 text-sm">
-        {isAdminMode 
-            ? 'הזן פרטי מנהל (אימייל וסיסמה)' 
-            : 'הזן את סיסמת הגישה לשאלון אישי'}
-      </p>
-      
-      <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+  return (
+    <div className="max-w-5xl w-full mx-auto animate-fade-in-up px-4">
+      <Branding />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
         
-        {isAdminMode && (
-            <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-full py-3 px-4 text-white text-center placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                placeholder="אימייל מנהל"
+        {/* RIGHT SIDE: TEAM / WORKSHOP */}
+        <div className="bg-gray-800/80 backdrop-blur-sm p-10 rounded-3xl border-2 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col justify-between text-center transform transition-all hover:scale-[1.02]">
+            <div>
+              <div className="w-20 h-20 bg-cyan-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-4xl">👥</span>
+              </div>
+              <h3 className="text-white text-3xl font-black mb-4">כניסה צוותית</h3>
+              <p className="text-gray-400 text-lg mb-8 leading-relaxed">
+                הצטרף לצוות שלך בסדנה, שמור את התוצאות בענן וקבל ניתוח קבוצתי חכם.
+              </p>
+            </div>
+            
+            <button
+                onClick={onTeamLoginClick}
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black py-6 px-4 rounded-2xl text-2xl transition-all shadow-xl border-b-4 border-blue-900 active:translate-y-1 active:border-b-0"
+            >
+                כניסת חבר צוות
+            </button>
+            <p className="text-cyan-400 text-sm mt-4 font-bold animate-pulse">מומלץ עבור סדנאות מנהלים</p>
+        </div>
+
+        {/* LEFT SIDE: PERSONAL QUESTIONNAIRE */}
+        <div className="bg-gray-800/50 p-10 rounded-3xl border border-gray-700 shadow-xl flex flex-col justify-between text-center">
+            <div>
+              <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-4xl">👤</span>
+              </div>
+              <h3 className="text-gray-200 text-2xl font-bold mb-4">שאלון אישי</h3>
+              <p className="text-gray-500 text-base mb-8 leading-relaxed">
+                מילוי השאלון באופן אנונימי ללא שמירה בענן.
+                <br/>
+                <span className="text-xs text-gray-600 mt-2 block italic">נדרשת סיסמת גישה למערכת</span>
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 rounded-xl py-4 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500/50 text-xl placeholder:text-gray-800"
+                placeholder="הקלד סיסמת גישה"
                 dir="ltr"
-                autoComplete="off"
-            />
-        )}
+              />
+              {error && <p className="text-red-400 text-sm font-bold text-center">{error}</p>}
+              <button
+                type="submit"
+                className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 px-8 rounded-xl transition-all text-xl border border-gray-600 shadow-lg"
+              >
+                התחל כשאלון אישי
+              </button>
+            </form>
+            
+            <button onClick={toggleMode} className="mt-6 text-[10px] text-gray-600 hover:text-gray-400 uppercase tracking-widest transition-colors">Admin Dashboard</button>
+        </div>
 
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full bg-gray-700 border border-gray-600 rounded-full py-3 px-4 text-white text-center placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-shadow"
-          placeholder="סיסמה"
-          dir="ltr"
-          autoComplete="new-password"
-        />
-        
-        {error && <p className="text-red-400 text-sm">{error}</p>}
-        
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-8 rounded-full text-lg transition-all shadow-lg disabled:opacity-50"
-        >
-          {loading ? 'מתחבר...' : 'כניסה'}
-        </button>
-      </form>
-
-      <div className="mt-8 pt-4 border-t border-gray-700">
-        <button 
-            onClick={toggleMode}
-            className="text-xs text-gray-500 hover:text-cyan-400 transition-colors underline"
-        >
-            {isAdminMode ? 'חזרה למסך כניסה' : 'כניסת מנהל (Admin)'}
-        </button>
       </div>
     </div>
   );
