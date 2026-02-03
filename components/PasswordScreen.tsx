@@ -26,7 +26,8 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
   useEffect(() => {
     if (isFirebaseInitialized) {
       getDoc(doc(db, "settings", "access")).then(snap => {
-        if (snap.exists()) setRemotePass(snap.data().questionnairePassword);
+        // Fix: Use type assertion to access questionnairePassword from unknown DocumentData
+        if (snap.exists()) setRemotePass((snap.data() as any).questionnairePassword);
       });
     }
   }, []);

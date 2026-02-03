@@ -37,7 +37,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const fetchCurrentPassword = async () => {
     try {
         const snap = await getDoc(doc(db, "settings", "access"));
-        if (snap.exists()) setQPassword(snap.data().questionnairePassword || 'inspire');
+        // Fix: Use type assertion to access questionnairePassword from unknown DocumentData
+        if (snap.exists()) setQPassword((snap.data() as any).questionnairePassword || 'inspire');
     } catch (e) {
         console.warn("Failed to fetch current password settings");
     }

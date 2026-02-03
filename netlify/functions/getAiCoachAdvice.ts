@@ -53,7 +53,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         מבנה התשובה הנדרש (בעברית, פורמט Markdown):
         1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה?
         2. נקודות עיוורון: מה הצוות מפספס?
-        3. 3 המלצות פרקטיות ומידיות לשיפור המצב.`;
+        3. 3 המלצות פרקטיות ומידיות לשיפור המצב.
+        חשוב: ענה בצורה מפורטת ומלאה. אל תעצור באמצע.`;
     } else {
         const sA = Number(scores?.a || 0);
         const sB = Number(scores?.b || 0);
@@ -67,17 +68,18 @@ const handler: Handler = async (event: HandlerEvent) => {
         const colors = [{n:'אדום',v:r},{n:'צהוב',v:y},{n:'ירוק',v:g},{n:'כחול',v:b}].sort((m,n)=>n.v-m.v);
 
         systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n} והצבע המשני הוא ${colors[1].n}.
-        ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.`;
+        ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.
+        חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
     }
 
-    // Direct call with explicit content structure for best compatibility
+    // Increased maxOutputTokens to 4000 to accommodate long Hebrew responses
     const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview", 
         contents: [{ role: 'user', parts: [{ text: userInput }] }],
         config: {
             systemInstruction: systemInstruction,
             temperature: 0.7,
-            maxOutputTokens: 1000
+            maxOutputTokens: 4000 
         }
     });
 
@@ -94,13 +96,12 @@ const handler: Handler = async (event: HandlerEvent) => {
   } catch (error: any) {
     console.error("Gemini API Error details:", error);
     
-    // Check for Referrer Blocked Error
     if (error.message?.includes('PERMISSION_DENIED') && error.message?.includes('referer')) {
         return {
             statusCode: 403,
             headers,
             body: JSON.stringify({ 
-              text: `מפתח ה-API שלך חסום לשימוש בשרת. עליך להיכנס ל-Google Cloud Console, ללכת ל-Credentials, ולבטל את ה-HTTP Referrer restriction (להעביר ל-None). המפתח נשאר בטוח כי הוא מופעל מתוך Netlify Function.` 
+              text: `שגיאת הרשאה: מפתח ה-API חסום לשימוש בשרת. עליך לבטל את ה-HTTP Referrer restriction ב-Google Cloud Console.` 
             }),
         };
     }
@@ -109,7 +110,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       statusCode: 500,
       headers,
       body: JSON.stringify({ 
-        text: `חלה שגיאה בעיבוד ה-AI. אנא וודא שמפתח ה-API תקין ומוגדר ללא מגבלות דומיין ב-Google Cloud Console. שגיאה: ${error.message || 'שגיאה כללית'}` 
+        text: `חלה שגיאה בעיבוד ה-AI. פרטי שגיאה: ${error.message || 'שגיאה כללית'}` 
       }),
     };
   }

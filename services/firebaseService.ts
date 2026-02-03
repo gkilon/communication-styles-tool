@@ -131,7 +131,8 @@ export const getTeams = async (): Promise<Team[]> => {
     const querySnapshot = await getDocs(teamsRef);
     const teams: Team[] = [];
     querySnapshot.forEach((doc) => {
-        teams.push({ id: doc.id, ...doc.data() } as Team);
+        // Fix: Use type assertion to allow spreading unknown DocumentData
+        teams.push({ id: doc.id, ...(doc.data() as any) } as Team);
     });
     return teams;
 };
