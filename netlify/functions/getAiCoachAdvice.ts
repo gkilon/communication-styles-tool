@@ -23,7 +23,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר." })
+      body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר בהגדרות Netlify." })
     };
   }
 
@@ -50,18 +50,16 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         האתגר שהוצג: "${userInput}"
 
-        מבנה התשובה הנדרש:
+        מבנה התשובה הנדרש (בעברית, פורמט Markdown):
         1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה?
         2. נקודות עיוורון: מה הצוות מפספס?
-        3. 3 המלצות פרקטיות ומידיות לשיפור המצב.
-        כתוב בעברית מקצועית, רהוטה ומעוררת השראה בפורמט Markdown.`;
+        3. 3 המלצות פרקטיות ומידיות לשיפור המצב.`;
     } else {
         const sA = Number(scores?.a || 0);
         const sB = Number(scores?.b || 0);
         const sC = Number(scores?.c || 0);
         const sD = Number(scores?.d || 0);
         
-        // Calculate the 4 color profiles from the 2 axes
         const r = sA + sC;
         const y = sA + sD;
         const g = sB + sD;
@@ -69,36 +67,38 @@ const handler: Handler = async (event: HandlerEvent) => {
         const colors = [{n:'אדום',v:r},{n:'צהוב',v:y},{n:'ירוק',v:g},{n:'כחול',v:b}].sort((m,n)=>n.v-m.v);
 
         systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n} והצבע המשני הוא ${colors[1].n}.
-        תפקידך לענות על שאלות המשתמש בהתבסס על הפרופיל שלו. 
-        השאלה: "${userInput}"
-        ענה בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.`;
+        ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.`;
     }
 
+    // Simplest possible call to Gemini 3 to ensure success across SDK environments
     const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview", 
-        contents: userInput,
+        contents: userInput, // Sending direct string for maximum reliability
         config: {
             systemInstruction: systemInstruction,
             temperature: 0.7,
-            topP: 0.9,
             maxOutputTokens: 1000
         }
     });
 
-    const outputText = response.text;
+    if (!response || !response.text) {
+        throw new Error("AI returned empty response");
+    }
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ text: outputText }),
+      body: JSON.stringify({ text: response.text }),
     };
 
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    console.error("Gemini API Error details:", error);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ text: "חלה שגיאה בעיבוד ה-AI. אנא נסה שוב בעוד כמה דקות." }),
+      body: JSON.stringify({ 
+        text: `חלה שגיאה בעיבוד ה-AI. אנא וודא שמפתח ה-API תקין ב-Netlify. פרטי שגיאה: ${error.message || 'שגיאה כללית'}` 
+      }),
     };
   }
 };

@@ -18,9 +18,14 @@ interface SimpleAppProps {
 const STORAGE_KEY_ANSWERS = 'comm_style_answers';
 const STORAGE_KEY_STEP = 'comm_style_step';
 const STORAGE_KEY_INDEX = 'comm_style_index';
+const STORAGE_KEY_AUTH = 'comm_style_is_auth';
 
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Load initial authentication state from localStorage
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem(STORAGE_KEY_AUTH) === 'true';
+  });
+  
   const [showTeamAuth, setShowTeamAuth] = useState(false);
   
   // Persistence initialization
@@ -39,13 +44,15 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     return saved ? JSON.parse(saved) : {};
   });
 
-  // Save progress to localStorage whenever it changes
+  // Save progress and auth state to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_ANSWERS, JSON.stringify(answers));
     localStorage.setItem(STORAGE_KEY_STEP, step);
     localStorage.setItem(STORAGE_KEY_INDEX, currentQuestionIndex.toString());
-  }, [answers, step, currentQuestionIndex]);
+    localStorage.setItem(STORAGE_KEY_AUTH, isAuthenticated.toString());
+  }, [answers, step, currentQuestionIndex, isAuthenticated]);
 
+  // Sync with Firebase User if available
   useEffect(() => {
     if (user) {
         setIsAuthenticated(true);
@@ -94,6 +101,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     setAnswers({});
     setCurrentQuestionIndex(0);
     setStep('intro');
+    // We keep isAuthenticated true if they just want to reset the questionnaire
     localStorage.removeItem(STORAGE_KEY_ANSWERS);
     localStorage.removeItem(STORAGE_KEY_STEP);
     localStorage.removeItem(STORAGE_KEY_INDEX);
@@ -106,6 +114,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   const handleLogout = () => {
     setIsAuthenticated(false);
     handleReset();
+    localStorage.removeItem(STORAGE_KEY_AUTH);
     import('firebase/auth').then(({ signOut, getAuth }) => {
         const auth = getAuth();
         if (auth.currentUser) signOut(auth);
@@ -127,7 +136,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                   onClick={handleLogout} 
                   className="text-sm text-gray-400 hover:text-white border border-gray-600 rounded px-4 py-2 bg-gray-800/50 transition-colors"
                 >
-                  יציאה
+                  יציאה / איפוס
                 </button>
             </div>
           )}
@@ -136,7 +145,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
         <main className="w-full flex justify-center">
             {!isAuthenticated ? (
                 showTeamAuth ? (
-                    <AuthScreen onLoginSuccess={() => {}} onBack={() => setShowTeamAuth(false)} />
+                    <AuthScreen onLoginSuccess={() => setIsAuthenticated(true)} onBack={() => setShowTeamAuth(false)} />
                 ) : (
                     <PasswordScreen 
                         onAuthenticate={handleSimpleAuthenticate} 
@@ -152,7 +161,10 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                         {Object.keys(answers).length > 0 && (
                           <div className="max-w-md mx-auto bg-cyan-900/20 border border-cyan-500/30 p-4 rounded-xl text-center mb-6">
                             <p className="text-cyan-300 mb-2">נמצאו תשובות שמולאו בעבר</p>
-                            <button onClick={handleStart} className="text-white bg-cyan-600 px-4 py-1 rounded-lg text-sm font-bold">המשך מאיפה שעצרתי</button>
+                            <div className="flex justify-center gap-3">
+                                <button onClick={handleStart} className="text-white bg-cyan-600 px-4 py-1 rounded-lg text-sm font-bold">המשך מאיפה שעצרתי</button>
+                                <button onClick={handleReset} className="text-gray-400 border border-gray-600 px-3 py-1 rounded-lg text-xs">התחל מחדש</button>
+                            </div>
                           </div>
                         )}
                         <IntroScreen onStart={handleStart} />

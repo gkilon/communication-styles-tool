@@ -4,64 +4,55 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Prevent color distortion on mobile devices -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Critical: Force the browser to respect our dark theme and not attempt to "fix" it -->
     <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#0f172a">
     <title>שאלון סגנונות תקשורת</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
-    <!-- Global Error Handler for White Screen Debugging -->
-    <script>
-      window.onerror = function(message, source, lineno, colno, error) {
-        var root = document.getElementById('root');
-        if (root && root.innerHTML.trim() === "") {
-            var errorDiv = document.createElement('div');
-            errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#111;color:#ff5555;padding:20px;font-family:monospace;z-index:9999;direction:ltr;overflow:auto;';
-            errorDiv.innerHTML = '<h1>Startup Error</h1><p>' + message + '</p><p>Source: ' + source + ':' + lineno + '</p>';
-            if(error && error.stack) {
-               errorDiv.innerHTML += '<pre style="white-space:pre-wrap;margin-top:20px;color:#ccc">' + error.stack + '</pre>';
-            }
-            document.body.appendChild(errorDiv);
-        }
-      };
-    </script>
-
     <style>
       :root {
-        color-scheme: dark;
+        color-scheme: dark !important;
+        --background-color: #0f172a;
       }
+      
+      html {
+        background-color: #0f172a !important;
+        color-scheme: dark !important;
+        forced-color-adjust: none !important;
+      }
+
       body {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        background-color: #0f172a; /* Explicit base color */
+        background-color: #0f172a !important;
+        /* Prevent mobile "force dark mode" from inverting colors */
+        forced-color-adjust: none !important;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
       }
+
+      #root {
+        background-color: transparent !important;
+        min-height: 100vh;
+      }
+
       @keyframes fade-in-up {
-        from {
-          opacity: 0;
-          transform: translateY(20px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
       }
-      .animate-fade-in-up {
-        animation: fade-in-up 0.5s ease-out forwards;
-      }
-      .animate-fade-in {
-        animation: fade-in-up 0.5s ease-out forwards;
-      }
-      .text-shadow {
-        text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
-      }
-      /* Prevent mobile browsers from inverting or "correcting" our colors */
-      @media (prefers-color-scheme: dark) {
-        html {
-          background-color: #000;
-        }
+      
+      .animate-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; }
+      .text-shadow { text-shadow: 1px 1px 4px rgba(0, 0, 0, 1) !important; }
+
+      /* Special fix for chart quadrants to ensure they are always visible and vibrant */
+      .chart-quadrant {
+         mix-blend-mode: normal !important;
+         filter: none !important;
+         opacity: 1 !important;
       }
     </style>
 <script type="importmap">
@@ -81,7 +72,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-gradient-to-br from-gray-900 via-slate-900 to-black text-white min-h-screen">
+  <body class="text-white min-h-screen">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
