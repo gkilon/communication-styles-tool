@@ -23,7 +23,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ text: "שגיאת שרת: API_KEY חסר בהגדרות Netlify." })
+      body: JSON.stringify({ text: "שגיאת שרת: מפתח API חסר." })
     };
   }
 
@@ -32,55 +32,60 @@ const handler: Handler = async (event: HandlerEvent) => {
     const { scores, userInput, mode, teamStats } = body;
 
     if (!userInput) {
-      return { statusCode: 400, headers, body: JSON.stringify({ text: "לא הוזן טקסט לניתוח." }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ text: "נא להזין טקסט." }) };
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: apiKey });
     let systemInstruction = "";
     
     if (mode === 'team') {
         const { red, yellow, green, blue, total } = teamStats || { red:0, yellow:0, green:0, blue:0, total:0 };
         
-        systemInstruction = `אתה יועץ ארגוני בכיר. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
+        systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
         נתוני הצוות (סה"כ ${total} משתתפים):
         - אדום: ${red}
         - צהוב: ${yellow}
         - ירוק: ${green}
         - כחול: ${blue}
 
-        האתגר: "${userInput}"
+        האתגר שהוצג: "${userInput}"
 
-        נתח בפירוט:
-        1. מדוע הרכב הצבעים הזה חווה את האתגר הזה?
-        2. מהו הסגנון החסר בצוות?
-        3. 3 המלצות פרקטיות לביצוע מיידי.
-        כתוב בעברית מקצועית בפורמט Markdown.`;
+        מבנה התשובה הנדרש:
+        1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה?
+        2. נקודות עיוורון: מה הצוות מפספס?
+        3. 3 המלצות פרקטיות ומידיות לשיפור המצב.
+        כתוב בעברית מקצועית, רהוטה ומעוררת השראה בפורמט Markdown.`;
     } else {
         const sA = Number(scores?.a || 0);
         const sB = Number(scores?.b || 0);
         const sC = Number(scores?.c || 0);
         const sD = Number(scores?.d || 0);
+        
+        // Calculate the 4 color profiles from the 2 axes
         const r = sA + sC;
         const y = sA + sD;
         const g = sB + sD;
         const b = sB + sC;
         const colors = [{n:'אדום',v:r},{n:'צהוב',v:y},{n:'ירוק',v:g},{n:'כחול',v:b}].sort((m,n)=>n.v-m.v);
 
-        systemInstruction = `אתה מאמן תקשורת אישי. המשתמש הוא בפרופיל דומיננטי ${colors[0].n} ומשני ${colors[1].n}.
-        ענה על השאלה: "${userInput}" בצורה תומכת ומקדמת בעברית.`;
+        systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n} והצבע המשני הוא ${colors[1].n}.
+        תפקידך לענות על שאלות המשתמש בהתבסס על הפרופיל שלו. 
+        השאלה: "${userInput}"
+        ענה בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.`;
     }
 
     const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview", 
-        contents: userInput, // Simplified format as per guidelines
+        contents: userInput,
         config: {
             systemInstruction: systemInstruction,
-            temperature: 0.8,
-            topP: 0.95
+            temperature: 0.7,
+            topP: 0.9,
+            maxOutputTokens: 1000
         }
     });
 
-    const outputText = response.text || "לא הצלחתי לגבש תשובה. נסה שוב בניסוח אחר.";
+    const outputText = response.text;
 
     return {
       statusCode: 200,
@@ -89,11 +94,11 @@ const handler: Handler = async (event: HandlerEvent) => {
     };
 
   } catch (error: any) {
-    console.error("Gemini Function Error:", error);
+    console.error("Gemini API Error:", error);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ text: "חלה שגיאה בעיבוד ה-AI. אנא נסה שוב בעוד רגע." }),
+      body: JSON.stringify({ text: "חלה שגיאה בעיבוד ה-AI. אנא נסה שוב בעוד כמה דקות." }),
     };
   }
 };

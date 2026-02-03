@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Scores } from '../types';
 import { getAiCoachAdvice } from '../services/geminiService';
 import { SparklesIcon } from './icons/Icons';
@@ -17,56 +17,53 @@ const PRESET_QUESTIONS = [
   "איך אוכל לשפר את עבודת הצוות שלי?",
   "מה הדרך הטובה ביותר עבורי להשפיע על אחרים?",
   "תן לי טיפ להתמודדות עם קונפליקטים.",
-  "כיצד אוכל למנף את החוזקות שלי כדי להתקדם בקריירה?"
+  "כיצד אוכל למנף את החוזקות שלי כדי להתקדם?"
 ];
 
 const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   if (!text) return null;
 
-  let htmlContent = '';
-  const marked = (window as any).marked;
+  const [htmlContent, setHtmlContent] = useState('');
 
-  try {
-    // Check if marked is available and is a function
-    if (marked && typeof marked.parse === 'function') {
-        const result = marked.parse(text);
-        // Ensure we got a string back (some versions might return a Promise if async is enabled)
-        if (typeof result === 'string') {
-            htmlContent = result;
+  useEffect(() => {
+    const renderMarkdown = () => {
+      const marked = (window as any).marked;
+      try {
+        if (marked) {
+          // Robust check for different marked versions
+          const parsed = typeof marked.parse === 'function' ? marked.parse(text) : (typeof marked === 'function' ? marked(text) : text);
+          setHtmlContent(parsed);
         } else {
-            // Fallback for Promise/unexpected return
-            htmlContent = text.replace(/\n/g, '<br />');
+          setHtmlContent(text.replace(/\n/g, '<br />'));
         }
-    } else if (marked && typeof marked === 'function') {
-        // Older marked versions
-        const result = marked(text);
-        if (typeof result === 'string') {
-             htmlContent = result;
-        } else {
-             htmlContent = text.replace(/\n/g, '<br />');
-        }
-    } else {
-        // Marked not loaded
-        htmlContent = text.replace(/\n/g, '<br />');
-    }
-  } catch (error) {
-    console.warn("Error parsing AI coach markdown:", error);
-    htmlContent = text.replace(/\n/g, '<br />');
-  }
+      } catch (error) {
+        console.warn("Markdown parsing failed, falling back to plain text", error);
+        setHtmlContent(text.replace(/\n/g, '<br />'));
+      }
+    };
+    renderMarkdown();
+  }, [text]);
 
   return (
     <div
-      className="prose prose-invert max-w-none prose-p:text-gray-200 prose-ul:text-gray-200 prose-li:text-gray-200"
+      className="prose prose-invert max-w-none prose-p:text-gray-200 prose-p:leading-relaxed prose-ul:text-gray-200 prose-li:text-gray-200"
       dangerouslySetInnerHTML={{ __html: htmlContent }}
     />
   );
 };
 
-
 export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
   const [userInput, setUserInput] = useState('');
   const [conversation, setConversation] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [conversation, isLoading]);
 
   const handleSendMessage = async (messageText?: string) => {
     const text = messageText || userInput;
@@ -79,61 +76,81 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
 
     try {
       const aiResponse = await getAiCoachAdvice(scores, text);
-      // Ensure we always have a string, even if the service returns null/undefined somehow
-      const safeResponse = aiResponse || "מצטער, התקבלה תשובה ריקה. אנא נסה שוב.";
-      const newAiMessage: Message = { sender: 'ai', text: safeResponse };
-      setConversation(prev => [...prev, newAiMessage]);
-    } catch (error) {
-      console.error("Component error:", error);
-      const errorMessage: Message = { sender: 'ai', text: 'מצטער, התרחשה שגיאה בתקשורת. אנא נסה שוב.' };
-      setConversation(prev => [...prev, errorMessage]);
+      const safeResponse = aiResponse || "מצטער, חלה שגיאה בעיבוד התשובה. נסה שוב.";
+      setConversation(prev => [...prev, { sender: 'ai', text: safeResponse }]);
+    } catch (error: any) {
+      console.error("AI Coach interaction failed:", error);
+      setConversation(prev => [...prev, { 
+        sender: 'ai', 
+        text: "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב." 
+      }]);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div>
-      <h3 className="text-2xl font-bold text-cyan-300 mb-4 flex items-center">
-        <SparklesIcon className="w-8 h-8 ml-3 text-yellow-400" />
-        מאמן ה-AI האישי שלך
-      </h3>
-      <p className="text-gray-400 mb-4">שאל שאלות וקבל ייעוץ מותאם אישית לפרופיל התקשורת שלך.</p>
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="bg-cyan-500/20 p-2 rounded-xl">
+          <SparklesIcon className="w-8 h-8 text-yellow-400" />
+        </div>
+        <div>
+          <h3 className="text-2xl font-bold text-white">מאמן ה-AI האישי שלך</h3>
+          <p className="text-gray-400 text-sm font-medium">ייעוץ מותאם אישית לפרופיל התקשורת שלך</p>
+        </div>
+      </div>
       
-      <div className="bg-gray-900 p-4 rounded-lg h-80 overflow-y-auto mb-4 border border-gray-700">
+      <div 
+        ref={scrollRef}
+        className="bg-gray-900/80 rounded-2xl h-[400px] overflow-y-auto mb-6 border border-gray-700/50 p-6 shadow-inner scroll-smooth"
+      >
         {conversation.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <p>התחל שיחה או בחר שאלה מוכנה.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4 w-full">
-              {PRESET_QUESTIONS.map((q, i) => (
-                <button key={i} onClick={() => handleSendMessage(q)} className="text-sm bg-gray-700 hover:bg-gray-600 p-2 rounded-md transition-colors">
-                  {q}
-                </button>
-              ))}
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
+            <div className="bg-gray-800/50 p-6 rounded-2xl border border-dashed border-gray-700">
+                <p className="text-gray-400 mb-4 font-medium italic">"היי! אני כאן כדי לעזור לך לרתום את החוזקות שלך. על מה נרצה לדבר היום?"</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {PRESET_QUESTIONS.map((q, i) => (
+                    <button 
+                      key={i} 
+                      onClick={() => handleSendMessage(q)} 
+                      className="text-right text-sm bg-gray-800 hover:bg-gray-700 hover:text-cyan-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
             </div>
           </div>
         )}
-        <div className="space-y-4">
+        
+        <div className="space-y-6">
           {conversation.map((msg, index) => (
-            <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
               <div
-                className={`max-w-xl p-3 rounded-lg ${msg.sender === 'user' ? 'bg-cyan-800 text-white' : 'bg-gray-700 text-gray-200'}`}
+                className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${
+                  msg.sender === 'user' 
+                  ? 'bg-gradient-to-br from-cyan-700 to-blue-800 text-white rounded-tl-none' 
+                  : 'bg-gray-800 text-gray-200 border border-gray-700 rounded-tr-none'
+                }`}
               >
                 {msg.sender === 'ai' ? (
                    <AiMessageContent text={msg.text} />
                 ) : (
-                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                  <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                 )}
               </div>
             </div>
           ))}
+          
            {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-700 text-gray-200 p-3 rounded-lg">
-                <div className="flex items-center space-x-2 space-x-reverse">
-                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
-                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse [animation-delay:0.4s]"></div>
+            <div className="flex justify-start animate-fade-in">
+              <div className="bg-gray-800 border border-gray-700 p-4 rounded-2xl rounded-tr-none">
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
+                    <span className="text-xs text-gray-500 mr-2 font-bold uppercase tracking-wider">מעבד נתונים...</span>
                 </div>
               </div>
             </div>
@@ -141,22 +158,22 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
         </div>
       </div>
 
-      <div className="flex space-x-2 space-x-reverse">
+      <div className="relative group">
         <input
           type="text"
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+          onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
           placeholder="כתוב את שאלתך כאן..."
-          className="flex-grow bg-gray-700 border border-gray-600 rounded-full py-2 px-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          className="w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 pr-5 pl-20 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-all shadow-lg"
           disabled={isLoading}
         />
         <button
           onClick={() => handleSendMessage()}
           disabled={isLoading || !userInput.trim()}
-          className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-full transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
+          className="absolute left-2 top-2 bottom-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-6 rounded-xl transition-all disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md"
         >
-          {isLoading ? 'חושב...' : 'שלח'}
+          {isLoading ? '...' : 'שלח'}
         </button>
       </div>
     </div>
