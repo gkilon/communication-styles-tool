@@ -21,14 +21,14 @@ const STORAGE_KEY_INDEX = 'comm_style_index';
 const STORAGE_KEY_AUTH = 'comm_style_is_auth';
 
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
-  // Load initial authentication state from localStorage
+  // Persistence initialization for Authentication
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem(STORAGE_KEY_AUTH) === 'true';
   });
   
   const [showTeamAuth, setShowTeamAuth] = useState(false);
   
-  // Persistence initialization
+  // Persistence initialization for Progress
   const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_STEP);
     return (saved as any) || 'intro';
@@ -80,6 +80,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     return newScores;
   }, [step, answers]);
 
+  // Keep results updated in cloud if user is logged in
   useEffect(() => {
     if (step === 'results' && scores && user) {
         saveUserResults(scores).catch(err => console.error("Firebase save error:", err));
@@ -98,10 +99,10 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   const handleSubmit = () => setStep('results');
   
   const handleReset = () => {
+    if (!window.confirm("האם אתה בטוח שברצונך למחוק את כל התשובות ולהתחיל מחדש?")) return;
     setAnswers({});
     setCurrentQuestionIndex(0);
     setStep('intro');
-    // We keep isAuthenticated true if they just want to reset the questionnaire
     localStorage.removeItem(STORAGE_KEY_ANSWERS);
     localStorage.removeItem(STORAGE_KEY_STEP);
     localStorage.removeItem(STORAGE_KEY_INDEX);
@@ -112,8 +113,8 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   };
 
   const handleLogout = () => {
+    if (!window.confirm("האם לצאת מהמערכת? (התשובות ישמרו בדפדפן זה)")) return;
     setIsAuthenticated(false);
-    handleReset();
     localStorage.removeItem(STORAGE_KEY_AUTH);
     import('firebase/auth').then(({ signOut, getAuth }) => {
         const auth = getAuth();
@@ -131,12 +132,12 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
           <p className="text-gray-300 mt-2 text-xl font-light">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
           
           {isAuthenticated && (
-            <div className="absolute top-0 left-0 flex flex-col items-end">
+            <div className="absolute top-0 left-0 flex gap-2">
                 <button 
                   onClick={handleLogout} 
-                  className="text-sm text-gray-400 hover:text-white border border-gray-600 rounded px-4 py-2 bg-gray-800/50 transition-colors"
+                  className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-3 py-1 bg-gray-800/50 transition-colors"
                 >
-                  יציאה / איפוס
+                  יציאה
                 </button>
             </div>
           )}
@@ -159,11 +160,12 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                     {step === 'intro' && (
                       <div className="space-y-6">
                         {Object.keys(answers).length > 0 && (
-                          <div className="max-w-md mx-auto bg-cyan-900/20 border border-cyan-500/30 p-4 rounded-xl text-center mb-6">
-                            <p className="text-cyan-300 mb-2">נמצאו תשובות שמולאו בעבר</p>
-                            <div className="flex justify-center gap-3">
-                                <button onClick={handleStart} className="text-white bg-cyan-600 px-4 py-1 rounded-lg text-sm font-bold">המשך מאיפה שעצרתי</button>
-                                <button onClick={handleReset} className="text-gray-400 border border-gray-600 px-3 py-1 rounded-lg text-xs">התחל מחדש</button>
+                          <div className="max-w-md mx-auto bg-cyan-900/40 border border-cyan-500/50 p-6 rounded-2xl text-center mb-8 shadow-2xl animate-fade-in">
+                            <h4 className="text-xl font-bold text-white mb-2">ברוך השב!</h4>
+                            <p className="text-gray-300 mb-4 text-sm">זיהינו שמילאת חלק מהשאלון בעבר. איך תרצה להמשיך?</p>
+                            <div className="flex flex-col gap-3">
+                                <button onClick={handleStart} className="w-full text-white bg-cyan-600 hover:bg-cyan-500 py-3 rounded-xl font-bold transition-all shadow-lg">המשך מאיפה שעצרתי</button>
+                                <button onClick={handleReset} className="w-full text-gray-400 border border-gray-700 hover:bg-gray-800 py-2 rounded-xl text-xs transition-all">מחק הכל והתחל מחדש</button>
                             </div>
                           </div>
                         )}

@@ -70,10 +70,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.`;
     }
 
-    // Simplest possible call to Gemini 3 to ensure success across SDK environments
+    // Direct call with explicit content structure for best compatibility
     const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview", 
-        contents: userInput, // Sending direct string for maximum reliability
+        contents: [{ role: 'user', parts: [{ text: userInput }] }],
         config: {
             systemInstruction: systemInstruction,
             temperature: 0.7,
@@ -93,11 +93,23 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   } catch (error: any) {
     console.error("Gemini API Error details:", error);
+    
+    // Check for Referrer Blocked Error
+    if (error.message?.includes('PERMISSION_DENIED') && error.message?.includes('referer')) {
+        return {
+            statusCode: 403,
+            headers,
+            body: JSON.stringify({ 
+              text: `מפתח ה-API שלך חסום לשימוש בשרת. עליך להיכנס ל-Google Cloud Console, ללכת ל-Credentials, ולבטל את ה-HTTP Referrer restriction (להעביר ל-None). המפתח נשאר בטוח כי הוא מופעל מתוך Netlify Function.` 
+            }),
+        };
+    }
+
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({ 
-        text: `חלה שגיאה בעיבוד ה-AI. אנא וודא שמפתח ה-API תקין ב-Netlify. פרטי שגיאה: ${error.message || 'שגיאה כללית'}` 
+        text: `חלה שגיאה בעיבוד ה-AI. אנא וודא שמפתח ה-API תקין ומוגדר ללא מגבלות דומיין ב-Google Cloud Console. שגיאה: ${error.message || 'שגיאה כללית'}` 
       }),
     };
   }
