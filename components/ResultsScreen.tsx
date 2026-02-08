@@ -38,23 +38,21 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
     setIsGeneratingPdf(true);
 
     try {
-        // Force element to a width that looks good in PDF
-        const originalWidth = input.style.width;
-        input.style.width = '1000px';
+        // Apply compact mode for export
+        input.classList.add('pdf-export-mode');
 
         const canvas = await html2canvas(input, {
             scale: 2, 
             backgroundColor: '#0f172a',
             useCORS: true,
             logging: false,
-            // Ensure we capture the full height and handle scroll offset
             windowWidth: 1200,
             scrollY: -window.scrollY,
             scrollX: 0,
         });
         
-        // Restore original width
-        input.style.width = originalWidth;
+        // Remove compact mode immediately after capture
+        input.classList.remove('pdf-export-mode');
 
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
@@ -74,17 +72,15 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
         pdf.addImage(imgData, 'PNG', margin, position, pdfContentWidth, pdfContentHeight);
         heightLeft -= (pageHeight - (margin * 2));
 
-        // Subsequent pages if content is longer than A4
+        // Subsequent pages if content is STILL longer than A4 even with shrinking
         while (heightLeft > 0) {
             position = heightLeft - pdfContentHeight + margin;
             pdf.addPage();
-            // Fill background with same dark color as the app for consistent looks
             pdf.setFillColor(15, 23, 42); // #0f172a
             pdf.rect(0, 0, pageWidth, pageHeight, 'F');
             
             pdf.addImage(imgData, 'PNG', margin, position, pdfContentWidth, pdfContentHeight);
             
-            // Add footer info to each page
             pdf.setFontSize(8);
             pdf.setTextColor(100, 100, 100);
             pdf.text('Kilon Consulting - דו"ח סגנון תקשורת אישי', pageWidth / 2, pageHeight - 5, { align: 'center' });
@@ -96,6 +92,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
     } catch (error) {
         console.error("Error generating PDF:", error);
         alert("חלה שגיאה ביצירת ה-PDF. נסה שוב או צלם מסך.");
+        if (input) input.classList.remove('pdf-export-mode');
     } finally {
         setIsGeneratingPdf(false);
     }
@@ -106,10 +103,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
       {/* Wrapper for PDF content */}
       <div ref={resultsRef} className="bg-slate-900 p-6 sm:p-12 rounded-[2rem] shadow-2xl border border-slate-800 overflow-hidden text-right" dir="rtl">
         
-        {/* PDF Header Section */}
-        <div className="border-b border-slate-700 pb-10 mb-10 flex flex-col md:flex-row justify-between items-center gap-8">
+        {/* Header Section with semantic class for PDF shrinking */}
+        <div className="header-section border-b border-slate-700 pb-10 mb-10 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="text-right flex-1">
-            <h1 className="text-5xl font-black text-white mb-3">דו"ח סגנון תקשורת</h1>
+            <h1 className="text-5xl font-black text-white mb-3 transition-all">דו"ח סגנון תקשורת</h1>
             <p className="text-cyan-400 font-bold uppercase tracking-widest text-lg">ניתוח מקצועי מבוסס מודל הצבעים</p>
           </div>
           <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50 text-center min-w-[200px]">
@@ -118,17 +115,17 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-10 mb-10 items-stretch">
-          <div className="flex-none lg:w-[40%] bg-slate-800/30 p-8 rounded-[2.5rem] border border-slate-700/50 shadow-inner">
+        <div className="main-content-gap flex flex-col lg:flex-row gap-10 mb-10 items-stretch">
+          <div className="chart-container flex-none lg:w-[40%] bg-slate-800/30 p-8 rounded-[2.5rem] border border-slate-700/50 shadow-inner">
             <ResultsChart scores={scores} />
           </div>
-          <div className="flex-1 bg-slate-800/30 p-8 rounded-[2.5rem] border border-slate-700/50 shadow-inner">
+          <div className="analysis-container flex-1 bg-slate-800/30 p-8 rounded-[2.5rem] border border-slate-700/50 shadow-inner">
             <CombinedAnalysis analysis={profileAnalysis} />
           </div>
         </div>
 
-        {/* This section will be included in the PDF */}
-        <div className="bg-gradient-to-br from-slate-800/20 to-cyan-900/10 p-10 rounded-[2.5rem] border border-dashed border-slate-700 relative overflow-hidden">
+        {/* Summary box with specific class for PDF shrinking */}
+        <div className="summary-box bg-gradient-to-br from-slate-800/20 to-cyan-900/10 p-10 rounded-[2.5rem] border border-dashed border-slate-700 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-3xl -mr-16 -mt-16"></div>
           <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
              <span className="text-cyan-400">📝</span> סיכום והמלצות מפתח
@@ -145,7 +142,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
         </div>
       </div>
       
-      {/* AI Coach Section - Kept separate from PDF for performance/cleanliness */}
+      {/* AI Coach Section - Kept separate from PDF */}
       <div className="bg-gray-800 p-8 rounded-[2rem] shadow-xl border border-gray-700 transition-all hover:border-cyan-500/30">
           <AiCoach scores={scores} />
       </div>
