@@ -18,7 +18,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     return { statusCode: 405, headers, body: JSON.stringify({ text: 'Method Not Allowed' }) };
   }
 
-  // Ensure API_KEY is present as per guidelines.
+  // Ensure API_KEY is present as per @google/genai guidelines.
   if (!process.env.API_KEY) {
     return {
       statusCode: 500,
@@ -35,7 +35,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       return { statusCode: 400, headers, body: JSON.stringify({ text: "נא להזין טקסט." }) };
     }
 
-    // Initialize GoogleGenAI with direct API key access.
+    // Initialize GoogleGenAI with named parameter apiKey.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     let systemInstruction = "";
     
@@ -73,18 +73,19 @@ const handler: Handler = async (event: HandlerEvent) => {
         חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
     }
 
-    // Call generateContent using the correct SDK pattern.
+    // Use gemini-3-pro-preview for complex reasoning tasks as per guidelines.
     const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview", 
+        model: "gemini-3-pro-preview", 
         contents: userInput,
         config: {
             systemInstruction: systemInstruction,
             temperature: 0.7,
-            maxOutputTokens: 4000 
+            // Include thinkingBudget for reasoning models; removed fixed maxOutputTokens to prevent response blocking.
+            thinkingConfig: { thinkingBudget: 4000 }
         }
     });
 
-    // Access the response text directly from the result.
+    // Access the response text directly as a property on the response object.
     const responseText = response.text;
     if (!responseText) {
         throw new Error("AI returned empty response");

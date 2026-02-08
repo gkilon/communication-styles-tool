@@ -38,7 +38,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
     setIsGeneratingPdf(true);
 
     try {
-        // Apply compact mode for export
+        // Toggle ultra-compact mode for capture
         input.classList.add('pdf-export-mode');
 
         const canvas = await html2canvas(input, {
@@ -46,12 +46,11 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
             backgroundColor: '#0f172a',
             useCORS: true,
             logging: false,
-            windowWidth: 1200,
+            windowWidth: 1000, 
             scrollY: -window.scrollY,
             scrollX: 0,
         });
         
-        // Remove compact mode immediately after capture
         input.classList.remove('pdf-export-mode');
 
         const imgData = canvas.toDataURL('image/png');
@@ -61,37 +60,29 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
         const pageHeight = pdf.internal.pageSize.getHeight();
         
         const imgProps = pdf.getImageProperties(imgData);
-        const margin = 10;
+        const margin = 8; 
         const pdfContentWidth = pageWidth - (margin * 2);
-        const pdfContentHeight = (imgProps.height * pdfContentWidth) / imgProps.width;
         
-        let heightLeft = pdfContentHeight;
-        let position = margin;
+        // Force the image to fit the page height if it's still too long
+        const maxContentHeight = pageHeight - (margin * 2);
+        const calculatedHeight = (imgProps.height * pdfContentWidth) / imgProps.width;
+        const finalContentHeight = Math.min(calculatedHeight, maxContentHeight);
 
-        // First page
-        pdf.addImage(imgData, 'PNG', margin, position, pdfContentWidth, pdfContentHeight);
-        heightLeft -= (pageHeight - (margin * 2));
-
-        // Subsequent pages if content is STILL longer than A4 even with shrinking
-        while (heightLeft > 0) {
-            position = heightLeft - pdfContentHeight + margin;
-            pdf.addPage();
-            pdf.setFillColor(15, 23, 42); // #0f172a
-            pdf.rect(0, 0, pageWidth, pageHeight, 'F');
-            
-            pdf.addImage(imgData, 'PNG', margin, position, pdfContentWidth, pdfContentHeight);
-            
-            pdf.setFontSize(8);
-            pdf.setTextColor(100, 100, 100);
-            pdf.text('Kilon Consulting - דו"ח סגנון תקשורת אישי', pageWidth / 2, pageHeight - 5, { align: 'center' });
-            
-            heightLeft -= pageHeight;
-        }
+        // Dark background for PDF
+        pdf.setFillColor(15, 23, 42); 
+        pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+        
+        pdf.addImage(imgData, 'PNG', margin, margin, pdfContentWidth, finalContentHeight);
+        
+        // Footer info
+        pdf.setFontSize(7);
+        pdf.setTextColor(80, 80, 80);
+        pdf.text('Kilon Consulting - דו"ח סגנון תקשורת אישי', pageWidth / 2, pageHeight - 5, { align: 'center' });
         
         pdf.save(`Communication_Profile_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
         console.error("Error generating PDF:", error);
-        alert("חלה שגיאה ביצירת ה-PDF. נסה שוב או צלם מסך.");
+        alert("חלה שגיאה ביצירת ה-PDF.");
         if (input) input.classList.remove('pdf-export-mode');
     } finally {
         setIsGeneratingPdf(false);
@@ -103,7 +94,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
       {/* Wrapper for PDF content */}
       <div ref={resultsRef} className="bg-slate-900 p-6 sm:p-12 rounded-[2rem] shadow-2xl border border-slate-800 overflow-hidden text-right" dir="rtl">
         
-        {/* Header Section with semantic class for PDF shrinking */}
         <div className="header-section border-b border-slate-700 pb-10 mb-10 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="text-right flex-1">
             <h1 className="text-5xl font-black text-white mb-3 transition-all">דו"ח סגנון תקשורת</h1>
@@ -124,7 +114,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
           </div>
         </div>
 
-        {/* Summary box with specific class for PDF shrinking */}
         <div className="summary-box bg-gradient-to-br from-slate-800/20 to-cyan-900/10 p-10 rounded-[2.5rem] border border-dashed border-slate-700 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-3xl -mr-16 -mt-16"></div>
           <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
@@ -134,7 +123,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
             הניתוח שלעיל משקף את ההעדפות הטבעיות שלך כפי שעלו מהשאלון. חשוב לזכור שסגנון תקשורת הוא מיומנות שניתן לפתח ולאזן לאורך זמן.
             השתמש בדו"ח זה ככלי למודעות עצמית ולשיפור ממשקי העבודה שלך עם סגנונות משלימים.
           </p>
-          <div className="mt-8 flex gap-4 flex-wrap">
+          <div className="tags-container mt-8 flex gap-4 flex-wrap">
               <span className="bg-slate-800 px-4 py-2 rounded-full text-xs text-gray-500 font-bold border border-slate-700">#מודעות_עצמית</span>
               <span className="bg-slate-800 px-4 py-2 rounded-full text-xs text-gray-500 font-bold border border-slate-700">#פיתוח_מנהיגות</span>
               <span className="bg-slate-800 px-4 py-2 rounded-full text-xs text-gray-500 font-bold border border-slate-700">#תקשורת_אפקטיבית</span>
@@ -147,7 +136,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
           <AiCoach scores={scores} />
       </div>
 
-      {/* Action buttons */}
       <div className="text-center mt-12 flex flex-wrap justify-center items-center gap-6 no-print">
         <button
           onClick={handleDownloadPdf}

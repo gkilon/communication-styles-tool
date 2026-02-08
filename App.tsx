@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, ReactNode, ErrorInfo, Component } from 'react';
+import React, { Component, useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import SimpleApp from './SimpleApp';
 import { AdminDashboard } from './components/AdminDashboard';
 import { auth, isFirebaseInitialized } from './firebaseConfig';
@@ -17,13 +17,13 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fix: Use the imported Component class directly to ensure proper inheritance in TypeScript.
-// This resolves the errors where 'state' and 'props' were not found on ErrorBoundary.
+// Fixed ErrorBoundary component issues with state/props recognition by using Component from react
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Explicitly defining state helps TypeScript recognize it when base class inheritance is ambiguous in some environments
+  public state: ErrorBoundaryState = { hasError: false };
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    // Fix: Correctly initialize state on the class component instance.
-    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -35,18 +35,15 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Fix: Destructure state and props from 'this' which are now correctly inherited from 'Component'.
-    const { hasError, error } = this.state;
-    const { children } = this.props;
-
-    if (hasError) {
+    // Correctly accessing state from the Component base class
+    if (this.state.hasError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-6 text-center" dir="rtl">
           <div className="bg-gray-800 p-8 rounded-2xl border-2 border-red-500 shadow-2xl max-w-md">
               <h1 className="text-3xl font-bold text-red-500 mb-4">אופס! משהו השתבש</h1>
-              <p className="text-gray-300 mb-6">חלה שגיאה בטעינת האפליקציה. ייתכן שקובץ חסר או פגום.</p>
+              <p className="text-gray-300 mb-6">חלה שגיאה בטעינת האפליקציה.</p>
               <pre className="bg-black/50 p-4 rounded text-xs text-red-300 overflow-auto mb-6 text-left" dir="ltr">
-                  {error?.message}
+                  {this.state.error?.message}
               </pre>
               <button 
                 onClick={() => window.location.reload()} 
@@ -58,7 +55,8 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         </div>
       );
     }
-    return children;
+    // Accessing children from props
+    return this.props.children;
   }
 }
 
@@ -67,7 +65,6 @@ export const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-     // Failsafe timer to exit loading state even if Firebase is slow
      const timer = setTimeout(() => {
        if (view === 'loading') setView('simple');
      }, 3000);
@@ -99,7 +96,7 @@ export const App: React.FC = () => {
      });
      
      return () => {
-       unsubscribe();
+       if (unsubscribe) unsubscribe();
        clearTimeout(timer);
      };
   }, []);

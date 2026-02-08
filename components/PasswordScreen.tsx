@@ -75,7 +75,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
       setPassword('');
   };
 
-  // Branding Component for reuse
+  // Updated Branding Component to match the new logo style
   const Branding = () => (
     <div className="mb-10 flex flex-col items-center">
       <a 
@@ -84,13 +84,14 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         rel="noopener noreferrer"
         className="group transition-all duration-300 transform hover:scale-105"
       >
-        <div className="flex items-center gap-3 bg-gray-900/40 px-5 py-3 rounded-2xl border border-gray-700/50 shadow-xl">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center font-black text-xl text-white group-hover:shadow-cyan-500/30 transition-all">
-            K
+        <div className="flex flex-col items-center">
+          <div className="flex items-center text-2xl md:text-3xl tracking-tight">
+            <span className="text-white font-light">GILAD</span>
+            <span className="text-white font-black ml-2">KILON</span>
+            <span className="text-cyan-500 font-black ml-1 leading-none text-3xl">.</span>
           </div>
-          <div className="text-right">
-            <div className="text-white font-black text-lg leading-none">KILON</div>
-            <div className="text-cyan-400 text-[10px] font-bold tracking-[0.2em] leading-none mt-1">CONSULTING</div>
+          <div className="text-gray-500 text-[8px] md:text-[9px] font-bold tracking-[0.3em] uppercase mt-1 border-t border-gray-800 pt-1 w-full text-center">
+            MANAGEMENT CONSULTING
           </div>
         </div>
       </a>
