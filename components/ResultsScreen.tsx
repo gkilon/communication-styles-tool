@@ -38,35 +38,64 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
     setIsGeneratingPdf(true);
 
     try {
-        // We temporarily adjust styling for PDF capture
+        // Force element to a width that looks good in PDF
+        const originalWidth = input.style.width;
+        input.style.width = '1000px';
+
         const canvas = await html2canvas(input, {
-            scale: 2, // High resolution
-            backgroundColor: '#0f172a', // Match the dark background
+            scale: 2, 
+            backgroundColor: '#0f172a',
             useCORS: true,
             logging: false,
-            windowWidth: 1200, // Fixed width for consistent rendering
+            // Ensure we capture the full height and handle scroll offset
+            windowWidth: 1200,
+            scrollY: -window.scrollY,
+            scrollX: 0,
         });
         
+        // Restore original width
+        input.style.width = originalWidth;
+
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
         
         const imgProps = pdf.getImageProperties(imgData);
         const margin = 10;
-        const contentWidth = pdfWidth - (margin * 2);
-        const contentHeight = (imgProps.height * contentWidth) / imgProps.width;
+        const pdfContentWidth = pageWidth - (margin * 2);
+        const pdfContentHeight = (imgProps.height * pdfContentWidth) / imgProps.width;
+        
+        let heightLeft = pdfContentHeight;
+        let position = margin;
 
-        pdf.addImage(imgData, 'PNG', margin, margin, contentWidth, contentHeight);
+        // First page
+        pdf.addImage(imgData, 'PNG', margin, position, pdfContentWidth, pdfContentHeight);
+        heightLeft -= (pageHeight - (margin * 2));
+
+        // Subsequent pages if content is longer than A4
+        while (heightLeft > 0) {
+            position = heightLeft - pdfContentHeight + margin;
+            pdf.addPage();
+            // Fill background with same dark color as the app for consistent looks
+            pdf.setFillColor(15, 23, 42); // #0f172a
+            pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+            
+            pdf.addImage(imgData, 'PNG', margin, position, pdfContentWidth, pdfContentHeight);
+            
+            // Add footer info to each page
+            pdf.setFontSize(8);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text('Kilon Consulting - דו"ח סגנון תקשורת אישי', pageWidth / 2, pageHeight - 5, { align: 'center' });
+            
+            heightLeft -= pageHeight;
+        }
         
-        // Add footer with branding
-        pdf.setFontSize(8);
-        pdf.setTextColor(150, 150, 150);
-        pdf.text('שאלון סגנונות תקשורת - דו"ח אישי מבוסס מודל הצבעים', pdfWidth / 2, pdfHeight - 5, { align: 'center' });
-        
-        pdf.save('report_communication_style.pdf');
+        pdf.save(`Communication_Profile_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
         console.error("Error generating PDF:", error);
+        alert("חלה שגיאה ביצירת ה-PDF. נסה שוב או צלם מסך.");
     } finally {
         setIsGeneratingPdf(false);
     }
@@ -116,7 +145,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
         </div>
       </div>
       
-      {/* AI Coach Section - Kept separate */}
+      {/* AI Coach Section - Kept separate from PDF for performance/cleanliness */}
       <div className="bg-gray-800 p-8 rounded-[2rem] shadow-xl border border-gray-700 transition-all hover:border-cyan-500/30">
           <AiCoach scores={scores} />
       </div>

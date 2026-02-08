@@ -18,8 +18,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     return { statusCode: 405, headers, body: JSON.stringify({ text: 'Method Not Allowed' }) };
   }
 
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
+  // Ensure API_KEY is present as per guidelines.
+  if (!process.env.API_KEY) {
     return {
       statusCode: 500,
       headers,
@@ -35,7 +35,8 @@ const handler: Handler = async (event: HandlerEvent) => {
       return { statusCode: 400, headers, body: JSON.stringify({ text: "נא להזין טקסט." }) };
     }
 
-    const ai = new GoogleGenAI({ apiKey: apiKey });
+    // Initialize GoogleGenAI with direct API key access.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     let systemInstruction = "";
     
     if (mode === 'team') {
@@ -72,10 +73,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
     }
 
-    // Increased maxOutputTokens to 4000 to accommodate long Hebrew responses
+    // Call generateContent using the correct SDK pattern.
     const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview", 
-        contents: [{ role: 'user', parts: [{ text: userInput }] }],
+        contents: userInput,
         config: {
             systemInstruction: systemInstruction,
             temperature: 0.7,
@@ -83,14 +84,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
     });
 
-    if (!response || !response.text) {
+    // Access the response text directly from the result.
+    const responseText = response.text;
+    if (!responseText) {
         throw new Error("AI returned empty response");
     }
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ text: response.text }),
+      body: JSON.stringify({ text: responseText }),
     };
 
   } catch (error: any) {
