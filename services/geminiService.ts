@@ -1,25 +1,15 @@
-
 import { Scores, UserProfile } from '../types';
 import { GoogleGenAI } from "@google/genai";
 
 /**
  * Helper to get the Gemini API key from environment variables.
- * Following guidelines to prefer process.env.GEMINI_API_KEY.
  */
 const getApiKey = () => {
   try {
-    if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
-      return process.env.GEMINI_API_KEY;
-    }
-  } catch (e) {
-    // process might not be defined in some environments
-  }
-  
-  try {
     // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.GEMINI_API_KEY) {
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
       // @ts-ignore
-      return import.meta.env.GEMINI_API_KEY;
+      return import.meta.env.VITE_GEMINI_API_KEY;
     }
   } catch (e) {
     // import.meta might not be defined or env might be missing
@@ -35,7 +25,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
   try {
     const apiKey = getApiKey();
     if (!apiKey) {
-      throw new Error("מפתח API חסר. אנא וודא שהגדרת את GEMINI_API_KEY.");
+      throw new Error("מפתח API חסר. אנא וודא שהגדרת את VITE_GEMINI_API_KEY.");
     }
 
     const ai = new GoogleGenAI({ apiKey });
@@ -99,7 +89,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
 
         const apiKey = getApiKey();
         if (!apiKey) {
-          throw new Error("מפתח API חסר. אנא וודא שהגדרת את GEMINI_API_KEY.");
+          throw new Error("מפתח API חסר. אנא וודא שהגדרת את VITE_GEMINI_API_KEY.");
         }
 
         const ai = new GoogleGenAI({ apiKey });
