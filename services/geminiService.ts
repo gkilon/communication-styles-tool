@@ -3,11 +3,37 @@ import { Scores, UserProfile } from '../types';
 import { GoogleGenAI } from "@google/genai";
 
 /**
+ * Helper to get the Gemini API key from environment variables.
+ * Following guidelines to prefer process.env.GEMINI_API_KEY.
+ */
+const getApiKey = () => {
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) {
+      return process.env.GEMINI_API_KEY;
+    }
+  } catch (e) {
+    // process might not be defined in some environments
+  }
+  
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.GEMINI_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.GEMINI_API_KEY;
+    }
+  } catch (e) {
+    // import.meta might not be defined or env might be missing
+  }
+  
+  return undefined;
+};
+
+/**
  * Calls the Gemini API directly from the frontend to get advice from the AI coach.
  */
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getApiKey();
     if (!apiKey) {
       throw new Error("מפתח API חסר. אנא וודא שהגדרת את GEMINI_API_KEY.");
     }
@@ -71,7 +97,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
             teamStats.total++;
         });
 
-        const apiKey = process.env.GEMINI_API_KEY;
+        const apiKey = getApiKey();
         if (!apiKey) {
           throw new Error("מפתח API חסר. אנא וודא שהגדרת את GEMINI_API_KEY.");
         }
