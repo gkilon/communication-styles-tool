@@ -1,32 +1,44 @@
 
 import { Scores, UserProfile } from '../types';
+import { GoogleGenAI } from "@google/genai";
 
 /**
- * Safely parse JSON from a response.
- */
-const safeParseJson = async (response: Response) => {
-    const text = await response.text();
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        return { text: `שגיאה בפענוח תשובת השרת: ${text.substring(0, 100)}` };
-    }
-};
-
-/**
- * Calls the Netlify function to get advice from the AI coach.
+ * Calls the Gemini API directly from the frontend to get advice from the AI coach.
  */
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
-    const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scores, userInput, mode: 'individual' }),
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("מפתח API חסר. אנא וודא שהגדרת את GEMINI_API_KEY.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const sA = Number(scores?.a || 0);
+    const sB = Number(scores?.b || 0);
+    const sC = Number(scores?.c || 0);
+    const sD = Number(scores?.d || 0);
+    
+    const r = sA + sC;
+    const y = sA + sD;
+    const g = sB + sD;
+    const b = sB + sC;
+    const colors = [{n:'אדום',v:r},{n:'צהוב',v:y},{n:'ירוק',v:g},{n:'כחול',v:b}].sort((m,n)=>n.v-m.v);
+
+    const systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n} והצבע המשני הוא ${colors[1].n}.
+    ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.
+    חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.1-pro-preview",
+      contents: userInput,
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+      },
     });
 
-    const data = await safeParseJson(response);
-    if (!response.ok) throw new Error(data.text || "שגיאה בחיבור לשרת ה-AI");
-    return data.text || "לא התקבלה תשובה.";
+    return response.text || "לא התקבלה תשובה.";
   } catch (error: any) {
     console.error("AI Service Error:", error);
     return `שגיאה: ${error.message}`;
@@ -34,7 +46,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
 };
 
 /**
- * Calls the Netlify function for team dynamics analysis.
+ * Calls the Gemini API directly for team dynamics analysis.
  */
 export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): Promise<string> => {
     try {
@@ -59,20 +71,38 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
             teamStats.total++;
         });
 
-        const response = await fetch('/.netlify/functions/getAiCoachAdvice', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                userInput: challenge, 
-                mode: 'team',
-                teamStats
-            }),
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+          throw new Error("מפתח API חסר. אנא וודא שהגדרת את GEMINI_API_KEY.");
+        }
+
+        const ai = new GoogleGenAI({ apiKey });
+
+        const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
+        נתוני הצוות (סה"כ ${teamStats.total} משתתפים):
+        - אדום: ${teamStats.red}
+        - צהוב: ${teamStats.yellow}
+        - ירוק: ${teamStats.green}
+        - כחול: ${teamStats.blue}
+
+        האתגר שהוצג: "${challenge}"
+
+        מבנה התשובה הנדרש (בעברית, פורמט Markdown):
+        1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה?
+        2. נקודות עיוורון: מה הצוות מפספס?
+        3. 3 המלצות פרקטיות ומידיות לשיפור המצב.
+        חשוב: ענה בצורה מפורטת ומלאה. אל תעצור באמצע.`;
+
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-pro-preview",
+            contents: challenge,
+            config: {
+                systemInstruction: systemInstruction,
+                temperature: 0.7,
+            },
         });
 
-        const data = await safeParseJson(response);
-        if (!response.ok) throw new Error(data.text || "ניתוח הצוות נכשל בשרת.");
-        
-        return data.text || "לא התקבל ניתוח.";
+        return response.text || "לא התקבל ניתוח.";
     } catch (error: any) {
         console.error("Team AI Error:", error);
         return `שגיאה בניתוח הצוות: ${error.message}`;

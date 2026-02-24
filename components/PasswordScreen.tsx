@@ -139,29 +139,8 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
       <Branding />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
         
-        {/* RIGHT SIDE: TEAM / WORKSHOP */}
-        <div className="bg-gray-800/80 backdrop-blur-sm p-10 rounded-3xl border-2 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col justify-between text-center transform transition-all hover:scale-[1.02]">
-            <div>
-              <div className="w-20 h-20 bg-cyan-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                <span className="text-4xl">👥</span>
-              </div>
-              <h3 className="text-white text-3xl font-black mb-4">כניסה צוותית</h3>
-              <p className="text-gray-400 text-lg mb-8 leading-relaxed">
-                הצטרף לצוות שלך בסדנה, שמור את התוצאות בענן וקבל ניתוח קבוצתי חכם.
-              </p>
-            </div>
-            
-            <button
-                onClick={onTeamLoginClick}
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black py-6 px-4 rounded-2xl text-2xl transition-all shadow-xl border-b-4 border-blue-900 active:translate-y-1 active:border-b-0"
-            >
-                כניסת חבר צוות
-            </button>
-            <p className="text-cyan-400 text-sm mt-4 font-bold animate-pulse">מומלץ עבור סדנאות מנהלים</p>
-        </div>
-
-        {/* LEFT SIDE: PERSONAL QUESTIONNAIRE */}
-        <div className="bg-gray-800/50 p-10 rounded-3xl border border-gray-700 shadow-xl flex flex-col justify-between text-center">
+        {/* LEFT SIDE: PERSONAL QUESTIONNAIRE (Now first in DOM for mobile) */}
+        <div className="bg-gray-800/50 p-10 rounded-3xl border border-gray-700 shadow-xl flex flex-col justify-between text-center order-1 md:order-1">
             <div>
               <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-6">
                 <span className="text-4xl">👤</span>
@@ -193,6 +172,27 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
             </form>
             
             <button onClick={toggleMode} className="mt-6 text-[10px] text-gray-600 hover:text-gray-400 uppercase tracking-widest transition-colors">Admin Dashboard</button>
+        </div>
+
+        {/* RIGHT SIDE: TEAM / WORKSHOP (Now second in DOM for mobile) */}
+        <div className="bg-gray-800/80 backdrop-blur-sm p-10 rounded-3xl border-2 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col justify-between text-center transform transition-all hover:scale-[1.02] order-2 md:order-2">
+            <div>
+              <div className="w-20 h-20 bg-cyan-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-4xl">👥</span>
+              </div>
+              <h3 className="text-white text-3xl font-black mb-4">כניסה צוותית</h3>
+              <p className="text-gray-400 text-lg mb-8 leading-relaxed">
+                הצטרף לצוות שלך בסדנה, שמור את התוצאות בענן וקבל ניתוח קבוצתי חכם.
+              </p>
+            </div>
+            
+            <button
+                onClick={onTeamLoginClick}
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black py-6 px-4 rounded-2xl text-2xl transition-all shadow-xl border-b-4 border-blue-900 active:translate-y-1 active:border-b-0"
+            >
+                כניסת חבר צוות
+            </button>
+            <p className="text-cyan-400 text-sm mt-4 font-bold animate-pulse">מומלץ עבור סדנאות מנהלים</p>
         </div>
 
       </div>
