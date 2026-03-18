@@ -7,7 +7,7 @@ import { GoogleGenAI } from "@google/genai";
  */
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
-    const apiKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : undefined;
+    const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
     if (!apiKey) {
       throw new Error("מפתח API חסר. אנא וודא שהגדרת את VITE_GEMINI_API_KEY.");
     }
@@ -71,7 +71,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
       teamStats.total++;
     });
 
-    const apiKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : undefined;
+    const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
     if (!apiKey) {
       throw new Error("מפתח API חסר. אנא וודא שהגדרת את VITE_GEMINI_API_KEY.");
     }
@@ -119,7 +119,7 @@ export interface SimulationMessage {
  */
 export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], userInput: string): Promise<string> => {
   try {
-    const apiKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : undefined;
+    const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
     if (!apiKey) {
       throw new Error("מפתח API חסר.");
     }
@@ -167,7 +167,7 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
  */
 export const getSimulationFeedback = async (targetColor: string, scenario: string, history: SimulationMessage[]): Promise<string> => {
   try {
-    const apiKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : undefined;
+    const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
     if (!apiKey) {
       throw new Error("מפתח API חסר.");
     }
@@ -198,5 +198,61 @@ ${conversationLog}
   } catch (error: any) {
     console.error("Feedback AI Error:", error);
     return `שגיאה ביצירת המשוב: ${error.message}`;
+  }
+};
+
+/**
+ * Analyzes how the user's communication style affects their AI prompting.
+ */
+export const generatePromptAnalysis = async (scores: Scores, taskDescription: string, userPrompt: string): Promise<string> => {
+  try {
+    const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
+    if (!apiKey) {
+      throw new Error("מפתח API חסר. אנא וודא שהגדרת את VITE_GEMINI_API_KEY.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const sA = Number(scores?.a || 0);
+    const sB = Number(scores?.b || 0);
+    const sC = Number(scores?.c || 0);
+    const sD = Number(scores?.d || 0);
+
+    const r = sA + sC;
+    const y = sA + sD;
+    const g = sB + sD;
+    const b = sB + sC;
+    const colors = [{ n: 'אדום', v: r }, { n: 'צהוב', v: y }, { n: 'ירוק', v: g }, { n: 'כחול', v: b }].sort((m, n) => n.v - m.v);
+
+    const mainColor = colors[0].n;
+
+    const systemInstruction = `אתה מומחה להנדסת פרומפטים (Prompt Engineering) ויועץ תקשורת. המשתמש מנסה להפעיל סוכן AI (אותך) לביצוע המשימה: "${taskDescription}".
+סגנון התקשורת האנושי של המשתמש מתאפיין בצבע ה${mainColor}.
+- אדומים נוטים להיות קצרים מדי וחסרי קונטקסט.
+- כחולים נוטים להעמיס פרטים ואילוצים שמבלבלים את ה-AI.
+- ירוקים נוטים להיות יותר מדי על הרגש ומפספסים את המבנה.
+- צהובים נוטים להיות מפוזרים חסרי מיקוד.
+
+עליך לנתח את ה-Prompt הבא: "${userPrompt}"
+
+החזר את הניתוח בפורמט Markdown הכולל:
+1. ציון משוער (1-100) על יעילות ההנחיה לסוכן AI.
+2. ניתוח: כיצד ה"צבע" של המשתמש (הסגנון האנושי שלו) בא לידי ביטוי בפרומפט הזה (לאן הוא משך את ההנחיה?).
+3. השלכה: איזו טעות קריטית ה-AI צפוי לעשות בגלל הפרומפט הזה במצבו הנוכחי.
+4. שכתוב מומלץ: הצע פרומפט הייטקיסטי, מדויק ומיטבי עבור המשימה.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: "אנא נתח את הפרומפט המצויין.",
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+      },
+    });
+
+    return response.text || "לא התקבל ניתוח.";
+  } catch (error: any) {
+    console.error("AI Agent Simulator Error:", error);
+    return `שגיאה בניתוח: ${error.message}`;
   }
 };
