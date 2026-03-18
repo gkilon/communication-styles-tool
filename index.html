@@ -1,0 +1,102 @@
+
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Critical: Force the browser to respect our dark theme and not attempt to "fix" it -->
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#0f172a">
+    <title>שאלון סגנונות תקשורת</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <style>
+      :root {
+        color-scheme: dark !important;
+        --background-color: #0f172a;
+      }
+      
+      html {
+        background-color: #0f172a !important;
+        color-scheme: dark !important;
+        forced-color-adjust: none !important;
+      }
+
+      body {
+        background-color: #0f172a !important;
+        /* Prevent mobile "force dark mode" from inverting colors */
+        forced-color-adjust: none !important;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+
+      #root {
+        background-color: transparent !important;
+        min-height: 100vh;
+      }
+
+      @keyframes fade-in-up {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      .animate-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; }
+      .text-shadow { text-shadow: 1px 1px 4px rgba(0, 0, 0, 1) !important; }
+
+      /* Special fix for chart quadrants to ensure they are always visible and vibrant */
+      .chart-quadrant {
+         mix-blend-mode: normal !important;
+         filter: none !important;
+         opacity: 1 !important;
+      }
+
+      /* PDF Export Ultra-Compact Mode Styles */
+      .pdf-export-mode {
+        padding: 25px !important;
+        width: 1000px !important;
+        background-color: #0f172a !important;
+      }
+      .pdf-export-mode .header-section {
+        margin-bottom: 15px !important;
+        padding-bottom: 10px !important;
+      }
+      .pdf-export-mode h1 { font-size: 2.2rem !important; }
+      .pdf-export-mode .main-content-gap { gap: 15px !important; margin-bottom: 15px !important; }
+      .pdf-export-mode .summary-box { padding: 18px !important; margin-top: 0 !important; }
+      .pdf-export-mode .chart-container { padding: 12px !important; }
+      .pdf-export-mode .analysis-container { padding: 12px !important; }
+      .pdf-export-mode p, .pdf-export-mode li, .pdf-export-mode div { 
+        font-size: 0.9rem !important; 
+        line-height: 1.35 !important;
+      }
+      .pdf-export-mode h3 { font-size: 1.3rem !important; margin-bottom: 8px !important; }
+      .pdf-export-mode h4 { font-size: 1.05rem !important; margin-bottom: 3px !important; }
+      .pdf-export-mode .space-y-6 > * + * { margin-top: 8px !important; }
+      .pdf-export-mode .tags-container { display: none !important; } 
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@netlify/functions": "https://aistudiocdn.com/@netlify/functions@^5.1.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.2",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+    "buffer": "https://aistudiocdn.com/buffer@^6.0.3"
+  }
+}
+</script>
+</head>
+  <body class="text-white min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
