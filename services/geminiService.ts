@@ -30,7 +30,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-pro-latest",
+      model: "gemini-2.5-pro",
       contents: userInput,
       config: {
         systemInstruction: systemInstruction,
@@ -94,7 +94,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
         חשוב: ענה בצורה מפורטת ומלאה. אל תעצור באמצע.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-pro-latest",
+      model: "gemini-2.5-pro",
       contents: challenge,
       config: {
         systemInstruction: systemInstruction,
@@ -147,7 +147,7 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
     const prompt = `היסטוריית השיחה עד כה:\n${conversationLog}\n\nהמשתמש כעת אומר:\n${userInput}\n\nהגב עכשיו מתוך הדמות (ללא הסברים מחוץ לדמות):`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-pro-latest",
+      model: "gemini-2.5-pro",
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
