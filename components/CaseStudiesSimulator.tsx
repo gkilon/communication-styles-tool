@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Scores } from '../types';
-import { getSimulationResponse } from '../services/geminiService';
+import { getSimulationResponse, getSimulationFeedback, SimulationMessage } from '../services/geminiService';
 
 interface CaseStudiesSimulatorProps {
     scores: Scores;
@@ -10,29 +10,129 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
     const [targetColor, setTargetColor] = useState<string>('');
     const [scenario, setScenario] = useState<string>('');
     const [userInput, setUserInput] = useState<string>('');
-    const [response, setResponse] = useState<string>('');
+    const [conversation, setConversation] = useState<SimulationMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isStarted, setIsStarted] = useState(false);
+    const [feedback, setFeedback] = useState<string>('');
+    const [isListening, setIsListening] = useState(false);
+
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const recognitionRef = useRef<any>(null);
+
+    // Auto-scroll to bottom of chat
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [conversation, isLoading]);
+
+    // Init SpeechRecognition
+    useEffect(() => {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognitionRef.current = new SpeechRecognition();
+            recognitionRef.current.continuous = false;
+            recognitionRef.current.lang = 'he-IL';
+            recognitionRef.current.interimResults = false;
+
+            recognitionRef.current.onresult = (event: any) => {
+                const transcript = event.results[0][0].transcript;
+                setUserInput(prev => prev ? prev + ' ' + transcript : transcript);
+            };
+
+            recognitionRef.current.onend = () => {
+                setIsListening(false);
+            };
+
+            recognitionRef.current.onerror = (event: any) => {
+                console.error("Speech recognition error", event.error);
+                setIsListening(false);
+            };
+        }
+    }, []);
+
+    const toggleListen = () => {
+        if (isListening) {
+            recognitionRef.current?.stop();
+        } else {
+            if (recognitionRef.current) {
+                recognitionRef.current.start();
+                setIsListening(true);
+            } else {
+                alert("הדפדפן שלך לא תומך בזיהוי קולי.");
+            }
+        }
+    };
+
+    const speakText = (text: string) => {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel(); // Stop current playing
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.lang = 'he-IL';
+            msg.rate = 1.0;
+            window.speechSynthesis.speak(msg);
+        }
+    };
 
     const colors = [
-        { name: 'אדום', desc: 'דומיננטי, ממוקד תוצאות, ישיר', bg: 'bg-red-900/40 border-red-500 text-red-100', hover: 'hover:bg-red-800' },
-        { name: 'צהוב', desc: 'חברותי, מלא התלהבות, יצירתי', bg: 'bg-yellow-900/40 border-yellow-500 text-yellow-100', hover: 'hover:bg-yellow-800' },
-        { name: 'ירוק', desc: 'רגיש, תומך, מחפש הרמוניה', bg: 'bg-green-900/40 border-green-500 text-green-100', hover: 'hover:bg-green-800' },
-        { name: 'כחול', desc: 'אנליטי, מחושב, יורד לפרטים', bg: 'bg-blue-900/40 border-blue-500 text-blue-100', hover: 'hover:bg-blue-800' },
+        { name: 'אדום', desc: 'דומיננטי, ממוקד תוצאות, ישיר', bg: 'bg-red-900/40 border-red-500 text-red-100' },
+        { name: 'צהוב', desc: 'חברותי, מלא התלהבות, יצירתי', bg: 'bg-yellow-900/40 border-yellow-500 text-yellow-100' },
+        { name: 'ירוק', desc: 'רגיש, תומך, מחפש הרמוניה', bg: 'bg-green-900/40 border-green-500 text-green-100' },
+        { name: 'כחול', desc: 'אנליטי, מחושב, יורד לפרטים', bg: 'bg-blue-900/40 border-blue-500 text-blue-100' },
     ];
 
-    const handleSimulate = async () => {
-        if (!targetColor || !scenario.trim() || !userInput.trim() || isLoading) return;
+    const handleStart = () => {
+        if (!targetColor || !scenario.trim()) return;
+        setIsStarted(true);
+        setConversation([]);
+        setFeedback('');
+    };
+
+    const handleSendMessage = async () => {
+        if (!userInput.trim() || isLoading) return;
+
+        // Stop listening if user clicks send
+        if (isListening) recognitionRef.current?.stop();
+
+        const newUserMsg: SimulationMessage = { sender: 'user', text: userInput };
+        const newHistory = [...conversation, newUserMsg];
+
+        setConversation(newHistory);
+        setUserInput('');
         setIsLoading(true);
-        setResponse('');
 
         try {
-            const result = await getSimulationResponse(scores, targetColor, scenario, userInput);
-            setResponse(result);
+            const result = await getSimulationResponse(scores, targetColor, scenario, conversation, newUserMsg.text);
+            const newAiMsg: SimulationMessage = { sender: 'ai', text: result };
+            setConversation([...newHistory, newAiMsg]);
+            speakText(result);
         } catch (err) {
-            setResponse("שגיאה בחיבור לסימולטור.");
+            setConversation([...newHistory, { sender: 'ai', text: "שגיאה בחיבור לסימולטור." }]);
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleGetFeedback = async () => {
+        if (conversation.length === 0 || isLoading) return;
+        setIsLoading(true);
+        try {
+            const result = await getSimulationFeedback(targetColor, scenario, conversation);
+            setFeedback(result);
+            speakText("הנה המשוב שלי על השיחה שלכם.");
+        } catch (err) {
+            setFeedback("לא הצלחתי לייצר משוב.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleReset = () => {
+        setIsStarted(false);
+        setConversation([]);
+        setFeedback('');
+        setUserInput('');
+        window.speechSynthesis.cancel();
     };
 
     const renderMarkdownText = (text: string) => {
@@ -44,77 +144,164 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
             } catch (e) {
                 html = text.replace(/\n/g, '<br/>');
             }
-            return <div className="prose prose-invert max-w-none prose-p:text-gray-200" dangerouslySetInnerHTML={{ __html: html }} />;
+            return <div className="prose prose-invert max-w-none prose-p:text-gray-200 text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />;
         }
         return <div className="whitespace-pre-wrap">{text}</div>;
     };
 
     return (
-        <div className="flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="bg-purple-500/20 p-2 rounded-xl">
-                    <span className="text-3xl">🎭</span>
-                </div>
-                <div>
-                    <h3 className="text-2xl font-bold text-white">סימולטור מקרי בוחן</h3>
-                    <p className="text-gray-400 text-sm font-medium">התאמן על תקשורת עם סגנונות שונים בזמן אמת</p>
-                </div>
-            </div>
-
-            <div className="bg-gray-900/60 p-6 rounded-2xl border border-gray-700 space-y-6">
-                <div>
-                    <label className="block text-sm font-bold text-gray-300 mb-2">1. בחר עם מי תרצה להתמודד (הקולגה):</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {colors.map(c => (
-                            <button
-                                key={c.name}
-                                onClick={() => setTargetColor(c.name)}
-                                className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${targetColor === c.name ? c.bg + ' ring-2 ring-white scale-105' : 'bg-gray-800 border-gray-600 hover:border-gray-500 opacity-70'
-                                    }`}
-                            >
-                                <div className="font-bold mb-1">{c.name}</div>
-                                <div className="text-xs opacity-80">{c.desc}</div>
-                            </button>
-                        ))}
+        <div className="flex flex-col h-full relative">
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                    <div className="bg-purple-500/20 p-2 rounded-xl">
+                        <span className="text-3xl">🎭</span>
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white">סימולטור מציאותי</h3>
+                        <p className="text-gray-400 text-sm font-medium">תרגול שיחה קולית וכתובה מול טיפוס תקשורת</p>
                     </div>
                 </div>
-
-                <div>
-                    <label className="block text-sm font-bold text-gray-300 mb-2">2. הגדר את התרחיש (לדוגמה: בקשת העלאת שכר, מתן פידבק שלילי):</label>
-                    <input
-                        type="text"
-                        value={scenario}
-                        onChange={e => setScenario(e.target.value)}
-                        className="w-full bg-gray-800 text-white rounded-xl p-3 border border-gray-600 focus:border-purple-500 outline-none"
-                        placeholder="נושא השיחה..."
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-bold text-gray-300 mb-2">3. מה המשפט הראשון שתגיד לו?</label>
-                    <textarea
-                        value={userInput}
-                        onChange={e => setUserInput(e.target.value)}
-                        className="w-full bg-gray-800 text-white rounded-xl p-3 border border-gray-600 focus:border-purple-500 outline-none min-h-[80px]"
-                        placeholder="היי, רציתי לדבר איתך על..."
-                    />
-                </div>
-
-                <button
-                    onClick={handleSimulate}
-                    disabled={!targetColor || !scenario || !userInput || isLoading}
-                    className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white font-bold py-4 rounded-xl shadow-lg transition-all"
-                >
-                    {isLoading ? 'מעבד תגובה...' : 'הפעל סימולציה 🚀'}
-                </button>
-
-                {response && (
-                    <div className="mt-6 p-6 bg-slate-800 border-2 border-purple-500/40 rounded-2xl animate-fade-in-up">
-                        <h4 className="text-purple-400 font-bold mb-3">תגובת הסימולטור:</h4>
-                        {renderMarkdownText(response)}
-                    </div>
+                {isStarted && (
+                    <button onClick={handleReset} className="text-xs text-gray-400 hover:text-white underline">סיים שיחה וסגור</button>
                 )}
             </div>
+
+            {!isStarted && (
+                <div className="bg-gray-900/60 p-6 rounded-2xl border border-gray-700 space-y-6 animate-fade-in-up">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">1. בחר קולגה (צבע):</label>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {colors.map(c => (
+                                <button
+                                    key={c.name}
+                                    onClick={() => setTargetColor(c.name)}
+                                    className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${targetColor === c.name ? c.bg + ' ring-2 ring-white scale-105' : 'bg-gray-800 border-gray-600 hover:border-gray-500 opacity-70'
+                                        }`}
+                                >
+                                    <div className="font-bold mb-1">{c.name}</div>
+                                    <div className="text-xs opacity-80">{c.desc}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">2. הגדר את התרחיש (נושא השיחה, הקשר):</label>
+                        <input
+                            type="text"
+                            value={scenario}
+                            onChange={e => setScenario(e.target.value)}
+                            className="w-full bg-gray-800 text-white rounded-xl p-4 border border-gray-600 focus:border-purple-500 outline-none"
+                            placeholder="למשל: תכנון פרויקט חדש, פתרון קונפליקט מול לקוח..."
+                        />
+                    </div>
+
+                    <button
+                        onClick={handleStart}
+                        disabled={!targetColor || !scenario.trim()}
+                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:grayscale text-white font-bold py-4 rounded-xl shadow-lg transition-all"
+                    >
+                        התחל שיחה 🚀
+                    </button>
+                </div>
+            )}
+
+            {isStarted && (
+                <div className="flex flex-col h-full bg-gray-900/60 rounded-2xl border border-gray-700 overflow-hidden relative">
+
+                    {/* Context Header */}
+                    <div className="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center px-4">
+                        <div className="text-xs text-gray-400">
+                            <span className="font-bold text-purple-400">דמות:</span> {targetColor} | <span className="font-bold text-purple-400">תרחיש:</span> {scenario}
+                        </div>
+                    </div>
+
+                    {/* Chat Area */}
+                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px]">
+                        {conversation.length === 0 && (
+                            <div className="h-full flex flex-col items-center justify-center text-center text-gray-500">
+                                <span className="text-4xl mb-2">🎤</span>
+                                <p>השיחה התחילה. שלח הודעה או דבר במיקרופון בשביל להתחיל!</p>
+                            </div>
+                        )}
+                        {conversation.map((msg, index) => (
+                            <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
+                                <div className={`max-w-[85%] p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tl-none' : 'bg-gray-800 text-gray-200 border border-gray-600 rounded-tr-none'}`}>
+                                    {msg.sender === 'user' ? (
+                                        <p className="whitespace-pre-wrap">{msg.text}</p>
+                                    ) : (
+                                        renderMarkdownText(msg.text)
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+
+                        {isLoading && (
+                            <div className="flex justify-start animate-fade-in">
+                                <div className="bg-gray-800 border border-gray-700 p-4 rounded-2xl rounded-tr-none flex gap-2">
+                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Feedback Area */}
+                        {feedback && (
+                            <div className="mt-6 p-6 bg-emerald-900/30 border border-emerald-500/50 rounded-2xl animate-fade-in-up mt-8">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className="text-2xl">💡</span>
+                                    <h4 className="text-emerald-400 font-bold text-xl">משוב המאמן:</h4>
+                                </div>
+                                {renderMarkdownText(feedback)}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Input Area */}
+                    {!feedback && (
+                        <div className="bg-gray-800 p-4 border-t border-gray-700">
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <input
+                                        type="text"
+                                        value={userInput}
+                                        onChange={e => setUserInput(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                                        className="w-full bg-gray-900 text-white rounded-xl py-3 px-4 pr-12 border border-gray-600 focus:border-purple-500 outline-none"
+                                        placeholder="הקלד כאן..."
+                                        disabled={isLoading}
+                                    />
+                                    <button
+                                        onClick={toggleListen}
+                                        className={`absolute right-2 top-2 bottom-2 px-2 rounded-lg transition-all ${isListening ? 'bg-red-500/20 text-red-500 animate-pulse' : 'text-gray-400 hover:text-white'}`}
+                                        title="דבר למיקרופון"
+                                    >
+                                        🎙️
+                                    </button>
+                                </div>
+                                <button
+                                    onClick={handleSendMessage}
+                                    disabled={!userInput.trim() || isLoading}
+                                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-6 py-3 rounded-xl disabled:opacity-50 transition-all"
+                                >
+                                    שלח
+                                </button>
+                            </div>
+
+                            {conversation.length > 0 && (
+                                <button
+                                    onClick={handleGetFeedback}
+                                    disabled={isLoading}
+                                    className="w-full mt-3 bg-gray-700 hover:bg-gray-600 text-emerald-400 font-bold py-2 rounded-xl text-sm transition-all border border-gray-600"
+                                >
+                                    🔍 קבל משוב מדויק על השיחה וסיים
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

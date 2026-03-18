@@ -30,7 +30,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: "gemini-1.5-flash",
       contents: userInput,
       config: {
         systemInstruction: systemInstruction,
@@ -94,7 +94,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
         חשוב: ענה בצורה מפורטת ומלאה. אל תעצור באמצע.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: "gemini-1.5-flash",
       contents: challenge,
       config: {
         systemInstruction: systemInstruction,
@@ -109,10 +109,15 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
   }
 }
 
+export interface SimulationMessage {
+  sender: 'user' | 'ai';
+  text: string;
+}
+
 /**
- * Calls the Gemini API for an interactive roleplay simulation.
+ * Calls the Gemini API for an interactive roleplay simulation (Dialogue mode).
  */
-export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, userInput: string): Promise<string> => {
+export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], userInput: string): Promise<string> => {
   try {
     const apiKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : undefined;
     if (!apiKey) {
@@ -136,15 +141,14 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
 המשתמש שפונה אליך הוא במקור עם סגנון תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n}.
 התרחיש שאתם נמצאים בו כרגע הוא: "${scenario}".
 
-המשתמש כרגע אומר לך: "${userInput}"
+חשוב מאוד: אל תיתן שום הסבר על התגובה שלך. פשוט תשחק את הדמות! ענה רק בתור הדמות, תגובה קצרה וטבעית כמו בשיחה מציאותית. שמור על התכונות של הצבע ה${targetColor}.`;
 
-מבנה התשובה שלך (חייב להיות בעברית ובפורמט Markdown):
-1. **תגובת הדמות שלך:** הגב לאמירה של המשתמש בדיוק כפי שאדם בצבע ה${targetColor} היה מגיב במציאות (תגובה בגוף ראשון, בסגנון האופייני לצבע: למשל אדום ממוקד תוצאה, צהוב חברותי ויצירתי, ירוק רגיש ומכיל, כחול אנליטי וקר).
-2. **ניתוח קצר של התגובה:** הסבר למשתמש (מחוץ לדמות) למה הגבת ככה ואיך כדאי לו לגשת אליך אחרת או להמשיך את השיחה כדי להשיג תוצאה אופטימלית.`;
+    const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'אתה (הקולגה)'}: ${m.text}`).join('\n\n');
+    const prompt = `היסטוריית השיחה עד כה:\n${conversationLog}\n\nהמשתמש כעת אומר:\n${userInput}\n\nהגב עכשיו מתוך הדמות (ללא הסברים מחוץ לדמות):`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: userInput,
+      model: "gemini-1.5-flash",
+      contents: prompt,
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.8,
@@ -155,5 +159,44 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
   } catch (error: any) {
     console.error("Simulation AI Error:", error);
     return `שגיאה בסימולציה: ${error.message}`;
+  }
+};
+
+/**
+ * Gets feedback on the simulation conversation.
+ */
+export const getSimulationFeedback = async (targetColor: string, scenario: string, history: SimulationMessage[]): Promise<string> => {
+  try {
+    const apiKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEY : undefined;
+    if (!apiKey) {
+      throw new Error("מפתח API חסר.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'הקולגה (צבע ' + targetColor + ')'}: ${m.text}`).join('\n\n');
+
+    const prompt = `קרא את השיחה הבאה שנערכה בסימולטור מקרי בוחן. התרחיש היה: "${scenario}". הקולגה היה בצבע "${targetColor}".
+
+השיחה:
+${conversationLog}
+
+אנא כתוב משוב קצר, בונה וממוקד למשתמש:
+1. מה הוא עשה טוב בשיחה מול הסגנון ה${targetColor}?
+2. איפה הוא יצר התנגדות או יכול היה לפעול אחרת?
+3. טיפ אחד לפעם הבאה שהוא יתמודד עם צבע ${targetColor} בסיטואציה דומה.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+      },
+    });
+
+    return response.text || "לא ניתן היה לייצר משוב.";
+  } catch (error: any) {
+    console.error("Feedback AI Error:", error);
+    return `שגיאה ביצירת המשוב: ${error.message}`;
   }
 };
