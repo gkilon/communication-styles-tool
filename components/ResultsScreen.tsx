@@ -138,11 +138,14 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
           <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
             <span className="text-cyan-400 text-3xl">📝</span> סיכום והמלצות מפתח
           </h3>
-          <p className="text-gray-300 leading-relaxed text-xl font-light">
-            הניתוח שלעיל משקף את ההעדפות הטבעיות שלך כפי שעלו מהשאלון. חשוב לזכור שסגנון תקשורת הוא מיומנות שניתן לפתח ולאזן לאורך זמן.
-            השתמש בדו"ח זה ככלי למודעות עצמית ולשיפור ממשקי העבודה שלך עם סגנונות משלימים.
+          <p className="text-gray-300 leading-relaxed text-xl font-light mb-4">
+            הניתוח שלעיל נגזר ממפת הפרופיל המשולבת שלך — לא מאחוזים מבודדים, אלא מהדינמיקה שבין הצבעים השונים. המפה חושפת את הנטיות הטבעיות שלך, את הסגנונות שמגיעים לך בקלות, ואת אלה שדורשים מאמץ מודע.
+          </p>
+          <p className="text-gray-400 leading-relaxed text-lg font-light">
+            סגנון תקשורת אינו גזר דין — הוא נקודת פתיחה. כל תכונה שמגדירה אותך היום היא גם שריר שניתן לאמן. ההמלצות בדוח זה נועדו לא לשנות מי שאתה, אלא להרחיב את הטווח שלך ולאפשר לך לתקשר אפקטיבית עם כל סגנון — בכל מצב.
           </p>
           <div className="tags-container mt-8 flex gap-4 flex-wrap">
+            <span className="bg-glass-dark px-5 py-2.5 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מפה_משולבת</span>
             <span className="bg-glass-dark px-5 py-2.5 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מודעות_עצמית</span>
             <span className="bg-glass-dark px-5 py-2.5 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#פיתוח_מנהיגות</span>
             <span className="bg-glass-dark px-5 py-2.5 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#תקשורת_אפקטיבית</span>
