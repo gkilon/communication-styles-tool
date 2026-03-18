@@ -105,7 +105,6 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
             const result = await getSimulationResponse(scores, targetColor, scenario, conversation, newUserMsg.text);
             const newAiMsg: SimulationMessage = { sender: 'ai', text: result };
             setConversation([...newHistory, newAiMsg]);
-            speakText(result);
         } catch (err) {
             setConversation([...newHistory, { sender: 'ai', text: "שגיאה בחיבור לסימולטור." }]);
         } finally {
@@ -119,7 +118,6 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
         try {
             const result = await getSimulationFeedback(targetColor, scenario, conversation);
             setFeedback(result);
-            speakText("הנה המשוב שלי על השיחה שלכם.");
         } catch (err) {
             setFeedback("לא הצלחתי לייצר משוב.");
         } finally {
@@ -226,11 +224,14 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                         )}
                         {conversation.map((msg, index) => (
                             <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
-                                <div className={`max-w-[85%] p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tl-none' : 'bg-gray-800 text-gray-200 border border-gray-600 rounded-tr-none'}`}>
+                                <div className={`relative max-w-[85%] p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tl-none' : 'bg-gray-800 text-gray-200 border border-gray-600 rounded-tr-none group'}`}>
                                     {msg.sender === 'user' ? (
                                         <p className="whitespace-pre-wrap">{msg.text}</p>
                                     ) : (
-                                        renderMarkdownText(msg.text)
+                                        <>
+                                            <button onClick={() => speakText(msg.text)} className="absolute -left-12 top-2 p-2 bg-gray-800 border border-gray-600 rounded-full opacity-50 hover:opacity-100 transition-opacity flex items-center justify-center w-10 h-10" title="הקרא בקול">🔊</button>
+                                            {renderMarkdownText(msg.text)}
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -248,7 +249,8 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
 
                         {/* Feedback Area */}
                         {feedback && (
-                            <div className="mt-6 p-6 bg-emerald-900/30 border border-emerald-500/50 rounded-2xl animate-fade-in-up mt-8">
+                            <div className="relative mt-6 p-6 bg-emerald-900/30 border border-emerald-500/50 rounded-2xl animate-fade-in-up mt-8 group">
+                                <button onClick={() => speakText(feedback)} className="absolute -left-4 -top-4 p-3 bg-emerald-900 border border-emerald-500 rounded-full opacity-70 hover:opacity-100 transition-opacity shadow-lg flex justify-center items-center w-12 h-12" title="הקרא משוב">🔊</button>
                                 <div className="flex items-center gap-2 mb-4">
                                     <span className="text-2xl">💡</span>
                                     <h4 className="text-emerald-400 font-bold text-xl">משוב המאמן:</h4>
