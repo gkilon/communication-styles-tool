@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores } from '../types';
-import { getSimulationResponse, getSimulationFeedback, SimulationMessage } from '../services/geminiService';
+import { getSimulationResponse, getSimulationFeedback, transcribeAudio, SimulationMessage } from '../services/geminiService';
 
 interface CaseStudiesSimulatorProps {
     scores: Scores;
@@ -16,10 +16,13 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
     const [feedback, setFeedback] = useState<string>('');
     const [isListening, setIsListening] = useState(false);
     const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+    const [isTranscribing, setIsTranscribing] = useState(false);
     const [speechError, setSpeechError] = useState<string>('');
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const recognitionRef = useRef<any>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
 
     // Auto-scroll to bottom of chat
     useEffect(() => {
@@ -28,62 +31,110 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
         }
     }, [conversation, isLoading]);
 
-    // Init SpeechRecognition with mobile-aware detection
+    // Detect speech support: prefer Web Speech API, else fall back to MediaRecorder
     useEffect(() => {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            setIsSpeechSupported(false);
-            return;
+        if (SpeechRecognition) {
+            try {
+                const recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.lang = 'he-IL';
+                recognition.interimResults = false;
+
+                recognition.onresult = (event: any) => {
+                    const transcript = event.results[0][0].transcript;
+                    setUserInput(prev => prev ? prev + ' ' + transcript : transcript);
+                    setSpeechError('');
+                };
+                recognition.onend = () => setIsListening(false);
+                recognition.onerror = (event: any) => {
+                    setIsListening(false);
+                    if (event.error === 'not-allowed') setSpeechError('גישה למיקרופון נדחתה. אנא אפשר גישה בהגדרות הדפדפן.');
+                    else if (event.error === 'network') setSpeechError('שגיאת רשת. נסה שוב.');
+                    else if (event.error === 'no-speech') setSpeechError('לא זוהה קול. נסה שוב.');
+                    else setSpeechError('שגיאה: ' + event.error);
+                };
+                recognitionRef.current = recognition;
+                setIsSpeechSupported(true);
+            } catch {
+                // fall through to MediaRecorder
+            }
         }
+    }, []);
+
+    // ---- MediaRecorder-based recording (works on iOS) ----
+    const startMediaRecorder = async () => {
+        setSpeechError('');
         try {
-            const recognition = new SpeechRecognition();
-            recognition.continuous = false;
-            recognition.lang = 'he-IL';
-            recognition.interimResults = false;
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Prefer webm/opus; fall back to whatever the browser supports
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                ? 'audio/webm;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/mp4')
+                ? 'audio/mp4'
+                : 'audio/ogg';
+            const recorder = new MediaRecorder(stream, { mimeType });
+            audioChunksRef.current = [];
 
-            recognition.onresult = (event: any) => {
-                const transcript = event.results[0][0].transcript;
-                setUserInput(prev => prev ? prev + ' ' + transcript : transcript);
-                setSpeechError('');
-            };
+            recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
 
-            recognition.onend = () => {
+            recorder.onstop = async () => {
+                stream.getTracks().forEach(t => t.stop());
+                const blob = new Blob(audioChunksRef.current, { type: mimeType });
+                setIsTranscribing(true);
                 setIsListening(false);
-            };
-
-            recognition.onerror = (event: any) => {
-                setIsListening(false);
-                if (event.error === 'not-allowed') {
-                    setSpeechError('גישה למיקרופון נדחתה. אנא אפשר גישה בהגדרות הדפדפן.');
-                } else if (event.error === 'network') {
-                    setSpeechError('שגיאת רשת בזיהוי קולי. נסה שוב.');
-                } else if (event.error === 'no-speech') {
-                    setSpeechError('לא זוהה קול. נסה לדבר קרוב יותר למיקרופון.');
-                } else {
-                    setSpeechError('שגיאה: ' + event.error);
+                try {
+                    const base64 = await blobToBase64(blob);
+                    const text = await transcribeAudio(base64, mimeType.split(';')[0]);
+                    if (text) setUserInput(prev => prev ? prev + ' ' + text : text);
+                    else setSpeechError('לא זוהה דיבור. נסה שנית.');
+                } catch (err: any) {
+                    setSpeechError(err.message || 'שגיאה בתמלול.');
+                } finally {
+                    setIsTranscribing(false);
                 }
             };
 
-            recognitionRef.current = recognition;
-            setIsSpeechSupported(true);
+            mediaRecorderRef.current = recorder;
+            recorder.start();
+            setIsListening(true);
         } catch {
-            setIsSpeechSupported(false);
+            setSpeechError('לא ניתן לגשת למיקרופון. ודא שהדפדפן קיבל הרשאה.');
         }
-    }, []);
+    };
+
+    const stopMediaRecorder = () => {
+        mediaRecorderRef.current?.stop();
+    };
+
+    const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const result = reader.result as string;
+            resolve(result.split(',')[1]); // strip data URL prefix
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
 
     const toggleListen = () => {
         setSpeechError('');
         if (isListening) {
-            recognitionRef.current?.stop();
-        } else {
-            if (recognitionRef.current) {
-                try {
-                    recognitionRef.current.start();
-                    setIsListening(true);
-                } catch {
-                    setSpeechError('לא ניתן להפעיל את המיקרופון. ודא שהדפדפן קיבל הרשאה.');
-                }
+            // Stop
+            if (isSpeechSupported) recognitionRef.current?.stop();
+            else stopMediaRecorder();
+            return;
+        }
+        // Start
+        if (isSpeechSupported) {
+            try {
+                recognitionRef.current.start();
+                setIsListening(true);
+            } catch {
+                setSpeechError('לא ניתן להפעיל את המיקרופון.');
             }
+        } else {
+            startMediaRecorder();
         }
     };
 
@@ -293,36 +344,36 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                                         value={userInput}
                                         onChange={e => setUserInput(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                                        className={`w-full bg-gray-900 text-white rounded-xl py-3 px-4 border border-gray-600 focus:border-purple-500 outline-none ${isSpeechSupported ? 'pr-14' : 'pr-4'}`}
-                                        placeholder="הקלד כאן..."
-                                        disabled={isLoading}
+                                        className="w-full bg-gray-900 text-white rounded-xl py-3 px-4 pr-14 border border-gray-600 focus:border-purple-500 outline-none"
+                                        placeholder={isTranscribing ? 'ממיר קול לטקסט...' : 'הקלד כאן...'}
+                                        disabled={isLoading || isTranscribing}
                                     />
-                                    {isSpeechSupported && (
-                                        <button
-                                            onClick={toggleListen}
-                                            className={`absolute right-2 top-1.5 bottom-1.5 px-3 rounded-lg transition-all text-xl ${
-                                                isListening
-                                                    ? 'bg-red-500/30 text-red-400 animate-pulse'
-                                                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                                            }`}
-                                            title={isListening ? 'עצור האזנה' : 'דבר למיקרופון'}
-                                        >
-                                            {isListening ? '🔴' : '🎙️'}
-                                        </button>
-                                    )}
+                                    <button
+                                        onClick={toggleListen}
+                                        disabled={isTranscribing || isLoading}
+                                        className={`absolute right-2 top-1.5 bottom-1.5 px-3 rounded-lg transition-all text-xl disabled:opacity-40 ${
+                                            isListening
+                                                ? 'bg-red-500/30 text-red-400 animate-pulse'
+                                                : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                                        }`}
+                                        title={isListening ? 'עצור הקלטה' : 'דבר למיקרופון'}
+                                    >
+                                        {isTranscribing ? '⏳' : isListening ? '🔴' : '🎙️'}
+                                    </button>
                                 </div>
                                 <button
                                     onClick={handleSendMessage}
-                                    disabled={!userInput.trim() || isLoading}
+                                    disabled={!userInput.trim() || isLoading || isTranscribing}
                                     className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-6 py-3 rounded-xl disabled:opacity-50 transition-all"
                                 >
                                     שלח
                                 </button>
                             </div>
-                            {!isSpeechSupported && (
-                                <p className="text-xs text-gray-500 mt-2 text-right">
-                                    💬 זיהוי קולי אינו נתמך בדפדפן זה. ניתן להקליד בלבד.
-                                </p>
+                            {isListening && !isSpeechSupported && (
+                                <p className="text-xs text-red-400 mt-2 text-right animate-pulse">🔴 מקליט... לחץ שוב לעצירה ותמלול</p>
+                            )}
+                            {isTranscribing && (
+                                <p className="text-xs text-purple-400 mt-2 text-right animate-pulse">⏳ ממיר את ההקלטה לטקסט...</p>
                             )}
                             {speechError && (
                                 <p className="text-xs text-red-400 mt-2 text-right">⚠️ {speechError}</p>

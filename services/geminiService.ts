@@ -258,3 +258,40 @@ export const generatePromptAnalysis = async (scores: Scores, taskDescription: st
     return `שגיאה בניתוח: ${error.message}`;
   }
 };
+
+/**
+ * Transcribes audio using Gemini API — works on iOS and all browsers.
+ */
+export const transcribeAudio = async (audioBase64: string, mimeType: string): Promise<string> => {
+  try {
+    const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
+    if (!apiKey) throw new Error('מפתח API חסר.');
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: audioBase64,
+              },
+            },
+            {
+              text: 'תמלל את ההקלטה הבאה לעברית. החזר רק את הטקסט המתומלל, ללא כל הסבר. אם לא ניתן לתמלל, החזר מחרוזת ריקה.'
+            }
+          ],
+        },
+      ],
+    });
+
+    return (response.text || '').trim();
+  } catch (error: any) {
+    console.error('Transcription error:', error);
+    throw new Error('שגיאה בתמלול: ' + error.message);
+  }
+};
