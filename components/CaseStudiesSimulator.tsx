@@ -18,6 +18,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
     const [isSpeechSupported, setIsSpeechSupported] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [speechError, setSpeechError] = useState<string>('');
+    const [autoSpeak, setAutoSpeak] = useState(false);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const recognitionRef = useRef<any>(null);
@@ -179,6 +180,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
             const result = await getSimulationResponse(scores, targetColor, scenario, conversation, newUserMsg.text);
             const newAiMsg: SimulationMessage = { sender: 'ai', text: result };
             setConversation([...newHistory, newAiMsg]);
+            if (autoSpeak) speakText(result);
         } catch (err) {
             setConversation([...newHistory, { sender: 'ai', text: "שגיאה בחיבור לסימולטור." }]);
         } finally {
@@ -286,6 +288,17 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                         <div className="text-xs text-gray-400">
                             <span className="font-bold text-purple-400">דמות:</span> {targetColor} | <span className="font-bold text-purple-400">תרחיש:</span> {scenario}
                         </div>
+                        <button
+                            onClick={() => { setAutoSpeak(v => { if (v) window.speechSynthesis.cancel(); return !v; }); }}
+                            className={`flex items-center gap-1 text-xs px-3 py-1 rounded-full border transition-all ${
+                                autoSpeak
+                                    ? 'bg-purple-600/30 border-purple-500 text-purple-300'
+                                    : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'
+                            }`}
+                            title="מצב קולי אוטומטי"
+                        >
+                            {autoSpeak ? '🔊 קולי' : '🔇 שקט'}
+                        </button>
                     </div>
 
                     {/* Chat Area */}
@@ -298,13 +311,19 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                         )}
                         {conversation.map((msg, index) => (
                             <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
-                                <div className={`relative max-w-[85%] p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tl-none' : 'bg-gray-800 text-gray-200 border border-gray-600 rounded-tr-none group'}`}>
+                                <div className={`max-w-[85%] p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tl-none' : 'bg-gray-800 text-gray-200 border border-gray-600 rounded-tr-none'}`}>
                                     {msg.sender === 'user' ? (
                                         <p className="whitespace-pre-wrap">{msg.text}</p>
                                     ) : (
                                         <>
-                                            <button onClick={() => speakText(msg.text)} className="absolute -left-12 top-2 p-2 bg-gray-800 border border-gray-600 rounded-full opacity-50 hover:opacity-100 transition-opacity flex items-center justify-center w-10 h-10" title="הקרא בקול">🔊</button>
                                             {renderMarkdownText(msg.text)}
+                                            <button
+                                                onClick={() => speakText(msg.text)}
+                                                className="mt-2 text-xs text-gray-500 hover:text-purple-400 transition-colors flex items-center gap-1"
+                                                title="הקרא בקול"
+                                            >
+                                                🔊 <span>הקרא</span>
+                                            </button>
                                         </>
                                     )}
                                 </div>
