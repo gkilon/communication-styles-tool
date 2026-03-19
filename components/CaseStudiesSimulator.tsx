@@ -15,6 +15,8 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
     const [isStarted, setIsStarted] = useState(false);
     const [feedback, setFeedback] = useState<string>('');
     const [isListening, setIsListening] = useState(false);
+    const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+    const [speechError, setSpeechError] = useState<string>('');
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const recognitionRef = useRef<any>(null);
@@ -26,40 +28,61 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
         }
     }, [conversation, isLoading]);
 
-    // Init SpeechRecognition
+    // Init SpeechRecognition with mobile-aware detection
     useEffect(() => {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            recognitionRef.current = new SpeechRecognition();
-            recognitionRef.current.continuous = false;
-            recognitionRef.current.lang = 'he-IL';
-            recognitionRef.current.interimResults = false;
+        if (!SpeechRecognition) {
+            setIsSpeechSupported(false);
+            return;
+        }
+        try {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'he-IL';
+            recognition.interimResults = false;
 
-            recognitionRef.current.onresult = (event: any) => {
+            recognition.onresult = (event: any) => {
                 const transcript = event.results[0][0].transcript;
                 setUserInput(prev => prev ? prev + ' ' + transcript : transcript);
+                setSpeechError('');
             };
 
-            recognitionRef.current.onend = () => {
+            recognition.onend = () => {
                 setIsListening(false);
             };
 
-            recognitionRef.current.onerror = (event: any) => {
-                console.error("Speech recognition error", event.error);
+            recognition.onerror = (event: any) => {
                 setIsListening(false);
+                if (event.error === 'not-allowed') {
+                    setSpeechError('גישה למיקרופון נדחתה. אנא אפשר גישה בהגדרות הדפדפן.');
+                } else if (event.error === 'network') {
+                    setSpeechError('שגיאת רשת בזיהוי קולי. נסה שוב.');
+                } else if (event.error === 'no-speech') {
+                    setSpeechError('לא זוהה קול. נסה לדבר קרוב יותר למיקרופון.');
+                } else {
+                    setSpeechError('שגיאה: ' + event.error);
+                }
             };
+
+            recognitionRef.current = recognition;
+            setIsSpeechSupported(true);
+        } catch {
+            setIsSpeechSupported(false);
         }
     }, []);
 
     const toggleListen = () => {
+        setSpeechError('');
         if (isListening) {
             recognitionRef.current?.stop();
         } else {
             if (recognitionRef.current) {
-                recognitionRef.current.start();
-                setIsListening(true);
-            } else {
-                alert("הדפדפן שלך לא תומך בזיהוי קולי.");
+                try {
+                    recognitionRef.current.start();
+                    setIsListening(true);
+                } catch {
+                    setSpeechError('לא ניתן להפעיל את המיקרופון. ודא שהדפדפן קיבל הרשאה.');
+                }
             }
         }
     };
@@ -270,17 +293,23 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                                         value={userInput}
                                         onChange={e => setUserInput(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                                        className="w-full bg-gray-900 text-white rounded-xl py-3 px-4 pr-12 border border-gray-600 focus:border-purple-500 outline-none"
+                                        className={`w-full bg-gray-900 text-white rounded-xl py-3 px-4 border border-gray-600 focus:border-purple-500 outline-none ${isSpeechSupported ? 'pr-14' : 'pr-4'}`}
                                         placeholder="הקלד כאן..."
                                         disabled={isLoading}
                                     />
-                                    <button
-                                        onClick={toggleListen}
-                                        className={`absolute right-2 top-2 bottom-2 px-2 rounded-lg transition-all ${isListening ? 'bg-red-500/20 text-red-500 animate-pulse' : 'text-gray-400 hover:text-white'}`}
-                                        title="דבר למיקרופון"
-                                    >
-                                        🎙️
-                                    </button>
+                                    {isSpeechSupported && (
+                                        <button
+                                            onClick={toggleListen}
+                                            className={`absolute right-2 top-1.5 bottom-1.5 px-3 rounded-lg transition-all text-xl ${
+                                                isListening
+                                                    ? 'bg-red-500/30 text-red-400 animate-pulse'
+                                                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                                            }`}
+                                            title={isListening ? 'עצור האזנה' : 'דבר למיקרופון'}
+                                        >
+                                            {isListening ? '🔴' : '🎙️'}
+                                        </button>
+                                    )}
                                 </div>
                                 <button
                                     onClick={handleSendMessage}
@@ -290,6 +319,14 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                                     שלח
                                 </button>
                             </div>
+                            {!isSpeechSupported && (
+                                <p className="text-xs text-gray-500 mt-2 text-right">
+                                    💬 זיהוי קולי אינו נתמך בדפדפן זה. ניתן להקליד בלבד.
+                                </p>
+                            )}
+                            {speechError && (
+                                <p className="text-xs text-red-400 mt-2 text-right">⚠️ {speechError}</p>
+                            )}
 
                             {conversation.length > 0 && (
                                 <button
