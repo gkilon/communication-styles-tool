@@ -56,9 +56,9 @@ function getColorsFromScores(scores: Scores) {
 export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
   try {
     const colors = getColorsFromScores(scores);
-    const systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n} והצבע המשני הוא ${colors[1].n}.
-    ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.
-    חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
+    const systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל ${colors[0].n} (דומיננטי) ו-${colors[1].n} (משני).
+    ענה על שאלות המשתמש בצורה ממוקדת, פרקטית וישירה. 
+    השתמש ב-Markdown, שמור על תשובות קצרות ולעניין (תכלס), והימנע מהקדמות ארוכות מדי.`;
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-2.5-flash",
@@ -85,8 +85,8 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
 
 export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void): Promise<string> => {
     const colors = getColorsFromScores(scores);
-    const systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n} והצבע המשני הוא ${colors[1].n}.
-    ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.`;
+    const systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל ${colors[0].n} ו-${colors[1].n}.
+    ענה בצורה ממוקדת, תומכת ופרקטית. התמקד בעיקר (תכלס) והשתמש בפורמט Markdown.`;
 
     return callGeminiApiStream('generateContent', {
       model: "gemini-2.5-flash",
