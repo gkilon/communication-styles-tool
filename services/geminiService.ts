@@ -30,7 +30,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: userInput,
       config: {
         systemInstruction: systemInstruction,
@@ -76,7 +76,7 @@ export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, 
     ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.`;
 
     const result = await ai.models.generateContentStream({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: userInput,
       config: {
         systemInstruction: systemInstruction,
@@ -153,7 +153,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
         חשוב: ענה בצורה מפורטת ומלאה. אל תעצור באמצע.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: challenge,
       config: {
         systemInstruction: systemInstruction,
@@ -220,7 +220,7 @@ export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: str
         3. 3 המלצות פרקטיות ומידיות לשיפור המצב.`;
 
         const result = await ai.models.generateContentStream({
-            model: "gemini-1.5-flash-latest",
+            model: "gemini-1.5-flash",
             contents: challenge,
             config: {
                 systemInstruction: systemInstruction,
@@ -286,7 +286,7 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
     const prompt = `היסטוריית השיחה עד כה:\n${conversationLog}\n\nהמשתמש כעת אומר:\n${userInput}\n\nהגב עכשיו מתוך הדמות (ללא הסברים מחוץ לדמות):`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -332,7 +332,7 @@ ${conversationLog}
 3. 💡 טיפ אחד לפעם הבאה — המלצה פרקטית קצרה.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: {
         temperature: 0.7,
@@ -395,7 +395,7 @@ export const generatePromptAnalysis = async (scores: Scores, taskDescription: st
 4. שכתוב מומלץ: הצע פרומפט מיטבי עבור המשימה.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: "אנא נתח את הפרומפט המצויין.",
       config: {
         systemInstruction: systemInstruction,
@@ -466,7 +466,7 @@ export async function translateText(text: string, targetLanguage: string): Promi
   try {
     const ai = new GoogleGenAI({ apiKey });
     const result = await ai.models.generateContent({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: text,
       config: {
         systemInstruction: `You are a professional translator. 
@@ -528,7 +528,7 @@ export const getStuckManagerAdviceStream = async (scores: Scores, situation: str
 
     console.log("Calling StuckManager AI with situation:", situation);
     const result = await ai.models.generateContentStream({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       contents: [{ role: 'user', parts: [{ text: situation }] }],
       config: {
         systemInstruction: systemInstruction,
