@@ -90,11 +90,21 @@ export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, 
       },
     });
 
+    console.log("Stream result (AiCoach):", result);
+    const iterator = result.stream || (typeof (result as any)[Symbol.asyncIterator] === 'function' ? result : null);
+    
+    if (!iterator) {
+       console.error("No iterator found in result:", result);
+       throw new Error("Could not initialize AI stream. See console for details.");
+    }
+
     let fullText = "";
-    for await (const chunk of result.stream) {
+    for await (const chunk of iterator as any) {
       const chunkText = chunk.text;
-      fullText += chunkText;
-      onChunk(fullText);
+      if (chunkText) {
+        fullText += chunkText;
+        onChunk(fullText);
+      }
     }
 
     return fullText;
@@ -234,11 +244,21 @@ export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: str
             },
         });
 
+        console.log("Stream result (TeamAi):", result);
+        const iterator = result.stream || (typeof (result as any)[Symbol.asyncIterator] === 'function' ? result : null);
+
+        if (!iterator) {
+            console.error("No iterator found in TeamAi result:", result);
+            throw new Error("Could not initialize Team AI stream.");
+        }
+
         let fullText = "";
-        for await (const chunk of result.stream) {
+        for await (const chunk of iterator as any) {
             const chunkText = chunk.text;
-            fullText += chunkText;
-            onChunk(fullText);
+            if (chunkText) {
+                fullText += chunkText;
+                onChunk(fullText);
+            }
         }
 
         return fullText;
