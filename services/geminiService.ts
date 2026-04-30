@@ -526,9 +526,10 @@ export const getStuckManagerAdviceStream = async (scores: Scores, situation: str
 3. החזרת שליטה (Executive Function): הצע דרך פעולה אופרטיבית אחת, ברורה ושקולה להתמודדות עם המצב מתוך מודעות לסגנון שלו ולצבעים אחרים.
 השתמש בשפה מרגיעה, מקצועית ואמפתית, בפורמט Markdown ברור ומסודר. אל תקטע את דבריך באמצע.`;
 
+    console.log("Calling StuckManager AI with situation:", situation);
     const result = await ai.models.generateContentStream({
       model: "gemini-2.0-flash",
-      contents: situation,
+      contents: [{ role: 'user', parts: [{ text: situation }] }],
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.7,
@@ -544,13 +545,18 @@ export const getStuckManagerAdviceStream = async (scores: Scores, situation: str
     let fullText = "";
     for await (const chunk of result.stream) {
       const chunkText = chunk.text;
-      fullText += chunkText;
-      onChunk(fullText);
+      if (chunkText) {
+        fullText += chunkText;
+        onChunk(fullText);
+      }
     }
 
+    if (!fullText) {
+      console.warn("AI returned empty response for StuckManager");
+    }
     return fullText;
   } catch (error: any) {
-    console.error("Stuck Manager AI Stream Error:", error);
+    console.error("Stuck Manager AI Stream Detailed Error:", error);
     throw error;
   }
 };

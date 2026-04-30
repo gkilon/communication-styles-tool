@@ -142,9 +142,9 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
       await getAiCoachAdviceStream(scores, text, (chunk) => {
         setConversation(prev => {
             const next = [...prev];
-            const aiMsg = next[next.length - 1];
-            if (aiMsg && aiMsg.sender === 'ai') {
-                aiMsg.text = chunk;
+            const lastIdx = next.length - 1;
+            if (next[lastIdx] && next[lastIdx].sender === 'ai') {
+                next[lastIdx] = { ...next[lastIdx], text: chunk };
             }
             return next;
         });
