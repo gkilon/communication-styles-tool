@@ -135,12 +135,12 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
   }
 
   return (
-    <div className="max-w-5xl w-full mx-auto animate-fade-in-up px-4">
+    <div className="max-w-5xl w-full mx-auto animate-fade-in-up px-4 pb-12">
       <Branding />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
         
         {/* LEFT SIDE: PERSONAL QUESTIONNAIRE (Now first in DOM for mobile) */}
-        <div className="bg-gray-800/50 p-10 rounded-3xl border border-gray-700 shadow-xl flex flex-col justify-between text-center order-1 md:order-1">
+        <div className="bg-gray-800/50 p-6 md:p-10 rounded-3xl border border-gray-700 shadow-xl flex flex-col justify-between text-center order-1 md:order-1">
             <div>
               <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-6">
                 <span className="text-4xl">👤</span>
@@ -175,7 +175,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         </div>
 
         {/* RIGHT SIDE: TEAM / WORKSHOP (Now second in DOM for mobile) */}
-        <div className="bg-gray-800/80 backdrop-blur-sm p-10 rounded-3xl border-2 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col justify-between text-center transform transition-all hover:scale-[1.02] order-2 md:order-2">
+        <div className="bg-gray-800/80 backdrop-blur-sm p-6 md:p-10 rounded-3xl border-2 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.15)] flex flex-col justify-between text-center transform transition-all hover:scale-[1.02] order-2 md:order-2">
             <div>
               <div className="w-20 h-20 bg-cyan-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                 <span className="text-4xl">👥</span>

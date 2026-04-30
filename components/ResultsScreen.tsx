@@ -7,6 +7,8 @@ import { generateProfileAnalysis } from '../services/analysisService';
 import { AiCoach } from './AiCoach';
 import { CaseStudiesSimulator } from './CaseStudiesSimulator';
 import { AiAgentSimulator } from './AiAgentSimulator';
+import { StuckManagerAi } from './StuckManagerAi';
+import { ResultsNavigation } from './ResultsNavigation';
 
 declare global {
   interface Window {
@@ -126,15 +128,15 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
         </div>
 
         <div className="main-content-gap flex flex-col lg:flex-row gap-10 mb-10 items-stretch relative z-10">
-          <motion.div variants={itemVariants} className="chart-container flex-none lg:w-[40%] bg-glass-light p-8 rounded-[2.5rem] border border-glass-border shadow-inner backdrop-blur-sm">
+          <motion.div id="chart-section" variants={itemVariants} className="chart-container flex-none lg:w-[40%] bg-glass-light p-8 rounded-[2.5rem] border border-glass-border shadow-inner backdrop-blur-sm">
             <ResultsChart scores={scores} />
           </motion.div>
-          <motion.div variants={itemVariants} className="analysis-container flex-1 bg-glass-light p-8 rounded-[2.5rem] border border-glass-border shadow-inner backdrop-blur-sm">
+          <motion.div id="analysis-section" variants={itemVariants} className="analysis-container flex-1 bg-glass-light p-8 rounded-[2.5rem] border border-glass-border shadow-inner backdrop-blur-sm">
             <CombinedAnalysis analysis={profileAnalysis} />
           </motion.div>
         </div>
 
-        <motion.div variants={itemVariants} className="summary-box bg-gradient-to-br from-slate-800/40 to-cyan-900/20 p-10 rounded-[2.5rem] border border-dashed border-cyan-500/30 relative overflow-hidden z-10 shadow-lg backdrop-blur-sm">
+        <motion.div id="summary-section" variants={itemVariants} className="summary-box bg-gradient-to-br from-slate-800/40 to-cyan-900/20 p-10 rounded-[2.5rem] border border-dashed border-cyan-500/30 relative overflow-hidden z-10 shadow-lg backdrop-blur-sm">
           <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
             <span className="text-cyan-400 text-3xl">📝</span> סיכום והמלצות מפתח
           </h3>
@@ -155,17 +157,24 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
 
       {/* AI Coach Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 no-print pt-6">
-        <motion.div variants={itemVariants} className="bg-glass-dark p-8 rounded-[2.5rem] shadow-xl border border-glass-border transition-all hover:shadow-[0_0_30px_rgba(6,182,212,0.15)] backdrop-blur-xl group">
+        <motion.div id="ai-coach-section" variants={itemVariants} className="bg-glass-dark p-8 rounded-[2.5rem] shadow-xl border border-glass-border transition-all hover:shadow-[0_0_30px_rgba(6,182,212,0.15)] backdrop-blur-xl group">
           <AiCoach scores={scores} />
         </motion.div>
-        <motion.div variants={itemVariants} className="bg-glass-dark p-8 rounded-[2.5rem] shadow-xl border border-glass-border transition-all hover:shadow-[0_0_30px_rgba(168,85,247,0.15)] backdrop-blur-xl group">
+        <motion.div id="case-studies-section" variants={itemVariants} className="bg-glass-dark p-8 rounded-[2.5rem] shadow-xl border border-glass-border transition-all hover:shadow-[0_0_30px_rgba(168,85,247,0.15)] backdrop-blur-xl group">
           <CaseStudiesSimulator scores={scores} />
         </motion.div>
       </div>
 
       {/* AI Agent Simulator */}
-      <motion.div variants={itemVariants} className="mb-12 no-print">
+      <motion.div id="ai-agent-section" variants={itemVariants} className="mb-12 no-print">
         <AiAgentSimulator scores={scores} />
+      </motion.div>
+
+      {/* Stuck Manager AI */}
+      <motion.div id="stuck-manager-section" variants={itemVariants} className="mb-12 no-print">
+        <div className="bg-glass-dark p-8 rounded-[2.5rem] shadow-xl border border-glass-border transition-all hover:shadow-[0_0_30px_rgba(249,115,22,0.15)] backdrop-blur-xl group">
+          <StuckManagerAi scores={scores} />
+        </div>
       </motion.div>
 
       <motion.div variants={itemVariants} className="text-center mt-12 flex flex-wrap justify-center items-center gap-6 no-print">
@@ -219,6 +228,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
           </button>
         </motion.div>
       )}
+
+      {/* Navigation Floating Menu */}
+      <ResultsNavigation />
     </motion.div>
   );
 };

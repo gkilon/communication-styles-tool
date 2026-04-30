@@ -1,10 +1,9 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores } from '../types';
-import { getAiCoachAdvice, getAiCoachAdviceStream, translateText } from '../services/geminiService';
-import { SparklesIcon } from './icons/Icons';
+import { getStuckManagerAdviceStream, translateText } from '../services/geminiService';
+import { LightbulbIcon } from './icons/Icons'; // Using an existing or standard icon, assuming LightbulbIcon or something similar. Let's use a standard SVG inline if not. Wait, I'll use an inline SVG for safety or check if Icons has it. Let's use an inline SVG.
 
-interface AiCoachProps {
+interface StuckManagerAiProps {
   scores: Scores;
 }
 
@@ -14,10 +13,10 @@ interface Message {
 }
 
 const PRESET_QUESTIONS = [
-  "איך אוכל לשפר את עבודת הצוות שלי?",
-  "מה הדרך הטובה ביותר עבורי להשפיע על אחרים?",
-  "תן לי טיפ להתמודדות עם קונפליקטים.",
-  "כיצד אוכל למנף את החוזקות שלי כדי להתקדם?"
+  "אני רותח מזעם עכשיו ועומד להתפוצץ בשיחה.",
+  "אני קופא מול התנגדות של העובד ולא מוצא מילים.",
+  "אני מוצף בפרטים ומרגיש שאני מאבד שליטה ומתפזר.",
+  "אני בורח מהחלטה קשה כי אני מפחד לטעות."
 ];
 
 const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
@@ -28,7 +27,6 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   const [htmlContent, setHtmlContent] = useState('');
 
   useEffect(() => {
-    // When the original text changes (new message streaming finished), reset
     if (text !== translations['HE']) {
         setTranslations({ 'HE': text });
         setCurrentText(text);
@@ -99,7 +97,7 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
             disabled={loadingLang !== null}
             className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all flex items-center justify-center min-w-[24px] ${
               currentLang === l.id 
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' 
+                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' 
                 : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent'
             }`}
           >
@@ -113,13 +111,12 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
+export const StuckManagerAi: React.FC<StuckManagerAiProps> = ({ scores }) => {
   const [userInput, setUserInput] = useState('');
   const [conversation, setConversation] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -135,11 +132,10 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
     setUserInput('');
     setIsLoading(true);
 
-    // Add a placeholder for AI response
     setConversation(prev => [...prev, { sender: 'ai', text: '' }]);
 
     try {
-      await getAiCoachAdviceStream(scores, text, (chunk) => {
+      await getStuckManagerAdviceStream(scores, text, (chunk) => {
         setConversation(prev => {
             const next = [...prev];
             const aiMsg = next[next.length - 1];
@@ -150,7 +146,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
         });
       });
     } catch (error: any) {
-      console.error("AI Coach interaction failed:", error);
+      console.error("Stuck Manager AI interaction failed:", error);
       setConversation(prev => {
         const next = [...prev];
         const last = next[next.length - 1];
@@ -167,12 +163,14 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 mb-6">
-        <div className="bg-cyan-500/20 p-2 rounded-xl">
-          <SparklesIcon className="w-8 h-8 text-yellow-400" />
+        <div className="bg-orange-500/20 p-2 rounded-xl">
+          <svg className="w-8 h-8 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
         </div>
         <div>
-          <h3 className="text-2xl font-bold text-white">מאמן ה-AI האישי שלך</h3>
-          <p className="text-gray-400 text-sm font-medium">ייעוץ מותאם אישית לפרופיל התקשורת שלך</p>
+          <h3 className="text-2xl font-bold text-white">נתקעתי - חילוץ מ'מחטף אמיגדלה'</h3>
+          <p className="text-gray-400 text-sm font-medium">כפתור מצוקה למצבי הצפה: תאר מה עובר עליך, ואעזור לך לווסת חזרה לשליטה לפי הצבע שלך</p>
         </div>
       </div>
       
@@ -183,13 +181,13 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
         {conversation.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
             <div className="bg-gray-800/50 p-6 rounded-2xl border border-dashed border-gray-700">
-                <p className="text-gray-400 mb-4 font-medium italic">"היי! אני כאן כדי לעזור לך לרתום את החוזקות שלך. על מה נרצה לדבר היום?"</p>
+                <p className="text-gray-400 mb-4 font-medium italic">"שלום. אני כאן כדי לעזור לך כשאתה מרגיש מוצף, כועס, קופא או מאבד שליטה (Amygdala Hijack). מה קורה לך עכשיו?"</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {PRESET_QUESTIONS.map((q, i) => (
                     <button 
                       key={i} 
                       onClick={() => handleSendMessage(q)} 
-                      className="text-right text-sm bg-gray-800 hover:bg-gray-700 hover:text-cyan-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm"
+                      className="text-right text-sm bg-gray-800 hover:bg-gray-700 hover:text-orange-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm"
                     >
                       {q}
                     </button>
@@ -205,7 +203,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
               <div
                 className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${
                   msg.sender === 'user' 
-                  ? 'bg-gradient-to-br from-cyan-700 to-blue-800 text-white rounded-tl-none' 
+                  ? 'bg-gradient-to-br from-orange-700 to-red-800 text-white rounded-tl-none' 
                   : 'bg-gray-800 text-gray-200 border border-gray-700 rounded-tr-none'
                 }`}
               >
@@ -222,10 +220,10 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
             <div className="flex justify-start animate-fade-in">
               <div className="bg-gray-800 border border-gray-700 p-4 rounded-2xl rounded-tr-none">
                 <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                    <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
-                    <span className="text-xs text-gray-500 mr-2 font-bold uppercase tracking-wider">מעבד נתונים...</span>
+                    <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce"></div>
+                    <span className="text-xs text-gray-500 mr-2 font-bold uppercase tracking-wider">מנתח סיטואציה...</span>
                 </div>
               </div>
             </div>
@@ -239,14 +237,14 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          placeholder="כתוב את שאלתך כאן..."
-          className="w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 pr-5 pl-20 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-all shadow-lg"
+          placeholder="תאר מה אתה מרגיש עכשיו..."
+          className="w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 pr-5 pl-20 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500 transition-all shadow-lg"
           disabled={isLoading}
         />
         <button
           onClick={() => handleSendMessage()}
           disabled={isLoading || !userInput.trim()}
-          className="absolute left-2 top-2 bottom-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-6 rounded-xl transition-all disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md"
+          className="absolute left-2 top-2 bottom-2 bg-orange-600 hover:bg-orange-500 text-white font-bold px-6 rounded-xl transition-all disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md"
         >
           {isLoading ? '...' : 'שלח'}
         </button>

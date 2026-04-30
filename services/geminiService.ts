@@ -30,7 +30,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     חשוב: וודא שהתשובה שלך מלאה ומקיפה. אל תקטע את דבריך באמצע.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: "gemini-1.5-flash",
       contents: userInput,
       config: {
         systemInstruction: systemInstruction,
@@ -42,6 +42,53 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
   } catch (error: any) {
     console.error("AI Service Error:", error);
     return `שגיאה: ${error.message}`;
+  }
+};
+
+/**
+ * Streams AI coach advice.
+ */
+export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void): Promise<string> => {
+  try {
+    const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
+    if (!apiKey) throw new Error("מפתח API חסר.");
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const sA = Number(scores?.a || 0);
+    const sB = Number(scores?.b || 0);
+    const sC = Number(scores?.c || 0);
+    const sD = Number(scores?.d || 0);
+
+    const r = sA + sC;
+    const y = sA + sD;
+    const g = sB + sD;
+    const b = sB + sC;
+    const colors = [{ n: 'אדום', v: r }, { n: 'צהוב', v: y }, { n: 'ירוק', v: g }, { n: 'כחול', v: b }].sort((m, n) => n.v - m.v);
+
+    const systemInstruction = `אתה מאמן תקשורת אישי בכיר מבית Kilon Consulting. המשתמש בעל פרופיל תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n} והצבע המשני הוא ${colors[1].n}.
+    ענה על שאלות המשתמש בהתבסס על הפרופיל שלו בצורה מפורטת, אמפתית ופרקטית. השתמש בפורמט Markdown.`;
+
+    const result = await ai.models.generateContentStream({
+      model: "gemini-1.5-flash",
+      contents: userInput,
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+      },
+    });
+
+    let fullText = "";
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text;
+      fullText += chunkText;
+      onChunk(fullText);
+    }
+
+    return fullText;
+  } catch (error: any) {
+    console.error("AI Stream Error:", error);
+    throw error;
   }
 };
 
@@ -94,7 +141,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
         חשוב: ענה בצורה מפורטת ומלאה. אל תעצור באמצע.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: "gemini-1.5-flash",
       contents: challenge,
       config: {
         systemInstruction: systemInstruction,
@@ -108,6 +155,74 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
     return `שגיאה בניתוח הצוות: ${error.message}`;
   }
 }
+
+/**
+ * Streams Team AI advice.
+ */
+export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: string, onChunk: (chunk: string) => void): Promise<string> => {
+    try {
+        if (!challenge.trim()) return "נא להזין אתגר לניתוח.";
+
+        const validUsers = users.filter(u => u.scores);
+        if (validUsers.length === 0) return "אין מספיק נתוני משתמשים עם תוצאות לביצוע ניתוח צוותי.";
+
+        const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
+        validUsers.forEach(u => {
+            const s = u.scores!;
+            const r = (s.a || 0) + (s.c || 0);
+            const y = (s.a || 0) + (s.d || 0);
+            const g = (s.b || 0) + (s.d || 0);
+            const b = (s.b || 0) + (s.c || 0);
+
+            const max = Math.max(r, y, g, b);
+            if (max === r) teamStats.red++;
+            else if (max === y) teamStats.yellow++;
+            else if (max === g) teamStats.green++;
+            else if (max === b) teamStats.blue++;
+            teamStats.total++;
+        });
+
+        const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
+        if (!apiKey) throw new Error("מפתח API חסר.");
+
+        const ai = new GoogleGenAI({ apiKey });
+
+        const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
+        נתוני הצוות (סה"כ ${teamStats.total} משתתפים):
+        - אדום: ${teamStats.red}
+        - צהוב: ${teamStats.yellow}
+        - ירוק: ${teamStats.green}
+        - כחול: ${teamStats.blue}
+
+        האתגר שהוצג: "${challenge}"
+
+        מבנה התשובה הנדרש (בעברית, פורמט Markdown):
+        1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה?
+        2. נקודות עיוורון: מה הצוות מפספס?
+        3. 3 המלצות פרקטיות ומידיות לשיפור המצב.`;
+
+        const result = await ai.models.generateContentStream({
+            model: "gemini-1.5-flash",
+            contents: challenge,
+            config: {
+                systemInstruction: systemInstruction,
+                temperature: 0.7,
+            },
+        });
+
+        let fullText = "";
+        for await (const chunk of result.stream) {
+            const chunkText = chunk.text;
+            fullText += chunkText;
+            onChunk(fullText);
+        }
+
+        return fullText;
+    } catch (error: any) {
+        console.error("Team AI Stream Error:", error);
+        throw error;
+    }
+};
 
 export interface SimulationMessage {
   sender: 'user' | 'ai';
@@ -147,7 +262,7 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
     const prompt = `היסטוריית השיחה עד כה:\n${conversationLog}\n\nהמשתמש כעת אומר:\n${userInput}\n\nהגב עכשיו מתוך הדמות (ללא הסברים מחוץ לדמות):`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -293,5 +408,94 @@ export const transcribeAudio = async (audioBase64: string, mimeType: string): Pr
   } catch (error: any) {
     console.error('Transcription error:', error);
     throw new Error('שגיאה בתמלול: ' + error.message);
+  }
+};
+
+/**
+ * Translates text into a target language using Gemini.
+ */
+export async function translateText(text: string, targetLanguage: string): Promise<string> {
+  const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
+  
+  if (!apiKey) {
+    throw new Error("מפתח API חסר. אנא וודא שהגדרת את VITE_GEMINI_API_KEY בסביבת העבודה.");
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const result = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: text,
+      config: {
+        systemInstruction: `You are a professional translator. 
+        Translate the following text into ${targetLanguage}. 
+        - Maintain the original tone, professionalism, and nuance.
+        - Preserve ALL Markdown formatting (bold, lists, headers, etc.).
+        - Return ONLY the translated text, with no explanations or extra tokens.
+        - Ensure the translation feels native and high-quality.`,
+        temperature: 0.3,
+      }
+    });
+
+    return result.text || "לא התקבלה תשובה.";
+  } catch (error) {
+    console.error("Translation error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Streams advice for a manager who is stuck in a situation.
+ */
+export const getStuckManagerAdviceStream = async (scores: Scores, situation: string, onChunk: (chunk: string) => void): Promise<string> => {
+  try {
+    const apiKey = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env.VITE_GEMINI_API_KEY : undefined;
+    if (!apiKey) throw new Error("מפתח API חסר.");
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    const sA = Number(scores?.a || 0);
+    const sB = Number(scores?.b || 0);
+    const sC = Number(scores?.c || 0);
+    const sD = Number(scores?.d || 0);
+
+    const r = sA + sC;
+    const y = sA + sD;
+    const g = sB + sD;
+    const b = sB + sC;
+    const colors = [{ n: 'אדום', v: r }, { n: 'צהוב', v: y }, { n: 'ירוק', v: g }, { n: 'כחול', v: b }].sort((m, n) => n.v - m.v);
+
+    const systemInstruction = `אתה יועץ מנהיגות ופסיכולוג ארגוני בכיר מבית Kilon Consulting. 
+המשתמש שפונה אליך הוא מנהל שחווה כרגע הצפה רגשית, לחץ, קפאון או אובדן שליטה ("Amygdala Hijack"). 
+סגנון התקשורת הדומיננטי שלו הוא ${colors[0].n} והמשני הוא ${colors[1].n}.
+
+המצב הפנימי שהוא מתאר: "${situation}"
+
+תפקידך הוא לשמש ככפתור חילוץ. עזור לו לחזור לשליטה ולתפקוד של קליפת המוח הקדם-מצחית (Prefrontal Cortex):
+1. זיהוי ונרמול (Validation): שקף לו שמה שהוא חווה זו תגובת לחץ טבעית המאפיינת את סגנונו. למשל, במצב לחץ: אדום נוטה לתקוף/להתפוצץ, ירוק נוטה להימנע/לשתוק, כחול נוטה לקפוא/לחפור בפרטים, צהוב נוטה להתפזר/לברוח.
+2. ויסות מיידי (Regulation): הצע פעולה קוגניטיבית או פיזית קצרה (נשימה, השהיה, שינוי מיקוד) המותאמת לו כדי לעצור את המחטף.
+3. החזרת שליטה (Executive Function): הצע דרך פעולה אופרטיבית אחת, ברורה ושקולה להתמודדות עם המצב מתוך מודעות לסגנון שלו ולצבעים אחרים.
+השתמש בשפה מרגיעה, מקצועית ואמפתית, בפורמט Markdown ברור ומסודר. אל תקטע את דבריך באמצע.`;
+
+    const result = await ai.models.generateContentStream({
+      model: "gemini-1.5-flash",
+      contents: situation,
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+      },
+    });
+
+    let fullText = "";
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text;
+      fullText += chunkText;
+      onChunk(fullText);
+    }
+
+    return fullText;
+  } catch (error: any) {
+    console.error("Stuck Manager AI Stream Error:", error);
+    throw error;
   }
 };
