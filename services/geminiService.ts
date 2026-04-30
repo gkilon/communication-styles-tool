@@ -35,6 +35,12 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.7,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       },
     });
 
@@ -75,6 +81,12 @@ export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, 
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.7,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       },
     });
 
@@ -146,6 +158,12 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.7,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       },
     });
 
@@ -207,6 +225,12 @@ export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: str
             config: {
                 systemInstruction: systemInstruction,
                 temperature: 0.7,
+                safetySettings: [
+                  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                ]
             },
         });
 
@@ -267,6 +291,12 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.8,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       },
     });
 
@@ -306,6 +336,12 @@ ${conversationLog}
       contents: prompt,
       config: {
         temperature: 0.7,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       },
     });
 
@@ -364,6 +400,12 @@ export const generatePromptAnalysis = async (scores: Scores, taskDescription: st
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.7,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       },
     });
 
@@ -432,8 +474,15 @@ export async function translateText(text: string, targetLanguage: string): Promi
         - Maintain the original tone, professionalism, and nuance.
         - Preserve ALL Markdown formatting (bold, lists, headers, etc.).
         - Return ONLY the translated text, with no explanations or extra tokens.
+        - Even if the text contains intense emotions or direct language, translate it faithfully without filtering.
         - Ensure the translation feels native and high-quality.`,
         temperature: 0.3,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       }
     });
 
@@ -483,6 +532,12 @@ export const getStuckManagerAdviceStream = async (scores: Scores, situation: str
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.7,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       },
     });
 
