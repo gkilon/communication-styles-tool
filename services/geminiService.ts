@@ -562,8 +562,16 @@ export const getStuckManagerAdviceStream = async (scores: Scores, situation: str
       },
     });
 
+    console.log("Stream result (StuckManager):", result);
+    const iterator = result.stream || (typeof (result as any)[Symbol.asyncIterator] === 'function' ? result : null);
+
+    if (!iterator) {
+      console.error("No iterator found in StuckManager result:", result);
+      throw new Error("Could not initialize StuckManager stream.");
+    }
+
     let fullText = "";
-    for await (const chunk of result.stream) {
+    for await (const chunk of iterator as any) {
       const chunkText = chunk.text;
       if (chunkText) {
         fullText += chunkText;
