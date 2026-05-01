@@ -77,19 +77,25 @@ export const App: React.FC = () => {
      
      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         setUser(currentUser);
-        if (currentUser) {
-            try {
-                const profile = await getUserProfile(currentUser.uid);
-                if (profile?.role === 'admin' || currentUser.email === 'admin@manager.com') {
-                    setView('admin');
-                } else {
-                    setView('simple');
-                }
-            } catch (e) {
-                console.error("Profile load error:", e);
-                setView('simple');
-            }
-        } else {
+         if (currentUser) {
+             try {
+                 const profile = await getUserProfile(currentUser.uid);
+                 console.log("Logged in user:", currentUser.email, "Role from DB:", profile?.role);
+                 
+                 if (profile?.role === 'admin' || 
+                     currentUser.email === 'admin@manager.com' || 
+                     currentUser.email === 'gilad@kilon.org') {
+                     console.log("Admin access granted");
+                     setView('admin');
+                 } else {
+                     console.log("Standard user access");
+                     setView('simple');
+                 }
+             } catch (e) {
+                 console.error("Profile load error:", e);
+                 setView('simple');
+             }
+         } else {
             setView('simple');
         }
         clearTimeout(timer);
