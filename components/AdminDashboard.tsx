@@ -282,6 +282,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 )}
             </div>
 
+            {/* Teams Management & Links Section */}
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-gray-700">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <span>🔗</span> ניהול צוותים וקישורי הרשמה
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {teams.map(team => (
+                        <div key={team.id} className="bg-gray-900/50 p-4 rounded-xl border border-gray-700 flex items-center justify-between group hover:border-cyan-500/50 transition-all">
+                            <div className="overflow-hidden">
+                                <div className="text-white font-bold truncate">{team.name}</div>
+                                <div className="text-[10px] text-gray-500 truncate">ID: {team.id}</div>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    const url = `${window.location.origin}/?team=${encodeURIComponent(team.name)}`;
+                                    navigator.clipboard.writeText(url);
+                                    alert(`הקישור לצוות "${team.name}" הועתק ללוח!`);
+                                }}
+                                className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-400 hover:text-white p-2 rounded-lg transition-all text-xs font-bold border border-cyan-600/30"
+                                title="העתק קישור ייעודי"
+                            >
+                                העתק קישור
+                            </button>
+                        </div>
+                    ))}
+                    {teams.length === 0 && <p className="text-gray-500 text-sm italic">טרם נוצרו צוותים.</p>}
+                </div>
+            </div>
+
             {/* Data Table & Map */}
             <div className="bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border border-gray-700">
                 <div className="p-6 border-b border-gray-700 flex flex-col sm:flex-row gap-4 items-center justify-between bg-gray-750">
