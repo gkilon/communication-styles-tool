@@ -4,7 +4,8 @@
   "private": true,
   "description": "An interactive questionnaire to discover your communication style with AI-powered insights.",
   "scripts": {
-    "dev": "vite",
+    "dev": "netlify dev",
+    "dev:vite": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },

@@ -3,52 +3,66 @@ import { GoogleGenAI } from "@google/genai";
 export default async (req: Request) => {
   try {
     const { action, payload } = await req.json();
-    const apiKey = process.env.VITE_GEMINI_API_KEY;
+    // Try standard Netlify env var first, then the VITE_ prefixed one
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "API Key missing in environment" }), { status: 500 });
+      console.error("Gemini API Key missing");
+      return new Response(JSON.stringify({ error: "API Key missing in environment" }), { 
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     const ai = new GoogleGenAI({ apiKey });
+    const modelName = payload.model || "gemini-2.0-flash";
 
     // Helper for streaming
     if (action.endsWith('Stream')) {
-      const result = await ai.models.generateContentStream({
-        model: payload.model || "gemini-2.5-flash",
-        contents: payload.contents,
-        config: payload.config
-      });
+      try {
+        const result = await ai.models.generateContentStream({
+          model: modelName,
+          contents: payload.contents,
+          config: payload.config
+        });
 
-      const iterator = result.stream || (typeof (result as any)[Symbol.asyncIterator] === 'function' ? result : null);
-
-      if (!iterator) {
-        return new Response(JSON.stringify({ error: "Failed to initialize stream" }), { status: 500 });
-      }
-
-      const stream = new ReadableStream({
-        async start(controller) {
-          try {
-            for await (const chunk of iterator as any) {
-              const text = chunk.text;
-              if (text) {
-                controller.enqueue(new TextEncoder().encode(text));
+        // The result itself is an async iterator in @google/genai
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              for await (const chunk of result) {
+                const text = chunk.text;
+                if (text) {
+                  controller.enqueue(new TextEncoder().encode(text));
+                }
               }
+              controller.close();
+            } catch (e: any) {
+              console.error("Stream processing error:", e);
+              controller.error(e);
             }
-            controller.close();
-          } catch (e) {
-            controller.error(e);
           }
-        }
-      });
+        });
 
-      return new Response(stream, {
-        headers: { "Content-Type": "text/plain; charset=utf-8" }
-      });
+        return new Response(stream, {
+          headers: { 
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+          }
+        });
+      } catch (streamError: any) {
+        console.error("Streaming initialization error:", streamError);
+        return new Response(JSON.stringify({ error: streamError.message }), { 
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
     }
 
     // Non-streaming actions
     const response = await ai.models.generateContent({
-      model: payload.model || "gemini-2.5-flash",
+      model: modelName,
       contents: payload.contents,
       config: payload.config
     });
@@ -59,7 +73,10 @@ export default async (req: Request) => {
 
   } catch (error: any) {
     console.error("Netlify Function Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: error.message }), { 
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 };
 

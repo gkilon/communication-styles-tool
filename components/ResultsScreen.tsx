@@ -60,7 +60,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
       input.classList.add('pdf-export-mode');
 
       const canvas = await html2canvas(input, {
-        scale: 2,
+        scale: 1.5, // Reduced from 2 to 1.5 for smaller size while keeping good quality
         backgroundColor: '#0f172a',
         useCORS: true,
         logging: false,
@@ -71,8 +71,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
 
       input.classList.remove('pdf-export-mode');
 
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      // Use JPEG with 0.8 quality for significant size reduction compared to PNG
+      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const pdf = new jsPDF('p', 'mm', 'a4', true); // Enable compression
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -88,7 +89,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, onReset, o
       pdf.setFillColor(15, 23, 42);
       pdf.rect(0, 0, pageWidth, pageHeight, 'F');
 
-      pdf.addImage(imgData, 'PNG', margin, margin, pdfContentWidth, finalContentHeight);
+      // Use JPEG with FAST compression
+      pdf.addImage(imgData, 'JPEG', margin, margin, pdfContentWidth, finalContentHeight, undefined, 'FAST');
 
       pdf.setFontSize(7);
       pdf.setTextColor(80, 80, 80);

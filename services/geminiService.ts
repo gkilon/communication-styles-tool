@@ -11,8 +11,12 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
   });
 
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error || 'Request failed');
+    try {
+      const err = await response.json();
+      throw new Error(err.error || `Request failed with status ${response.status}`);
+    } catch (e) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
   }
 
   return response;
@@ -61,7 +65,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
     השתמש ב-Markdown, שמור על תשובות קצרות ולעניין (תכלס), והימנע מהקדמות ארוכות מדי.`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: userInput,
       config: {
         systemInstruction,
@@ -89,7 +93,7 @@ export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, 
     ענה בצורה ממוקדת, תומכת ופרקטית. התמקד בעיקר (תכלס) והשתמש בפורמט Markdown.`;
 
     return callGeminiApiStream('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: userInput,
       config: {
         systemInstruction,
@@ -141,7 +145,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
         חשוב: ענה בצורה מפורטת ומלאה. אל תעצור באמצע.`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: challenge,
       config: {
         systemInstruction,
@@ -195,7 +199,7 @@ export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: str
     3. 3 המלצות פרקטיות ומידיות לשיפור המצב.`;
 
     return callGeminiApiStream('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: challenge,
       config: {
         systemInstruction,
@@ -228,7 +232,7 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
     const prompt = `היסטוריית השיחה עד כה:\n${conversationLog}\n\nהמשתמש כעת אומר:\n${userInput}\n\nהגב עכשיו מתוך הדמות (ללא הסברים מחוץ לדמות):`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -264,7 +268,7 @@ ${conversationLog}
 3. 💡 טיפ אחד לפעם הבאה — המלצה פרקטית קצרה.`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         temperature: 0.7,
@@ -308,7 +312,7 @@ export const generatePromptAnalysis = async (scores: Scores, taskDescription: st
 4. שכתוב מומלץ: הצע פרומפט מיטבי עבור המשימה.`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: "אנא נתח את הפרומפט המצויין.",
       config: {
         systemInstruction,
@@ -356,7 +360,7 @@ export const transcribeAudio = async (audioBase64: string, mimeType: string): Pr
 export async function translateText(text: string, targetLanguage: string): Promise<string> {
   try {
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: text,
       config: {
         systemInstruction: `You are a professional translator. Translate the following text into ${targetLanguage}.`,
@@ -389,7 +393,7 @@ export const getStuckManagerAdviceStream = async (scores: Scores, situation: str
 3. המלצות "תכלס" לפעולה.`;
 
     return callGeminiApiStream('generateContent', {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [{ role: 'user', parts: [{ text: situation }] }],
       config: {
         systemInstruction,
