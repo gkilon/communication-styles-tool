@@ -377,9 +377,6 @@ ${positionContext[relationship] || ''}
     const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'אתה'}: ${m.text}`).join('\n\n');
     const prompt = `היסטוריית השיחה:\n${conversationLog}\n\nהמשתמש אומר:\n${userInput}\n\nהגב מתוך הדמות:`;
 
-    const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'אתה'}: ${m.text}`).join('\n\n');
-    const prompt = `היסטוריית השיחה:\n${conversationLog}\n\nהמשתמש אומר:\n${userInput}\n\nהגב מתוך הדמות:`;
-
     const response = await callGeminiApi('generateContent', {
       model: "gemini-2.0-flash",
       contents: prompt,
