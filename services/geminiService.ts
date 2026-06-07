@@ -57,23 +57,77 @@ function getColorsFromScores(scores: Scores) {
   return [{ n: 'אדום', v: r }, { n: 'צהוב', v: y }, { n: 'ירוק', v: g }, { n: 'כחול', v: b }].sort((m, n) => n.v - m.v);
 }
 
-export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
-  try {
-    const colors = getColorsFromScores(scores);
-    const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting. 
-המשתמש שפונה אליך מאופיין במפת צבעים מוגדרת: צבע דומיננטי: ${colors[0].n}, צבע משני: ${colors[1].n}.
+/**
+ * Builds a detailed color profile string for use in prompts.
+ * Instead of just "dominant: red, secondary: blue", includes all four scores
+ * and the intensity/gap between colors for richer personalization.
+ */
+function buildColorProfile(scores: Scores): string {
+  const sA = Number(scores?.a || 0);
+  const sB = Number(scores?.b || 0);
+  const sC = Number(scores?.c || 0);
+  const sD = Number(scores?.d || 0);
 
-להלן מפת התכונות וההתנהגות של ארבעת הצבעים במודל Kilon Consulting:
+  const r = sA + sC;
+  const y = sA + sD;
+  const g = sB + sD;
+  const b = sB + sC;
+  const total = r + y + g + b;
+
+  const colors = [
+    { n: 'אדום', v: r },
+    { n: 'צהוב', v: y },
+    { n: 'ירוק', v: g },
+    { n: 'כחול', v: b }
+  ].sort((a, b) => b.v - a.v);
+
+  const dominant = colors[0];
+  const secondary = colors[1];
+  const gap = dominant.v - secondary.v;
+
+  const dominanceDesc = gap > 8
+    ? `דומיננטיות חזקה מאוד של ${dominant.n} (פער של ${gap} נקודות מהצבע הבא)`
+    : gap > 4
+    ? `דומיננטיות ברורה של ${dominant.n}`
+    : `פרופיל מאוזן יחסית בין ${dominant.n} ל-${secondary.n}`;
+
+  return `פרופיל צבעים מלא של המשתמש:
+- אדום (הנחוש): ${r} נקודות (${Math.round(r/total*100)}%)
+- צהוב (המשפיע): ${y} נקודות (${Math.round(y/total*100)}%)
+- ירוק (התומך): ${g} נקודות (${Math.round(g/total*100)}%)
+- כחול (המדויק): ${b} נקודות (${Math.round(b/total*100)}%)
+צבע דומיננטי: ${dominant.n} | צבע משני: ${secondary.n}
+${dominanceDesc}`;
+}
+
+const COLOR_TRAITS = `מאפייני הצבעים במודל Kilon Consulting:
 - אדום (הנחוש): ממוקד תוצאות, ישיר, מהיר, החלטי, חסר סבלנות, עלול להיתפס כשתלטן או אגרסיבי, קושי בהקשבה לדעות שונות.
 - צהוב (המשפיע): כריזמטי, אופטימי, יצירתי, חברותי, מתקשה עם פרטים וסדר, נטייה להימנע מקונפליקטים, זקוק להכרה.
 - ירוק (התומך): אמפתי, מקשיב, סבלני, הרמוני, אמין, מתנגד לשינויים מהירים, נמנע מעימותים, נוטה לוותר על עצמו.
-- כחול (המדויק): אנליטי, יסודי, מבוסס נתונים ופרטים, שאיפה לשלמות, ביקורתי, עלול להיתפס כמרוחק או קר.
+- כחול (המדויק): אנליטי, יסודי, מבוסס נתונים ופרטים, שאיפה לשלמות, ביקורתי, עלול להיתפס כמרוחק או קר.`;
+
+const SAFETY_SETTINGS = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+];
+
+export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
+  try {
+    const colorProfile = buildColorProfile(scores);
+    const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
+
+${colorProfile}
+
+${COLOR_TRAITS}
 
 הנחיות לאימון מותאם אישית:
-1. התאם את העצות שאתה נותן בדיוק לפרופיל שלו (${colors[0].n} דומיננטי ו-${colors[1].n} משני) ולתוצאות השאלון שלו.
-2. הצע לו דרכים פרקטיות כיצד להשתמש בחוזקות שלו כדי לשפר את התקשורת שלו עם סגנונות אחרים (למשל, איך אדום צריך לדבר עם ירוק, או איך כחול צריך לדבר עם צהוב).
-3. הראה לו כיצד להתגבר על נקודות העיוורון הטבעיות של הצבע שלו.
-4. ענה בצורה ממוקדת, פרקטית, בגובה העיניים וייחודית (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
+1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה. אם הדומיננטיות חזקה מאוד, ציין את עוצמתה.
+2. כשהמשתמש פונה אליך בפעם הראשונה ולא שאל שאלה ספציפית — שאל אותו שאלת פתיחה אחת קצרה: "מה מביא אותך כאן היום? יש מצב ספציפי, אדם מסוים, או אתגר שאתה רוצה לעבוד עליו?" — ואז המתן לתשובתו.
+3. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שהוא תיאר, ולא לדוגמאות גנריות.
+4. הצע דרכים פרקטיות כיצד הפרופיל הספציפי שלו (עם הניואנסים המספריים) יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון שלו.
+5. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-2.0-flash",
@@ -81,12 +135,7 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
       config: {
         systemInstruction,
         temperature: 0.7,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
+        safetySettings: SAFETY_SETTINGS
       }
     });
 
@@ -99,36 +148,29 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promi
 };
 
 export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void): Promise<string> => {
-    const colors = getColorsFromScores(scores);
-    const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
-המשתמש שפונה אליך מאופיין במפת צבעים מוגדרת: צבע דומיננטי: ${colors[0].n}, צבע משני: ${colors[1].n}.
+  const colorProfile = buildColorProfile(scores);
+  const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
 
-להלן מפת התכונות של ארבעת הצבעים במודל Kilon Consulting:
-- אדום (הנחוש): ממוקד תוצאות, ישיר, מהיר, החלטי, חסר סבלנות, עלול להיתפס כשתלטן או אגרסיבי, קושי בהקשבה לדעות שונות.
-- צהוב (המשפיע): כריזמטי, אופטימי, יצירתי, חברותי, מתקשה עם פרטים וסדר, נטייה להימנע מקונפליקטים, זקוק להכרה.
-- ירוק (התומך): אמפתי, מקשיב, סבלני, הרמוני, אמין, מתנגד לשינויים מהירים, נמנע מעימותים, נוטה לוותר על עצמו.
-- כחול (המדויק): אנליטי, יסודי, מבוסס נתונים ופרטים, שאיפה לשלמות, ביקורתי, עלול להיתפס כמרוחק או קר.
+${colorProfile}
+
+${COLOR_TRAITS}
 
 הנחיות לאימון מותאם אישית:
-1. התאם את העצות שאתה נותן בדיוק לפרופיל שלו (${colors[0].n} דומיננטי ו-${colors[1].n} משני) ולתוצאות השאלון שלו.
-2. הצע לו דרכים פרקטיות כיצד להשתמש בחוזקות שלו כדי לשפר את התקשורת שלו עם סגנונות אחרים.
-3. הראה לו כיצד להתגבר על נקודות העיוורון הטבעיות של הצבע שלו.
-4. ענה בצורה ממוקדת, פרקטית, בגובה העיניים וייחודית (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
+1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה. אם הדומיננטיות חזקה מאוד, ציין את עוצמתה.
+2. כשהמשתמש פונה אליך בפעם הראשונה ולא שאל שאלה ספציפית — שאל אותו שאלת פתיחה אחת קצרה: "מה מביא אותך כאן היום? יש מצב ספציפי, אדם מסוים, או אתגר שאתה רוצה לעבוד עליו?" — ואז המתן לתשובתו.
+3. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שהוא תיאר, ולא לדוגמאות גנריות.
+4. הצע דרכים פרקטיות כיצד הפרופיל הספציפי שלו (עם הניואנסים המספריים) יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון שלו.
+5. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
 
-    return callGeminiApiStream('generateContent', {
-      model: "gemini-2.0-flash",
-      contents: userInput,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
-      }
-    }, onChunk);
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-2.0-flash",
+    contents: userInput,
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
 };
 
 export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): Promise<string> => {
@@ -152,20 +194,35 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
       teamStats.total++;
     });
 
+    // Find dominant and missing colors
+    const colorCounts = [
+      { n: 'אדום', v: teamStats.red },
+      { n: 'צהוב', v: teamStats.yellow },
+      { n: 'ירוק', v: teamStats.green },
+      { n: 'כחול', v: teamStats.blue }
+    ].sort((a, b) => b.v - a.v);
+
+    const dominantColor = colorCounts[0].n;
+    const missingColors = colorCounts.filter(c => c.v === 0).map(c => c.n);
+    const missingStr = missingColors.length > 0 ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}` : 'כל הצבעים מיוצגים בצוות';
+
     const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
-להלן מפת הצבעים המשמשת אותך לניתוח:
-- אדום (הנחוש): ממוקד תוצאות, ישיר, מניע תהליכים, חסר סבלנות, עלול להיתפס כשתלטן או אגרסיבי, קושי בהקשבה לדעות שונות.
-- צהוב (המשפיע): כריזמטי, אופטימי, יצירתי, חברותי, קושי עם פרטים וסדר, נטייה להימנע מקונפליקטים, זקוק להכרה.
-- ירוק (התומך): יציב, אמפתי, סבלני, הרמוני, אמין, נמנע מעימותים, נוטה לוותר על עצמו, מתנגד לשינויים מהירים.
-- כחול (המדויק): אנליטי, יסודי, מבוסס נתונים ופרטים, שאיפה לשלמות, ביקורתי, עלול להיתפס כמרוחק או קר.
+
+${COLOR_TRAITS}
 
 נתוני הצוות (סה"כ ${teamStats.total} משתתפים):
-- אדום: ${teamStats.red}
-- צהוב: ${teamStats.yellow}
-- ירוק: ${teamStats.green}
-- כחול: ${teamStats.blue}
+- אדום: ${teamStats.red} (${Math.round(teamStats.red/teamStats.total*100)}%)
+- צהוב: ${teamStats.yellow} (${Math.round(teamStats.yellow/teamStats.total*100)}%)
+- ירוק: ${teamStats.green} (${Math.round(teamStats.green/teamStats.total*100)}%)
+- כחול: ${teamStats.blue} (${Math.round(teamStats.blue/teamStats.total*100)}%)
+הצבע הדומיננטי בצוות: ${dominantColor}
+${missingStr}
 
 האתגר שהוצג: "${challenge}"
+
+חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק — לא ניתוח גנרי. 
+למשל: אם יש רוב ירוק, הסבר איך זה ספציפית יוצר את האתגר הזה. 
+אם חסר צבע מסוים, הסבר מה בדיוק הצוות מפספס בגלל זה.
 
 מבנה התשובה הנדרש (בעברית, פורמט Markdown):
 1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה? כיצד הצבע הדומיננטי בצוות והצבע החסר משפיעים על המצב?
@@ -179,12 +236,7 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
       config: {
         systemInstruction,
         temperature: 0.7,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
+        safetySettings: SAFETY_SETTINGS
       }
     });
 
@@ -197,56 +249,63 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): 
 };
 
 export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: string, onChunk: (chunk: string) => void): Promise<string> => {
-    const validUsers = users.filter(u => u.scores);
-    const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
-    validUsers.forEach(u => {
-        const s = u.scores!;
-        const r = (s.a || 0) + (s.c || 0);
-        const y = (s.a || 0) + (s.d || 0);
-        const g = (s.b || 0) + (s.d || 0);
-        const b = (s.b || 0) + (s.c || 0);
-        const max = Math.max(r, y, g, b);
-        if (max === r) teamStats.red++;
-        else if (max === y) teamStats.yellow++;
-        else if (max === g) teamStats.green++;
-        else if (max === b) teamStats.blue++;
-        teamStats.total++;
-    });
+  const validUsers = users.filter(u => u.scores);
+  const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
+  validUsers.forEach(u => {
+    const s = u.scores!;
+    const r = (s.a || 0) + (s.c || 0);
+    const y = (s.a || 0) + (s.d || 0);
+    const g = (s.b || 0) + (s.d || 0);
+    const b = (s.b || 0) + (s.c || 0);
+    const max = Math.max(r, y, g, b);
+    if (max === r) teamStats.red++;
+    else if (max === y) teamStats.yellow++;
+    else if (max === g) teamStats.green++;
+    else if (max === b) teamStats.blue++;
+    teamStats.total++;
+  });
 
-    const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
-להלן מפת הצבעים המשמשת אותך לניתוח:
-- אדום (הנחוש): ממוקד תוצאות, ישיר, מניע תהליכים, חסר סבלנות, עלול להיתפס כשתלטן או אגרסיבי, קושי בהקשבה לדעות שונות.
-- צהוב (המשפיע): כריזמטי, אופטימי, יצירתי, חברותי, קושי עם פרטים וסדר, נטייה להימנע מקונפליקטים, זקוק להכרה.
-- ירוק (התומך): יציב, אמפתי, סבלני, הרמוני, אמין, נמנע מעימותים, נוטה לוותר על עצמו, מתנגד לשינויים מהירים.
-- כחול (המדויק): אנליטי, יסודי, מבוסס נתונים ופרטים, שאיפה לשלמות, ביקורתי, עלול להיתפס כמרוחק או קר.
+  const colorCounts = [
+    { n: 'אדום', v: teamStats.red },
+    { n: 'צהוב', v: teamStats.yellow },
+    { n: 'ירוק', v: teamStats.green },
+    { n: 'כחול', v: teamStats.blue }
+  ].sort((a, b) => b.v - a.v);
+
+  const dominantColor = colorCounts[0].n;
+  const missingColors = colorCounts.filter(c => c.v === 0).map(c => c.n);
+  const missingStr = missingColors.length > 0 ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}` : 'כל הצבעים מיוצגים בצוות';
+
+  const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
+
+${COLOR_TRAITS}
 
 נתוני הצוות (סה"כ ${teamStats.total} משתתפים):
-- אדום: ${teamStats.red}
-- צהוב: ${teamStats.yellow}
-- ירוק: ${teamStats.green}
-- כחול: ${teamStats.blue}
+- אדום: ${teamStats.red} (${Math.round(teamStats.red/teamStats.total*100)}%)
+- צהוב: ${teamStats.yellow} (${Math.round(teamStats.yellow/teamStats.total*100)}%)
+- ירוק: ${teamStats.green} (${Math.round(teamStats.green/teamStats.total*100)}%)
+- כחול: ${teamStats.blue} (${Math.round(teamStats.blue/teamStats.total*100)}%)
+הצבע הדומיננטי בצוות: ${dominantColor}
+${missingStr}
 
 האתגר שהוצג: "${challenge}"
+
+חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק — לא ניתוח גנרי.
 
 מבנה התשובה הנדרש (בעברית, פורמט Markdown):
 1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה? כיצד הצבע הדומיננטי בצוות והצבע החסר משפיעים על המצב?
 2. נקודות עיוורון: מה הצוות מפספס בגלל הרכב הצבעים שלו?
 3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות.`;
 
-    return callGeminiApiStream('generateContent', {
-      model: "gemini-2.0-flash",
-      contents: challenge,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
-      }
-    }, onChunk);
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-2.0-flash",
+    contents: challenge,
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
 };
 
 export interface SimulationMessage {
@@ -256,8 +315,8 @@ export interface SimulationMessage {
 
 export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], userInput: string): Promise<string> => {
   try {
-    const colors = getColorsFromScores(scores);
-    
+    const colorProfile = buildColorProfile(scores);
+
     const colorBehaviors: Record<string, string> = {
       'אדום': 'התנהג כטיפוס אדום (הנחוש): דבר בצורה ישירה, קצרה, ממוקדת במטרה וחלקה. היה אסרטיבי, ממוקד תוצאות, ענייני מאוד (תכלס), ואולי מעט חסר סבלנות לפרטים קטנים או למילים רכות. השתמש במשפטים קצרים ומעשיים.',
       'צהוב': 'התנהג כטיפוס צהוב (המשפיע): דבר בצורה אנרגטית, חברותית, מתלהבת, פתוחה ויצירתית. השתמש בסימני קריאה, הבע רגש, התמקד בקשר האישי ובחזון הכללי, והימנע מצלילה לפרטים טכניים או סדר ונהלים.',
@@ -267,11 +326,14 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
     const targetBehavior = colorBehaviors[targetColor] || `דבר בהתאם למאפייני סגנון ה-${targetColor}.`;
 
     const systemInstruction = `אתה משחק תפקיד של עמית לעבודה (קולגה) בעל סגנון תקשורת מובהק בצבע ${targetColor}.
-המשתמש שפונה אליך הוא עם סגנון תקשורת שבו הצבע הדומיננטי הוא ${colors[0].n}.
 התרחיש שאתם נמצאים בו כרגע הוא: "${scenario}".
+
+${colorProfile}
 
 הנחיית התנהגות קריטית עבורך:
 ${targetBehavior}
+
+שים לב לפרופיל הצבעים של המשתמש — הוא עשוי לתקשר בצורה שמאפיינת את הצבע הדומיננטי שלו. הגב בהתאם לסגנון שלך (${targetColor}) ולמה שאתה "מרגיש" מסגנון התקשורת שלו.
 
 הנחיות טכניות למשחק תפקידים:
 1. אל תיתן שום הסבר, הקדמה או הערה מחוץ לדמות!
@@ -287,12 +349,7 @@ ${targetBehavior}
       config: {
         systemInstruction,
         temperature: 0.8,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
+        safetySettings: SAFETY_SETTINGS
       }
     });
 
@@ -304,10 +361,11 @@ ${targetBehavior}
   }
 };
 
-export const getSimulationFeedback = async (targetColor: string, scenario: string, history: SimulationMessage[]): Promise<string> => {
+export const getSimulationFeedback = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[]): Promise<string> => {
   try {
+    const colorProfile = buildColorProfile(scores);
     const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'הקולגה (צבע ' + targetColor + ')'}: ${m.text}`).join('\n\n');
-    
+
     const colorFeedbackRules: Record<string, string> = {
       'אדום': 'זכור שטיפוס אדום (הנחוש) מעריך קצר ולעניין, ישירות, ביטחון ותכלס. הוא מתעצבן מגישושים ארוכים, היסוסים או רגשנות יתר. נתח האם המשתמש היה ענייני וישיר מספיק, או מרח את השיחה.',
       'צהוב': 'זכור שטיפוס צהוב (המשפיע) מעריך התלהבות, קשר אישי, יצירתיות ואנרגיה חיובית. הוא נרתע מפרטים יבשים, נהלים נוקשים או ביקורתיות. נתח האם המשתמש השתמש באנרגיה חיובית וחיזק את הקשר, או היה יבש מדי.',
@@ -316,34 +374,33 @@ export const getSimulationFeedback = async (targetColor: string, scenario: strin
     };
     const targetRules = colorFeedbackRules[targetColor] || "";
 
-    const prompt = `קרא את השיחה הבאה שנערכה בסימולטור מקרי בוחן. 
+    const prompt = `קרא את השיחה הבאה שנערכה בסימולטור מקרי בוחן.
 התרחיש: "${scenario}".
 הקולגה איתו שוחח המשתמש הוא בעל סגנון תקשורת בצבע: "${targetColor}".
+
+${colorProfile}
 
 כללי הניתוח של הסגנון ה${targetColor}:
 ${targetRules}
 
+שים לב לפרופיל הצבעים המלא של המשתמש בעת ניתוח השיחה — ייתכן שחוזקות או עיוורונות של הצבע הדומיננטי שלו השפיעו על אופן התקשורת שלו.
+
 השיחה שהתנהלה:
 ${conversationLog}
 
-אנא כתוב משוב בונה וממוקד מאוד בעברית בפורמט Markdown. 
+אנא כתוב משוב בונה וממוקד מאוד בעברית בפורמט Markdown.
 מבנה המשוב הנדרש:
 1. 💡 **הסבר קצר על הטיפוס ה${targetColor}:** הסבר בקצרה למשתמש איך טיפוס ${targetColor} חושב, מה מאפיין אותו ומה מניע אותו בתקשורת.
-2. ✅ **מה עבד טוב בשיחה?** (ציין מה בדיוק המשתמש עשה טוב שהתאים לצבע ה${targetColor}, תחת אילו תנאים הוא הצליח לייצר איתו חיבור, וציין דוגמה ספציפית מהשיחה).
-3. 🎯 **מה יצר חיכוך / מה ניתן לחדד?** (ציין היכן הגישה של המשתמש יצרה חיכוך עם סגנון ה${targetColor}, למשל רגשנות יתר מול אדום, חוסר סבלנות מול ירוק, או דיבור בסיסמאות מול כחול. הבא דוגמה ספציפית מהשיחה).
-4. 🚀 **שורה תחתונה וטיפ זהב לפעם הבאה:** המלצה פרקטית אחת ברורה ומעשית.`;
+2. ✅ **מה עבד טוב בשיחה?** (ציין מה בדיוק המשתמש עשה טוב שהתאים לצבע ה${targetColor}, וציין דוגמה ספציפית מהשיחה).
+3. 🎯 **מה יצר חיכוך / מה ניתן לחדד?** (ציין היכן הגישה של המשתמש יצרה חיכוך — גם בגלל הצבע שלו. הבא דוגמה ספציפית מהשיחה).
+4. 🚀 **שורה תחתונה וטיפ זהב לפעם הבאה:** המלצה פרקטית אחת ברורה ומעשית המותאמת לפרופיל הצבעים שלו.`;
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         temperature: 0.7,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
+        safetySettings: SAFETY_SETTINGS
       }
     });
 
@@ -357,11 +414,13 @@ ${conversationLog}
 
 export const generatePromptAnalysis = async (scores: Scores, taskDescription: string, userPrompt: string): Promise<string> => {
   try {
+    const colorProfile = buildColorProfile(scores);
     const colors = getColorsFromScores(scores);
     const mainColor = colors[0].n;
 
-    const systemInstruction = `אתה מומחה להנדסת פרומפטים (Prompt Engineering) ויועץ תקשורת. המשתמש מנסה להפעיל סוכן AI (אותך) לביצוע המשימה: "${taskDescription}".
-סגנון התקשורת האנושי של המשתמש מתאפיין בצבע ה${mainColor}.
+    const systemInstruction = `אתה מומחה להנדסת פרומפטים (Prompt Engineering) ויועץ תקשורת. המשתמש מנסה להפעיל סוכן AI לביצוע המשימה: "${taskDescription}".
+
+${colorProfile}
 
 לכל סגנון יש חוזקות וגם עיוורונות אופייניים בהנחיות ל-AI:
 - אדומים: ישירים, מהירים, ממוקדי תוצאה — לפעמים קצרים מדי וחסרי קונטקסט לסוכן.
@@ -371,11 +430,13 @@ export const generatePromptAnalysis = async (scores: Scores, taskDescription: st
 
 עליך לנתח את ה-Prompt הבא: "${userPrompt}"
 
+חשוב: הניתוח חייב להתייחס ספציפית לפרופיל המספרי המלא של המשתמש, לא רק לצבע הדומיננטי.
+
 החזר את הניתוח בפורמט Markdown הכולל:
 1. ציון משוער (1-100) על יעילות ההנחיה לסוכן AI.
-2. ניתוח: כיצד ה"צבע" של המשתמש בא לידי ביטוי — מה הוא הביא מהחוזקות שלו, ומה עלול להפריע לסוכן?
+2. ניתוח: כיצד ה"צבע" הספציפי של המשתמש (עם הניואנסים המספריים) בא לידי ביטוי — מה הוא הביא מהחוזקות שלו, ומה עלול להפריע לסוכן?
 3. השלכה: איזו טעות קריטית ה-AI צפוי לעשות בגלל הפרומפט הזה במצבו הנוכחי.
-4. שכתוב מומלץ: הצע פרומפט מיטבי עבור המשימה.`;
+4. שכתוב מומלץ: הצע פרומפט מיטבי עבור המשימה המותאם לאופן החשיבה של הצבע ${mainColor}.`;
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-2.0-flash",
@@ -383,12 +444,7 @@ export const generatePromptAnalysis = async (scores: Scores, taskDescription: st
       config: {
         systemInstruction,
         temperature: 0.7,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
+        safetySettings: SAFETY_SETTINGS
       }
     });
 
@@ -431,12 +487,7 @@ export async function translateText(text: string, targetLanguage: string): Promi
       config: {
         systemInstruction: `You are a professional translator. Translate the following text into ${targetLanguage}.`,
         temperature: 0.3,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
+        safetySettings: SAFETY_SETTINGS
       }
     });
 
@@ -449,11 +500,14 @@ export async function translateText(text: string, targetLanguage: string): Promi
 }
 
 export const getStuckManagerAdviceStream = async (scores: Scores, situation: string, onChunk: (chunk: string) => void): Promise<string> => {
-    const colors = getColorsFromScores(scores);
-    const systemInstruction = `אתה יועץ מנהיגות ופסיכולוג ארגוני בכיר מבית Kilon Consulting. 
-המנהל שפונה אליך מאופיין בצבע דומיננטי ${colors[0].n} ומשני ${colors[1].n}.
+  const colorProfile = buildColorProfile(scores);
+  const colors = getColorsFromScores(scores);
 
-להלן מפת התכונות והתנהגות הלחץ של ארבעת הצבעים במותג Kilon Consulting:
+  const systemInstruction = `אתה יועץ מנהיגות ופסיכולוג ארגוני בכיר מבית Kilon Consulting.
+
+${colorProfile}
+
+מאפייני התנהגות תחת לחץ לפי צבע:
 - אדום (הנחוש): תחת לחץ נוטה להיות חסר סבלנות, תוקפני, דורש שליטה מיידית. זקוק לוויסות של נשימה והקשבה.
 - צהוב (המשפיע): תחת לחץ נוטה להתפזר, לאבד פוקוס, להיכנס לפאניקה חברתית או להימנע מהבעיה. זקוק למיקוד ותוכנית עבודה מסודרת.
 - ירוק (התומך): תחת לחץ נוטה להסתגר, לשתוק, להיפגע רגשית ולוותר על הצרכים שלו. זקוק לאסרטיביות וביטחון.
@@ -461,23 +515,20 @@ export const getStuckManagerAdviceStream = async (scores: Scores, situation: str
 
 המצב שבו הוא תקוע: "${situation}"
 
-תפקידך הוא לשמש ככפתור חילוץ מהיר ומותאם אישית לפרופיל שלו (${colors[0].n} ו-${colors[1].n}). אל תאריך בניתוח תיאורטי, התמקד ב"תכלס":
-1. שיקוף קצר ונרמול (Validation) - דבר אל הלב של הפרופיל שלו.
+תפקידך הוא לשמש ככפתור חילוץ מהיר ומותאם אישית לפרופיל הספציפי שלו — כולל עוצמת הדומיננטיות ומשקל הצבע המשני. 
+אם הפרופיל מאוזן בין שני צבעים, ציין כיצד שניהם מתבטאים תחת לחץ.
+אל תאריך בניתוח תיאורטי, התמקד ב"תכלס":
+1. שיקוף קצר ונרמול (Validation) — דבר אל הלב של הפרופיל הספציפי שלו.
 2. פעולה מיידית לוויסות רגשי/פיזיולוגי המתאימה לפרופיל שלו.
 3. 3 המלצות "תכלס" לפעולה מיידית כדי לחלץ אותו מהמצב.`;
 
-    return callGeminiApiStream('generateContent', {
-      model: "gemini-2.0-flash",
-      contents: [{ role: 'user', parts: [{ text: situation }] }],
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
-      }
-    }, onChunk);
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-2.0-flash",
+    contents: [{ role: 'user', parts: [{ text: situation }] }],
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
 };
