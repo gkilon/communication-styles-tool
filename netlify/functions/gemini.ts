@@ -48,6 +48,9 @@ export default async (req: Request) => {
     if (groqApiKey) {
       const systemInstruction = payload.config?.systemInstruction;
       const messages = convertToGroqMessages(payload.contents, systemInstruction);
+      
+      // Allow caller to request a specific Groq model (e.g. deepseek for simulation)
+      const groqModel = payload.groqModel || "llama-3.3-70b-versatile";
 
       // Streaming implementation for Groq
       if (action.endsWith('Stream')) {
@@ -59,7 +62,7 @@ export default async (req: Request) => {
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              model: "llama-3.3-70b-versatile",
+              model: groqModel,
               messages,
               temperature: payload.config?.temperature ?? 0.7,
               stream: true
@@ -141,7 +144,7 @@ export default async (req: Request) => {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: groqModel,
           messages,
           temperature: payload.config?.temperature ?? 0.7
         })
