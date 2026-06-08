@@ -50,8 +50,12 @@ export default async (req: Request) => {
       const messages = convertToGroqMessages(payload.contents, systemInstruction);
       
       // Allow caller to request a specific Groq model (e.g. deepseek for simulation)
-      const groqModel = payload.groqModel || "llama-3.3-70b-versatile";
+let groqModel = payload.groqModel || "llama-3.3-70b-versatile";
 
+// אם הגיע מהפרונטאנד מודל שנמחק, נחליף אותו ידנית למודל פעיל ותקין ב-Groq
+if (groqModel === "deepseek-r1-distill-llama-70b") {
+  groqModel = "llama-3.3-70b-versatile";
+}
       // Streaming implementation for Groq
       if (action.endsWith('Stream')) {
         try {
