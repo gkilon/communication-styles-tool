@@ -381,7 +381,6 @@ ${positionContext[relationship] || ''}
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-2.0-flash",
-      groqModel: "deepseek-r1-distill-llama-70b",
       contents: prompt,
       config: {
         systemInstruction,
