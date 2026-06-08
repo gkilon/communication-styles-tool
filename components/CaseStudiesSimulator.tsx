@@ -1,431 +1,692 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Scores } from '../types';
-import { getSimulationResponse, getSimulationFeedback, transcribeAudio, SimulationMessage } from '../services/geminiService';
+בשמחה! איחדתי את כל השינויים, השיפורים והדגשים על **ההתמודדויות עם התנגדויות וזיהוי התנגדויות סמויות** לתוך קוד השרותים המלא שלך (`geminiService`).
 
-interface CaseStudiesSimulatorProps {
-    scores: Scores;
+אתה יכול להעתיק את כל הקוד שלהלן ולהחליף איתו את תוכן הקובץ הנוכחי שלך בצורה נקייה:
+
+```typescript
+import { Scores, UserProfile } from '../types';
+
+export interface SimulationMessage {
+  sender: 'user' | 'ai';
+  text: string;
 }
 
-export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scores }) => {
-    const [targetColor, setTargetColor] = useState<string>('');
-    const [scenario, setScenario] = useState<string>('');
-    const [relationship, setRelationship] = useState<string>('');
-    const [userInput, setUserInput] = useState<string>('');
-    const [conversation, setConversation] = useState<SimulationMessage[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isStarted, setIsStarted] = useState(false);
-    const [feedback, setFeedback] = useState<string>('');
-    const [isListening, setIsListening] = useState(false);
-    const [isSpeechSupported, setIsSpeechSupported] = useState(false);
-    const [isTranscribing, setIsTranscribing] = useState(false);
-    const [speechError, setSpeechError] = useState<string>('');
-    const [autoSpeak, setAutoSpeak] = useState(false);
+/**
+ * Shared helper to call our Netlify Function backend.
+ */
+async function callGeminiApi(action: string, payload: any): Promise<any> {
+  const response = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, payload })
+  });
 
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const recognitionRef = useRef<any>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
+  if (!response.ok) {
+    try {
+      const err = await response.json();
+      throw new Error(err.error || `Request failed with status ${response.status}`);
+    } catch (e) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+  }
 
-    useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
-    }, [conversation, isLoading]);
+  return response;
+}
 
-    useEffect(() => {
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            try {
-                const recognition = new SpeechRecognition();
-                recognition.continuous = false;
-                recognition.lang = 'he-IL';
-                recognition.interimResults = false;
+/**
+ * Shared helper for streaming responses from our Netlify Function.
+ */
+async function callGeminiApiStream(action: string, payload: any, onChunk: (chunk: string) => void): Promise<string> {
+  const response = await callGeminiApi(action + 'Stream', payload);
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Failed to get stream reader');
 
-                recognition.onresult = (event: any) => {
-                    const transcript = event.results[0][0].transcript;
-                    setUserInput(prev => prev ? prev + ' ' + transcript : transcript);
-                    setSpeechError('');
-                };
-                recognition.onend = () => setIsListening(false);
-                recognition.onerror = (event: any) => {
-                    setIsListening(false);
-                    if (event.error === 'not-allowed') setSpeechError('גישה למיקרופון נדחתה. אנא אפשר גישה בהגדרות הדפדפן.');
-                    else if (event.error === 'network') setSpeechError('שגיאת רשת. נסה שוב.');
-                    else if (event.error === 'no-speech') setSpeechError('לא זוהה קול. נסה שוב.');
-                    else setSpeechError('שגיאה: ' + event.error);
-                };
-                recognitionRef.current = recognition;
-                setIsSpeechSupported(true);
-            } catch {
-                // fall through to MediaRecorder
-            }
-        }
-    }, []);
+  let fullText = "";
+  const decoder = new TextDecoder();
 
-    const startMediaRecorder = async () => {
-        setSpeechError('');
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                ? 'audio/webm;codecs=opus'
-                : MediaRecorder.isTypeSupported('audio/mp4')
-                ? 'audio/mp4'
-                : 'audio/ogg';
-            const recorder = new MediaRecorder(stream, { mimeType });
-            audioChunksRef.current = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    fullText += chunk;
+    onChunk(fullText);
+  }
 
-            recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+  return fullText;
+}
 
-            recorder.onstop = async () => {
-                stream.getTracks().forEach(t => t.stop());
-                const blob = new Blob(audioChunksRef.current, { type: mimeType });
-                setIsTranscribing(true);
-                setIsListening(false);
-                try {
-                    const base64 = await blobToBase64(blob);
-                    const text = await transcribeAudio(base64, mimeType.split(';')[0]);
-                    if (text) setUserInput(prev => prev ? prev + ' ' + text : text);
-                    else setSpeechError('לא זוהה דיבור. נסה שנית.');
-                } catch (err: any) {
-                    setSpeechError(err.message || 'שגיאה בתמלול.');
-                } finally {
-                    setIsTranscribing(false);
-                }
-            };
+function getColorsFromScores(scores: Scores) {
+  const sA = Number(scores?.a || 0);
+  const sB = Number(scores?.b || 0);
+  const sC = Number(scores?.c || 0);
+  const sD = Number(scores?.d || 0);
 
-            mediaRecorderRef.current = recorder;
-            recorder.start();
-            setIsListening(true);
-        } catch {
-            setSpeechError('לא ניתן לגשת למיקרופון. ודא שהדפדפן קיבל הרשאה.');
-        }
-    };
+  const r = sA + sC;
+  const y = sA + sD;
+  const g = sB + sD;
+  const b = sB + sC;
+  return [{ n: 'אדום', v: r }, { n: 'צהוב', v: y }, { n: 'ירוק', v: g }, { n: 'כחול', v: b }].sort((m, n) => n.v - m.v);
+}
 
-    const stopMediaRecorder = () => {
-        mediaRecorderRef.current?.stop();
-    };
+/**
+ * Builds a detailed color profile string for use in prompts.
+ */
+function buildColorProfile(scores: Scores): string {
+  const sA = Number(scores?.a || 0);
+  const sB = Number(scores?.b || 0);
+  const sC = Number(scores?.c || 0);
+  const sD = Number(scores?.d || 0);
 
-    const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const result = reader.result as string;
-            resolve(result.split(',')[1]);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
+  const r = sA + sC;
+  const y = sA + sD;
+  const g = sB + sD;
+  const b = sB + sC;
+  const total = r + y + g + b;
+
+  const colors = [
+    { n: 'אדום', v: r },
+    { n: 'צהוב', v: y },
+    { n: 'ירוק', v: g },
+    { n: 'כחול', v: b }
+  ].sort((a, b) => b.v - a.v);
+
+  const dominant = colors[0];
+  const secondary = colors[1];
+  const gap = dominant.v - secondary.v;
+
+  const dominanceDesc = gap > 8
+    ? `דומיננטיות חזקה מאוד של ${dominant.n} (פער של ${gap} נקודות מהצבע הבא)`
+    : gap > 4
+    ? `דומיננטיות ברורה של ${dominant.n}`
+    : `פרופיל מאוזן יחסית בין ${dominant.n} ל-${secondary.n}`;
+
+  return `פרופיל צבעים מלא של המשתמש:
+- אדום (הנחוש): ${r} נקודות (${Math.round(r/total*100)}%)
+- צהוב (המשפיע): ${y} נקודות (${Math.round(y/total*100)}%)
+- ירוק (התומך): ${g} נקודות (${Math.round(g/total*100)}%)
+- כחול (המדויק): ${b} נקודות (${Math.round(b/total*100)}%)
+צבע דומיננטי: ${dominant.n} | צבע משני: ${secondary.n}
+${dominanceDesc}`;
+}
+
+const COLOR_TRAITS = `מאפייני הצבעים במודל Kilon Consulting:
+- אדום (הנחוש): ממוקד תוצאות, ישיר, מהיר, החלטי, חסר סבלנות, עלול להיתפס כשתלטן או אגרסיבי, קושי בהקשבה לדעות שונות.
+- צהוב (המשפיע): כריזמטי, אופטימי, יצירתי, חברותי, מתקשה עם פרטים וסדר, נטייה להימנע מקונפליקטים, זקוק להכרה.
+- ירוק (התומך): אמפתי, מקשיב, סבלני, הרמוני, אמין, מתנגד לשינויים מהירים, נמנע מעימותים, נוטה לוותר על עצמו.
+- כחול (המדויק): אנליטי, יסודי, מבוסס נתונים ופרטים, שאיפה לשלמות, ביקורתי, עלול להיתפס כמרוחק או קר.`;
+
+const SAFETY_SETTINGS = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+];
+
+export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
+  try {
+    const colorProfile = buildColorProfile(scores);
+    const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
+
+${colorProfile}
+
+${COLOR_TRAITS}
+
+הנחיות לאימון מותאם אישית:
+1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה. אם הדומיננטיות חזקה מאוד, ציין את עוצמתה.
+2. כשהמשתמש פונה אליך בפעם הראשונה ולא שאל שאלה ספציפית — שאל אותו שאלת פתיחה אחת קצרה: "מה מביא אותך כאן היום? יש מצב ספציפי, אדם מסוים, או אתגר שאתה רוצה לעבוד עליו?" — ואז המתן לתשובתו.
+3. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שהוא תיאר, ולא לדוגמאות גנריות.
+4. הצע דרכים פרקטיות כיצד הפרופיל הספציפי שלו (עם הניואנסים המספריים) יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון שלו.
+5. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
+
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-2.0-flash",
+      contents: userInput,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        safetySettings: SAFETY_SETTINGS
+      }
     });
 
-    const toggleListen = () => {
-        setSpeechError('');
-        if (isListening) {
-            if (isSpeechSupported) recognitionRef.current?.stop();
-            else stopMediaRecorder();
-            return;
-        }
-        if (isSpeechSupported) {
-            try {
-                recognitionRef.current.start();
-                setIsListening(true);
-            } catch {
-                setSpeechError('לא ניתן להפעיל את המיקרופון.');
-            }
-        } else {
-            startMediaRecorder();
-        }
-    };
-
-    const speakText = (text: string) => {
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = 'he-IL';
-            msg.rate = 1.0;
-            window.speechSynthesis.speak(msg);
-        }
-    };
-
-    const colors = [
-        { name: 'אדום', desc: 'דומיננטי, ממוקד תוצאות, ישיר', bg: 'bg-red-900/40 border-red-500 text-red-100' },
-        { name: 'צהוב', desc: 'חברותי, מלא התלהבות, יצירתי', bg: 'bg-yellow-900/40 border-yellow-500 text-yellow-100' },
-        { name: 'ירוק', desc: 'רגיש, תומך, מחפש הרמוניה', bg: 'bg-green-900/40 border-green-500 text-green-100' },
-        { name: 'כחול', desc: 'אנליטי, מחושב, יורד לפרטים', bg: 'bg-blue-900/40 border-blue-500 text-blue-100' },
-    ];
-
-    const relationships = [
-        { value: 'מנהל', label: '👔 המנהל שלי', desc: 'הוא מעליי בהיררכיה' },
-        { value: 'עובד', label: '🙋 עובד שלי', desc: 'הוא תחתיי בהיררכיה' },
-        { value: 'קולגה', label: '🤝 קולגה', desc: 'אנחנו באותה רמה' },
-        { value: 'לקוח', label: '💼 לקוח', desc: 'לקוח חיצוני' },
-    ];
-
-    const handleStart = () => {
-        if (!targetColor || !scenario.trim() || !relationship) return;
-        setIsStarted(true);
-        setConversation([]);
-        setFeedback('');
-    };
-
-    const handleSendMessage = async () => {
-        if (!userInput.trim() || isLoading) return;
-
-        if (isListening) recognitionRef.current?.stop();
-
-        const newUserMsg: SimulationMessage = { sender: 'user', text: userInput };
-        const newHistory = [...conversation, newUserMsg];
-
-        setConversation(newHistory);
-        setUserInput('');
-        setIsLoading(true);
-
-        try {
-            // Pass relationship as part of scenario context
-            const enrichedScenario = `${scenario} [יחס: הצד השני הוא ה${relationship} של המשתמש]`;
-            const result = await getSimulationResponse(scores, targetColor, enrichedScenario, conversation, newUserMsg.text);
-            const newAiMsg: SimulationMessage = { sender: 'ai', text: result };
-            setConversation([...newHistory, newAiMsg]);
-            if (autoSpeak) speakText(result);
-        } catch (err) {
-            setConversation([...newHistory, { sender: 'ai', text: "שגיאה בחיבור לסימולטור." }]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleGetFeedback = async () => {
-        if (conversation.length === 0 || isLoading) return;
-        setIsLoading(true);
-        try {
-            const enrichedScenario = `${scenario} [יחס: הצד השני הוא ה${relationship} של המשתמש]`;
-            const result = await getSimulationFeedback(scores, targetColor, enrichedScenario, conversation);
-            setFeedback(result);
-        } catch (err) {
-            setFeedback("לא הצלחתי לייצר משוב.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleReset = () => {
-        setIsStarted(false);
-        setConversation([]);
-        setFeedback('');
-        setUserInput('');
-        setRelationship('');
-        window.speechSynthesis.cancel();
-    };
-
-    const renderMarkdownText = (text: string) => {
-        const marked = (window as any).marked;
-        if (marked) {
-            let html = '';
-            try {
-                html = typeof marked.parse === 'function' ? marked.parse(text) : marked(text);
-            } catch (e) {
-                html = text.replace(/\n/g, '<br/>');
-            }
-            return <div className="prose prose-invert max-w-none prose-p:text-gray-200 text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />;
-        }
-        return <div className="whitespace-pre-wrap">{text}</div>;
-    };
-
-    return (
-        <div className="flex flex-col h-full relative">
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                    <div className="bg-purple-500/20 p-2 rounded-xl">
-                        <span className="text-3xl">🎭</span>
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white">סימולטור מציאותי</h3>
-                        <p className="text-gray-400 text-sm font-medium">תרגול שיחה קולית וכתובה מול טיפוס תקשורת</p>
-                    </div>
-                </div>
-                {isStarted && (
-                    <button onClick={handleReset} className="text-xs text-gray-400 hover:text-white underline">סיים שיחה וסגור</button>
-                )}
-            </div>
-
-            {!isStarted && (
-                <div className="bg-gray-900/60 p-6 rounded-2xl border border-gray-700 space-y-6 animate-fade-in-up">
-                    
-                    {/* Step 1: Color */}
-                    <div>
-                        <label className="block text-sm font-bold text-gray-300 mb-2">1. בחר את סגנון התקשורת של הצד השני:</label>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {colors.map(c => (
-                                <button
-                                    key={c.name}
-                                    onClick={() => setTargetColor(c.name)}
-                                    className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${targetColor === c.name ? c.bg + ' ring-2 ring-white scale-105' : 'bg-gray-800 border-gray-600 hover:border-gray-500 opacity-70'}`}
-                                >
-                                    <div className="font-bold mb-1">{c.name}</div>
-                                    <div className="text-xs opacity-80">{c.desc}</div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Step 2: Relationship */}
-                    <div>
-                        <label className="block text-sm font-bold text-gray-300 mb-2">2. מה הקשר שלך אליו?</label>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {relationships.map(r => (
-                                <button
-                                    key={r.value}
-                                    onClick={() => setRelationship(r.value)}
-                                    className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${relationship === r.value ? 'bg-purple-900/40 border-purple-500 text-purple-100 ring-2 ring-white scale-105' : 'bg-gray-800 border-gray-600 hover:border-gray-500 opacity-70 text-gray-300'}`}
-                                >
-                                    <div className="font-bold mb-1">{r.label}</div>
-                                    <div className="text-xs opacity-80">{r.desc}</div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Step 3: Scenario */}
-                    <div>
-                        <label className="block text-sm font-bold text-gray-300 mb-2">3. הגדר את התרחיש (נושא השיחה, הקשר):</label>
-                        <input
-                            type="text"
-                            value={scenario}
-                            onChange={e => setScenario(e.target.value)}
-                            className="w-full bg-gray-800 text-white rounded-xl p-4 border border-gray-600 focus:border-purple-500 outline-none"
-                            placeholder="למשל: תכנון פרויקט חדש, פתרון קונפליקט מול לקוח..."
-                        />
-                    </div>
-
-                    <button
-                        onClick={handleStart}
-                        disabled={!targetColor || !scenario.trim() || !relationship}
-                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:grayscale text-white font-bold py-4 rounded-xl shadow-lg transition-all"
-                    >
-                        התחל שיחה 🚀
-                    </button>
-                </div>
-            )}
-
-            {isStarted && (
-                <div className="flex flex-col h-full bg-gray-900/60 rounded-2xl border border-gray-700 overflow-hidden relative">
-
-                    {/* Context Header */}
-                    <div className="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center px-4">
-                        <div className="text-xs text-gray-400">
-                            <span className="font-bold text-purple-400">דמות:</span> {targetColor} ({relationship}) | <span className="font-bold text-purple-400">תרחיש:</span> {scenario}
-                        </div>
-                        <button
-                            onClick={() => { setAutoSpeak(v => { if (v) window.speechSynthesis.cancel(); return !v; }); }}
-                            className={`flex items-center gap-1 text-xs px-3 py-1 rounded-full border transition-all ${autoSpeak ? 'bg-purple-600/30 border-purple-500 text-purple-300' : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'}`}
-                            title="מצב קולי אוטומטי"
-                        >
-                            {autoSpeak ? '🔊 קולי' : '🔇 שקט'}
-                        </button>
-                    </div>
-
-                    {/* Chat Area */}
-                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px]">
-                        {conversation.length === 0 && (
-                            <div className="h-full flex flex-col items-center justify-center text-center text-gray-500">
-                                <span className="text-4xl mb-2">🎤</span>
-                                <p>השיחה התחילה. שלח הודעה או דבר במיקרופון בשביל להתחיל!</p>
-                            </div>
-                        )}
-                        {conversation.map((msg, index) => (
-                            <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
-                                <div className={`max-w-[85%] p-4 rounded-2xl ${msg.sender === 'user' ? 'bg-indigo-600 text-white rounded-tl-none' : 'bg-gray-800 text-gray-200 border border-gray-600 rounded-tr-none'}`}>
-                                    {msg.sender === 'user' ? (
-                                        <p className="whitespace-pre-wrap">{msg.text}</p>
-                                    ) : (
-                                        <>
-                                            {renderMarkdownText(msg.text)}
-                                            <button
-                                                onClick={() => speakText(msg.text)}
-                                                className="mt-2 text-xs text-gray-500 hover:text-purple-400 transition-colors flex items-center gap-1"
-                                                title="הקרא בקול"
-                                            >
-                                                🔊 <span>הקרא</span>
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-
-                        {isLoading && (
-                            <div className="flex justify-start animate-fade-in">
-                                <div className="bg-gray-800 border border-gray-700 p-4 rounded-2xl rounded-tr-none flex gap-2">
-                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
-                                </div>
-                            </div>
-                        )}
-
-                        {feedback && (
-                            <div className="relative mt-6 p-6 bg-emerald-900/30 border border-emerald-500/50 rounded-2xl animate-fade-in-up mt-8 group">
-                                <button onClick={() => speakText(feedback)} className="absolute -left-4 -top-4 p-3 bg-emerald-900 border border-emerald-500 rounded-full opacity-70 hover:opacity-100 transition-opacity shadow-lg flex justify-center items-center w-12 h-12" title="הקרא משוב">🔊</button>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <span className="text-2xl">💡</span>
-                                    <h4 className="text-emerald-400 font-bold text-xl">משוב המאמן:</h4>
-                                </div>
-                                {renderMarkdownText(feedback)}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Input Area */}
-                    {!feedback && (
-                        <div className="bg-gray-800 p-4 border-t border-gray-700">
-                            <div className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <input
-                                        type="text"
-                                        value={userInput}
-                                        onChange={e => setUserInput(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                                        className="w-full bg-gray-900 text-white rounded-xl py-3 px-4 pr-14 border border-gray-600 focus:border-purple-500 outline-none"
-                                        placeholder={isTranscribing ? 'ממיר קול לטקסט...' : 'הקלד כאן...'}
-                                        disabled={isLoading || isTranscribing}
-                                    />
-                                    <button
-                                        onClick={toggleListen}
-                                        disabled={isTranscribing || isLoading}
-                                        className={`absolute right-2 top-1.5 bottom-1.5 px-3 rounded-lg transition-all text-xl disabled:opacity-40 ${isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
-                                        title={isListening ? 'עצור הקלטה' : 'דבר למיקרופון'}
-                                    >
-                                        {isTranscribing ? '⏳' : isListening ? '🔴' : '🎙️'}
-                                    </button>
-                                </div>
-                                <button
-                                    onClick={handleSendMessage}
-                                    disabled={!userInput.trim() || isLoading || isTranscribing}
-                                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-6 py-3 rounded-xl disabled:opacity-50 transition-all"
-                                >
-                                    שלח
-                                </button>
-                            </div>
-                            {isListening && !isSpeechSupported && (
-                                <p className="text-xs text-red-400 mt-2 text-right animate-pulse">🔴 מקליט... לחץ שוב לעצירה ותמלול</p>
-                            )}
-                            {isTranscribing && (
-                                <p className="text-xs text-purple-400 mt-2 text-right animate-pulse">⏳ ממיר את ההקלטה לטקסט...</p>
-                            )}
-                            {speechError && (
-                                <p className="text-xs text-red-400 mt-2 text-right">⚠️ {speechError}</p>
-                            )}
-
-                            {conversation.length > 0 && (
-                                <button
-                                    onClick={handleGetFeedback}
-                                    disabled={isLoading}
-                                    className="w-full mt-3 bg-gray-700 hover:bg-gray-600 text-emerald-400 font-bold py-2 rounded-xl text-sm transition-all border border-gray-600"
-                                >
-                                    🔍 קבל משוב מדויק על השיחה וסיים
-                                </button>
-                            )}
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
+    const data = await response.json();
+    return data.text || "לא התקבלה תשובה.";
+  } catch (error: any) {
+    console.error("AI Service Error:", error);
+    return `שגיאה: ${error.message}`;
+  }
 };
+
+export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void): Promise<string> => {
+  const colorProfile = buildColorProfile(scores);
+  const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
+
+${colorProfile}
+
+${COLOR_TRAITS}
+
+הנחיות לאימון מותאם אישית:
+1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה. אם הדומיננטיות חזקה מאוד, ציין את עוצמתה.
+2. כשהמשתמש פונה אליך בפעם הראשונה ולא שאל שאלה ספציפית — שאל אותו שאלת פתיחה אחת קצרה: "מה מביא אותך כאן היום? יש מצב ספציפי, אדם מסוים, או אתגר שאתה רוצה לעבוד עליו?" — ואז המתן לתשובתו.
+3. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שהוא תיאר, ולא לדוגמאות גנריות.
+4. הצע דרכים פרקטיות כיצד הפרופיל הספציפי שלו (עם הניואנסים המספריים) יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון שלו.
+5. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
+
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-2.0-flash",
+    contents: userInput,
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
+};
+
+export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): Promise<string> => {
+  try {
+    if (!challenge.trim()) return "נא להזין אתגר לניתוח.";
+    const validUsers = users.filter(u => u.scores);
+    if (validUsers.length === 0) return "אין מספיק נתוני משתמשים עם תוצאות לביצוע ניתוח צוותי.";
+
+    const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
+    validUsers.forEach(u => {
+      const s = u.scores!;
+      const r = (s.a || 0) + (s.c || 0);
+      const y = (s.a || 0) + (s.d || 0);
+      const g = (s.b || 0) + (s.d || 0);
+      const b = (s.b || 0) + (s.c || 0);
+      const max = Math.max(r, y, g, b);
+      if (max === r) teamStats.red++;
+      else if (max === y) teamStats.yellow++;
+      else if (max === g) teamStats.green++;
+      else if (max === b) teamStats.blue++;
+      teamStats.total++;
+    });
+
+    const colorCounts = [
+      { n: 'אדום', v: teamStats.red },
+      { n: 'צהוב', v: teamStats.yellow },
+      { n: 'ירוק', v: teamStats.green },
+      { n: 'כחול', v: teamStats.blue }
+    ].sort((a, b) => b.v - a.v);
+
+    const dominantColor = colorCounts[0].n;
+    const missingColors = colorCounts.filter(c => c.v === 0).map(c => c.n);
+    const missingStr = missingColors.length > 0 ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}` : 'כל הצבעים מיוצגים בצוות';
+
+    const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
+
+${COLOR_TRAITS}
+
+נתוני הצוות (סה"כ ${teamStats.total} משתתפים):
+- אדום: ${teamStats.red} (${Math.round(teamStats.red/teamStats.total*100)}%)
+- צהוב: ${teamStats.yellow} (${Math.round(teamStats.yellow/teamStats.total*100)}%)
+- ירוק: ${teamStats.green} (${Math.round(teamStats.green/teamStats.total*100)}%)
+- כחול: ${teamStats.blue} (${Math.round(teamStats.blue/teamStats.total*100)}%)
+הצבע הדומיננטי בצוות: ${dominantColor}
+${missingStr}
+
+האתגר שהוצג: "${challenge}"
+
+חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק — לא ניתוח גנרי. 
+
+מבנה התשובה הנדרש (בעברית, פורמט Markdown):
+1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה? כיצד הצבע הדומיננטי בצוות והצבע החסר משפיעים על המצב?
+2. נקודות עיוורון: מה הצוות מפספס בגלל הרכב הצבעים שלו?
+3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות.`;
+
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-2.0-flash",
+      contents: challenge,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        safetySettings: SAFETY_SETTINGS
+      }
+    });
+
+    const data = await response.json();
+    return data.text || "לא התקבל ניתוח.";
+  } catch (error: any) {
+    console.error("Team AI Error:", error);
+    return `שגיאה בניתוח הצוות: ${error.message}`;
+  }
+};
+
+export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: string, onChunk: (chunk: string) => void): Promise<string> => {
+  const validUsers = users.filter(u => u.scores);
+  const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
+  validUsers.forEach(u => {
+    const s = u.scores!;
+    const r = (s.a || 0) + (s.c || 0);
+    const y = (s.a || 0) + (s.d || 0);
+    const g = (s.b || 0) + (s.d || 0);
+    const b = (s.b || 0) + (s.c || 0);
+    const max = Math.max(r, y, g, b);
+    if (max === r) teamStats.red++;
+    else if (max === y) teamStats.yellow++;
+    else if (max === g) teamStats.green++;
+    else if (max === b) teamStats.blue++;
+    teamStats.total++;
+  });
+
+  const colorCounts = [
+    { n: 'אדום', v: teamStats.red },
+    { n: 'צהוב', v: teamStats.yellow },
+    { n: 'ירוק', v: teamStats.green },
+    { n: 'כחול', v: teamStats.blue }
+  ].sort((a, b) => b.v - a.v);
+
+  const dominantColor = colorCounts[0].n;
+  const missingColors = colorCounts.filter(c => c.v === 0).map(c => c.n);
+  const missingStr = missingColors.length > 0 ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}` : 'כל הצבעים מיוצגים בצוות';
+
+  const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
+
+${COLOR_TRAITS}
+
+נתוני הצוות (סה"כ ${teamStats.total} משתתפים):
+- אדום: ${teamStats.red} (${Math.round(teamStats.red/teamStats.total*100)}%)
+- צהוב: ${teamStats.yellow} (${Math.round(teamStats.yellow/teamStats.total*100)}%)
+- ירוק: ${teamStats.green} (${Math.round(teamStats.green/teamStats.total*100)}%)
+- כחול: ${teamStats.blue} (${Math.round(teamStats.blue/teamStats.total*100)}%)
+הצבע הדומיננטי בצוות: ${dominantColor}
+${missingStr}
+
+האתגר שהוצג: "${challenge}"
+
+חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק — לא ניתוח גנרי.
+
+מבנה התשובה הנדרש (בעברית, פורמט Markdown):
+1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה? כיצד הצבע הדומיננטי בצוות והצבע החסר משפיעים על המצב?
+2. נקודות עיוורון: מה הצוות מפספס בגלל הרכב הצבעים שלו?
+3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות.`;
+
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-2.0-flash",
+    contents: challenge,
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
+};
+
+function getFewShotExamples(color: string, relationship: string): string {
+  const examples: Record<string, Record<string, string>> = {
+    'ירוק': {
+      'עובד': `
+משתמש: "מה נשמע?"
+אתה: "כלום מיוחד, עובד על הדברים שלי. הכל מתקדם."
+משתמש: "יש פה פיגור לא קטן ביעדים."
+אתה: "אני יודע... זה לא נוח לי להגיד, אבל היו כמה דברים שעיכבו. אני מנסה להדביק."
+משתמש: "אני רוצה שאם יש בעיה תציף בפניי מוקדם."
+אתה: "אתה צודק. אני חושש שאם אגיד משהו לפני שיש לי פתרון — זה ייראה כאילו אני לא מתמודד. אבל אני מבין שזה לא עוזר לך."`,
+      'מנהל': `
+משתמש: "מה שלומך?"
+אתה: "בסדר, תודה ששאלת. איך אני יכול לעזור?"
+משתמש: "העובד הזה לא עומד ביעדים."
+אתה: "אני שומע. אפשר לדבר איתו — אולי יש משהו שאנחנו לא רואים. מה דעתך שנשב שלושתנו?"
+משתמש: "אני רוצה תוצאות, לא שיחות."
+אתה: "אני מבין. אני רק חושש שאם לא נבין את הסיבה — זה יחזור. אבל אתה קובע."`,
+      'קולגה': `
+משתמש: "אתה לא מסכים עם ההחלטה הזו?"
+אתה: "לא בדיוק... אבל אולי אני מפספס משהו. תסביר לי את ההיגיון שלך."
+משתמש: "זה פשוט יותר יעיל."
+אתה: "אוקיי, אני יכול לחיות עם זה. רק תגיד לי אם אתה צריך עזרה עם היישום."`,
+      'לקוח': `
+משתמש: "השירות שקיבלתי לא היה מה שציפיתי."
+אתה: "אני מצטער לשמוע. ספר לי מה קרה — אני רוצה להבין."
+משתמש: "חיכיתי שבוע ולא קיבלתי מענה."
+אתה: "זה לא מקובל ואני מבין את התסכול. אני אטפל בזה אישית."`,
+    },
+    'אדום': {
+      'עובד': `
+משתמש: "מה נשמע?"
+אתה: "הכל בסדר. מה יש?"
+משתמש: "מה קרה עם יוסי אתמול?"
+אתה: "ישבנו, אמרתי לו ישר שהדדליין לא עובר. הוא התנגד — עמדתי על שלי. בסוף הסכים."
+משתמש: "אתה שם לב שאתה קצת פוגע?"
+אתה: "אני לא רואה את זה ככה. עשיתי מה שצריך. אם יוסי נפגע — זה לא הכוונה, אבל אני לא יכול לרכך כל שיחה קשה."
+משתמש: "יש דרך לעשות את זה אחרת."
+אתה: "אוקיי, תראה לי — אני רוצה ללמוד, לא רק לשמוע שאני טועה."`,
+      'מנהל': `
+משתמש: "הפרויקט מפגר."
+אתה: "מה הסיבה? ומה הפתרון?"
+משתמש: "יש הרבה גורמים."
+אתה: "אני לא צריך את הגורמים — אני צריך תוכנית. מה אנחנו עושים עכשיו?"`,
+      'קולגה': `
+משתמש: "אתה חושב שהגישה שלי לא נכונה?"
+אתה: "כן. זה לוקח יותר מדי זמן."
+משתמש: "אבל התוצאות טובות."
+אתה: "אפשר לקבל תוצאות טובות בחצי הזמן. בוא נדבר על זה."`,
+      'לקוח': `
+משתמש: "מתי זה יהיה מוכן?"
+אתה: "מה הדדליין שלך?"
+משתמש: "סוף השבוע."
+אתה: "אם זה קריטי — תגיד לי עכשיו ואסדר את זה. אם לא — זה יהיה מוכן ביום שלישי."`,
+    },
+    'צהוב': {
+      'עובד': `
+משתמש: "מה נשמע?"
+אתה: "סבבה! היה לי בוקר מטורף — יש לי רעיון שאני חייב לספר לך."
+משתמש: "יש פה פיגור ביעדים."
+אתה: "אני יודע, אני יודע... אבל תשמע — אם נעשה X ו-Y ביחד, אנחנו יכולים לא רק להדביק אלא לקפוץ קדימה!"
+משתמש: "אני צריך תוכנית, לא חזון."
+אתה: "צודק, סליחה. בוא נשב ואני אכתוב לך הכל."`,
+      'מנהל': `
+משתמש: "הצוות לא נלהב מהפרויקט."
+אתה: "אני חושב שאם נציג להם את התמונה הגדולה — זה ישנה הכל! הם לא רואים לאן זה הולך."
+משתמש: "הם עייפים, לא חסרי השראה."
+אתה: "אה... אוקיי. אז אולי אירוע קטן של צוות? משהו שיטעין אנרגיה?"`,
+      'קולגה': `
+משתמש: "אתה לא שם לב לפרטים."
+אתה: "אתה צודק, זה החולשה שלי. תעזור לי — אני אביא את האנרגיה ואתה תביא את הסדר."`,
+      'לקוח': `
+משתמש: "המוצר שלכם לא מה שציפיתי."
+אתה: "אוי לא! ספר לי מה קרה — אני ממש רוצה לתקן את זה. אתה לקוח חשוב לנו."`,
+    },
+    'כחול': {
+      'עובד': `
+משתמש: "מה נשמע?"
+אתה: "עובד על הדוח. יש שאלה?"
+משתמש: "יש פה פיגור ביעדים."
+אתה: "כמה אחוז פיגור? ומה הסיבה המדויקת?"
+משתמש: "אתה לא מודאג?"
+אתה: "אני מודאג — לכן אני רוצה נתונים לפני שאני מגיב."`,
+      'מנהל': `
+משתמש: "העובד הזה לא עומד ביעדים."
+אתה: "מה היעדים המקוריים ומה הביצוע בפועל? יש תיעוד?"
+משתמש: "זה ברור — כולם רואים."
+אתה: "אני צריך מספרים לפני שיחה. בלי זה אי אפשר לנהל שיחה פרודוקטיבית."`,
+      'קולגה': `
+משתמש: "אני חושב שהגישה שלנו נכונה."
+אתה: "על בסיס מה? יש נתונים שתומכים בזה?"
+משתמש: "אינטואיציה."
+אתה: "אינטואיציה לא מספיקה לי. בוא נבדוק את הנתונים ביחד."`,
+      'לקוח': `
+משתמש: "השירות לא עמד בציפיות שלי."
+אתה: "מה בדיוק לא עמד? יש SLA שסוכם?"
+משתמש: "הייתי מצפה ליותר תגובתיות."
+אתה: "הבנתי. מה זמן התגובה שקיבלת לעומת מה שציפית? אני רוצה לבדוק מול ההסכם."`,
+    },
+  };
+
+  return examples[color]?.[relationship] || '';
+}
+
+export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], userInput: string): Promise<string> => {
+  try {
+    const colorProfile = buildColorProfile(scores);
+
+    const relationshipMatch = scenario.match(/\[יחס: הצד השני הוא ה(.+?) של המשתמש\]/);
+    const relationship = relationshipMatch ? relationshipMatch[1] : 'קולגה';
+    const cleanScenario = scenario.replace(/\s*\[יחס:.*?\]/, '').trim();
+
+    const positionContext: Record<string, string> = {
+      'מנהל': `אתה המנהל של המשתמש. יש לך סמכות מעליו. אתה מצפה לדיווח, ביצוע ועמידה ביעדים. אתה לא צריך להסביר את עצך יתר על המידה.`,
+      'עובד': `אתה העובד של המשתמש. המשתמש הוא המנהל שלך. אתה כפוף אליו ומצפה להנחיות, תמיכה והכרה. אתה לא מאתגר אותו פרונטלית אך יש לך דעות משלך.`,
+      'קולגה': `אתה קולגה של המשתמש — אותה רמה היררכית. הקשר שלכם שיתופי ושווה.`,
+      'לקוח': `אתה לקוח חיצוני. המשתמש הוא הנציג של הספק/שירות. יש לך ציפיות, דרישות ואולי תסכולים.`
+    };
+
+    const behaviorMatrix: Record<string, Record<string, string>> = {
+      'אדום': {
+        'מנהל': 'אתה אדום-מנהל: ישיר, תובעני, חסר סבלנות לתירוצים. כשיש בעיה — אתה רוצה פתרון עכשיו. אתה מגיב לרגשות בקוצר רוח.',
+        'עובד': 'אתה אדום-עובד: אסרטיבי ודוחף אבל יודע שאתה כפוף. אתה לא מהסס לומר את דעתך אך לא מתעמת ישירות עם המנהל באופן בוטה.',
+        'קולגה': 'אתה אדום-קולגה: תחרותי, ישיר, לעניין. ממוקד משימה ותוצאה.',
+        'לקוח': 'אתה אדום-לקוח: דורשני, קוצר רוח ורוצה תוצאות מיידיות.'
+      },
+      'צהוב': {
+        'מנהל': 'אתה צהוב-מנהל: כריזמטי, מוכר חזון, מעודד. מדבר על הגדול ופחות מתעסק בפרטים. רוצה צוות נלהב.',
+        'עובד': 'אתה צהוב-עובד: אנרגטי, מנסה להרשים ולהיות אהוב. מחפש אישור והכרה מהמנהל.',
+        'קולגה': 'אתה צהוב-קולגה: חברותי, אופטימי. אוהב לשוחח, לשתף ולהתחבר ברמה האישית.',
+        'לקוח': 'אתה צהוב-לקוח: חם, מתלהב, מחפש יחס וקשר אישי חם מהספק.'
+      },
+      'ירוק': {
+        'מנהל': 'אתה ירוק-מנהל: חם, מכיל, דגש על רווחת הצוות ויחסים טובים. מתקשה מאוד לתת ביקורת חותכת.',
+        'עובד': 'אתה ירוק-עובד: זהיר, מנומס, לא מאתגר סמכות ונמנע מעימותים באופן פסיבי.',
+        'קולגה': 'אתה ירוק-קולגה: שיתופי, מקשיב, לא תחרותי ונמנע מקונפליקטים.',
+        'לקוח': 'אתה ירוק-לקוח: סבלני, מנומס, נמנע מלהתלונן בקלות אך נפגע בשקט.'
+      },
+      'כחול': {
+        'מנהל': 'אתה כחול-מנהל: מנהל שיטתי ומדויק. מתעניין אך ורק בנתונים, עובדות, תהליכים ומספרים.',
+        'עובד': 'אתה כחול-עובד: שיטתי, יסודי, מגיע עם נתונים ומצפה להגדרות ברורות ומדויקות ללא סיסמאות.',
+        'קולגה': 'אתה כחול-קולגה: ענייני, שקט, מחזיר תמיד לעובדות ולמסמכים.',
+        'לקוח': 'אתה כחול-לקוח: בודק כל פרט והסכם בקפידה. ספקן ולא פועל מאינטואיציה.'
+      }
+    };
+
+    const targetBehavior = behaviorMatrix[targetColor]?.[relationship] || `התנהג כטיפוס ${targetColor} בתפקיד ${relationship}.`;
+
+    const systemInstruction = `אתה משחק תפקיד של אדם אמיתי בעבודה. סגנון התקשורת שלך: ${targetColor}. תפקידך מול המשתמש: ${relationship}.
+התרחיש: "${cleanScenario}"
+
+${colorProfile}
+
+הנחיית אופי — חובה לקרוא ולהתנהג לפיה:
+${targetBehavior}
+${positionContext[relationship] || ''}
+
+כללי משחק תפקידים — קריטי:
+1. אל תצא מהדמות לרגע אחד. אין הסברים, אין הקדמות.
+2. תגובות קצרות וטבעיות — כמו בשיחה אמיתית במשרד. משפט-שניים.
+3. אתה אדם אמיתי עם נטייה דומיננטית — לא רובוט. הגב בצורה אנושית ודינמית.
+4. הקשב למה שהצד השני אומר באמת והגב לזה ספציפית.
+
+דוגמאות לטון:
+${getFewShotExamples(targetColor, relationship)}`;
+
+    const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'אתה'}: ${m.text}`).join('\n\n');
+    const prompt = `היסטוריית השיחה:\n${conversationLog}\n\nהמשתמש אומר:\n${userInput}\n\nהגב מתוך הדמות:`;
+
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-2.0-flash",
+      contents: prompt,
+      config: {
+        systemInstruction,
+        temperature: 0.8,
+        safetySettings: SAFETY_SETTINGS
+      }
+    });
+
+    const data = await response.json();
+    return data.text || "לא התקבלה תשובה מהסימולטור.";
+  } catch (error: any) {
+    console.error("Simulation AI Error:", error);
+    return `שגיאה בסימולציה: ${error.message}`;
+  }
+};
+
+/**
+ * מנגנון המשוב המשופר - מנתח דינמיקה, סבטקסט והתמודדות עם התנגדויות גלויות וסמויות.
+ */
+export const getSimulationFeedback = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[]): Promise<string> => {
+  try {
+    const colorProfile = buildColorProfile(scores);
+    const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'הקולגה (צבע ' + targetColor + ')'}: ${m.text}`).join('\n\n');
+
+    const colorFeedbackRules: Record<string, string> = {
+      'אדום': 'טיפוס אדום (הנחוש) מונע מאגו, שליטה, הישגיות ומהירות. התנגדות גלויה אצלו תהיה תוקפנית וישירה. התנגדות סמויה תתבטא בציניות, קוצר רוח או החלטות חד-צדדיות. הוא חסר סבלנות להתנצלויות. ניתוח השיחה חייב לבדוק האם המשתמש עמד מולו בביטחון וענה עניינית, או נגרר למגננה והסברים מורחים.',
+      'צהוב': 'טיפוס צהוב (המשפיע) מונע מצורך בהכרה, חברתיות ואישור. התנגדות גלויה תהיה דרמטית או מתלהמת. התנגדות סמויה תתבטא בהנהונים מזויפים, שינוי נושא או סרקזם חברתי. ניתוח השיחה חייב לבדוק האם המשתמש זיהה מתי הצהוב אומר "כן" אבל מרגיש "לא", והאם הוא השתמש באמפתיה כדי לרתום אותו מחדש.',
+      'ירוק': 'טיפוס ירוק (התומך) מונע מצורך בביטחון, הרמוניה והימנעות מקונפליקט. הוא כמעט לעולם לא יתנגד בגלוי. התנגדות סמויה אצלו היא הכלל: שתיקות, מילים מכובסות ("יהיה בסדר", "נראה"), פסיב-אגרסיב או הסכמה מאולצת. ניתוח השיחה חייב לבדוק האם המשתמש קרא את השתיקות שלו ונתן לו מרחב בטוח לדבר, או דרס אותו עם כוחנות.',
+      'כחול': 'טיפוס כחול (המדויק) מונע מצורך בצדק, יסודיות ולוגיקה. התנגדות גלויה תהיה הצפת שאלות קשות וספקנות. התנגדות סמויה תתבטא בהתכנסות לפרטים שוליים, דרישת עוד ועוד נתונים כדי לעכב תהליך, או התנתקות קרה. ניתוח השיחה חייב לבדוק האם המשתמש סיפק לוגיקה ועובדות, או הגיב באינטואיציות שרק הגבירו את ההתנגדויות.'
+    };
+    const targetRules = colorFeedbackRules[targetColor] || "";
+
+    const systemInstruction = `אתה יועץ ארגוני בכיר ומאמן תקשורת מנוסה מבית Kilon Consulting. 
+תפקידך לתת משוב מקצועי, חד, אמין ואמיתי לחלוטין על סימולציה שנערכה. אל תנסה לרצות את המשתמש ואל תשתמש במילים יפות או גנריות. תהיה אמפתי אך קורקטי ומנומק לעומק.
+
+התרחיש שהתנהל: "${scenario}"
+הצד השני בסימולציה פעל כטיפוס בצבע: "${targetColor}".
+
+פרופיל הצבעים המלא של המשתמש שביצע את הסימולציה:
+${colorProfile}
+
+הנחיות לניתוח סגנון ה${targetColor}:
+${targetRules}
+
+משימת הניתוח שלך - עליך לנתח את הדינמיקה הכוללת בדגש על ניהול התנגדויות:
+1. אל תיתפס למילים בודדות. נתח את ה"סבטקסט", את הטון ואת קו המחשבה של המשתמש.
+2. בחן לעומק כיצד המשתמש זיהה והתמודד עם התנגדויות. האם היו בשיחה התנגדויות סמויות (שבו הטיפוס אומר משהו אחד אך רמז למשהו אחר בטון או בתוכן)? האם המשתמש זיהה אותן או פספס אותן והמשיך הלאה?
+3. חבר את התנהגות המשתמש לפרופיל הצבעים שלו (למשל: "כמשתמש עם אדום נמוך, נטייתך לוותר/להסס באה לידי ביטוי ב...").
+
+מבנה המשוב הנדרש (עברית מקצועית, פורמט Markdown):
+
+### 💡 תובנה פסיכולוגית על טיפוס ${targetColor}
+[כאן תספק הסבר קצר אך מעמיק על המניע הפנימי של הטיפוס בסיטואציה הזו. מה מנהל אותו? ממה הוא מפחד? מה הוא באמת חיפש לקבל מהמשתמש בשיחה הזו?]
+
+### 🎯 ניתוח התמודדות עם התנגדויות (גלויות וסמויות)
+[כאן תנתח ספציפית את ניהול ההתנגדויות:
+- האם הטיפוס הציג התנגדות גלויה או סמויה? הבא ציטוט מהשיחה שממחיש זאת.
+- כיצד המשתמש פעל מול ההתנגדות? האם הוא התגונן, תקף חזרה, התעלם, או שיקף וניטרל אותה? 
+- קבע במפורש האם המשתמש הצליח לזהות את הניואנס הסמוי בטון של הטיפוס או "רץ קדימה" ופספס את החיכוך התת-קרקעי].
+
+### ✅ מה עבד טוב בשיחה?
+[אנליזה של מה שעבד טוב מבחינה אסטרטגית. הסבר איזו פעולה או משפט של המשתמש פגעו בצרכים של הטיפוס ה${targetColor} וגרמו להתקדמות בשיחה. הבא ציטוט מדויק והסבר את ההשפעה שלו].
+
+### ❌ נקודות עיוורון ופספוסים
+[כאן הלב של המשוב. איפה המשתמש נכשל בקריאת המפה? היכן הפרופיל האישי שלו גרם לו לפעול בצורה שגויה מול ה${targetColor}? הבא ציטוט ספציפי שבו חל מפנה שלילי או חוסר הבנה].
+
+### 🚀 אסטרטגיה מנצחת וטיפ זהב לפעם הבאה
+[המלצה קונקרטית, עמוקה ומעשית שמורכבת משני חלקים: 
+1. שינוי תפיסתי: איך המשתמש צריך לגשת מנטלית לסיטואציה כזו בפעם הבאה בהתאם לצבעים שלו.
+2. תכלס: שכתוב מחדש של אחד המשפטים הפחות טובים מהשיחה למשפט מנצח באותו הקשר שמנטרל את ההתנגדות בצורה נכונה].`;
+
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-2.0-flash",
+      contents: `אנא בצע ניתוח מעמיק ומקצועי של היסטוריית השיחה הבאה:\n\n${conversationLog}`,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        safetySettings: SAFETY_SETTINGS
+      }
+    });
+
+    const data = await response.json();
+    return data.text || "לא ניתן היה לייצר משוב.";
+  } catch (error: any) {
+    console.error("Feedback AI Error:", error);
+    return `שגיאה ביצירת המשוב: ${error.message}`;
+  }
+};
+
+export const generatePromptAnalysis = async (scores: Scores, taskDescription: string, userPrompt: string): Promise<string> => {
+  try {
+    const colorProfile = buildColorProfile(scores);
+    const colors = getColorsFromScores(scores);
+    const mainColor = colors[0].n;
+
+    const systemInstruction = `אתה מומחה להנדסת פרומפטים (Prompt Engineering) ויועץ תקשורת. המשתמש מנסה להפעיל סוכן AI לביצוע המשימה: "${taskDescription}".
+
+${colorProfile}
+
+לכל סגנון יש חוזקות וגם עיוורונות אופייניים בהנחיות ל-AI:
+- אדומים: ישירים, מהירים, ממוקדי תוצאה — לפעמים קצרים מדי וחסרי קונטקסט לסוכן.
+- כחולים: מדויקים, יסודיים, מובנים — לפעמים מעמיסים פרטים ואילוצים שמבלבלים.
+- ירוקים: אמפתיים, שיתופיים, בעלי אינטליגנציה רגשית — לפעמים מפספסים מבנה ברור.
+- צהובים: יצירתיים, אינטואיטיביים, בעלי חשיבה רחבה — לפעמים חסרי פוקוס ספציפי.
+
+עליך לנתח את ה-Prompt הבא: "${userPrompt}"
+
+חשוב: הניתוח חייב להתייחס ספציפית לפרופיל המספרי המלא של המשתמש.
+
+החזר את הניתוח בפורמט Markdown הכולל:
+1. ציון משוער (1-100) על יעילות ההנחיה.
+2. ניתוח: כיצד ה"צבע" הספציפי של המשתמש בא לידי ביטוי.
+3. השלכה: איזו טעות קריטית ה-AI צפוי לעשות.
+4. שכתוב מומלץ: הצע פרומפט מיטבי עבור המשימה המותאם לאופן החשיבה של הצבע ${mainColor}.`;
+
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-2.0-flash",
+      contents: "אנא נתח את הפרומפט המצויין.",
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        safetySettings: SAFETY_SETTINGS
+      }
+    });
+
+    const data = await response.json();
+    return data.text || "לא התקבל ניתוח.";
+  } catch (error: any) {
+    console.error("AI Agent Simulator Error:", error);
+    return `שגיאה בניתוח: ${error.message}`;
+  }
+};
+
+export const transcribeAudio = async (audioBase64: string, mimeType: string): Promise<string> => {
+  try {
+    const response = await callGeminiApi('generateContent', {
+      model: 'gemini-2.0-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType, data: audioBase64 } },
+            { text: 'תמלל את ההקלטה הבאה לעברית. החזר רק את הטקסט המתומלל, ללא כל הסבר.' }
+          ]
+        }
+      ]
+    });
+
+    const data = await response.json();
+    return (data.text || '').trim();
+  } catch (error: any) {
+    console.error('Transcription error:', error);
+    throw new Error('שגיאה בתמלול: ' + error.message);
+  }
+};
+
+export async function translateText(text: string, targetLanguage: string): Promise<string> {
+  try {
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-2.0-flash",
+      contents: text,
+      config: {
+        systemInstruction: `You are a professional translator. Translate the following text into ${targetLanguage}.`,
+        temperature: 0.3,
+        safetySettings: SAFETY_SETTINGS
+      }
+    });
+
+    const data = await response.json();
+    return data.text || "לא התקבלה תשובה.";
+  } catch (error: any) {
+    console.error("Translation error:", error);
+    throw error;
+  }
+}
+
+export const getStuckManagerAdviceStream = async (scores: Scores, situation: string, onChunk: (chunk: string) => void): Promise<string> => {
+  const colorProfile = buildColorProfile(scores);
+
+  const systemInstruction = `אתה יועץ מנהיגות ופסיכולוג ארגוני בכיר מבית Kilon Consulting.
+
+${colorProfile}
+
+מאפייני התנהגות תחת לחץ לפי צבע:
+- אדום (הנחוש): תחת לחץ נוטה להיות חסר סבלנות, תוקפני, דורש שליטה מיידית.
+- צהוב (המשפיע): תחת לחץ נוטה להתפזר, לאבד פוקוס, להיכנס לפאניקה חברתית.
+- ירוק (התומך): תחת לחץ נוטה להסתגר, לשתוק, להיפגע רגשית ולוותר על הצרכים שלו.
+- כחול (המדויק): תחת לחץ נוטה לשיתוק מניתוח יתר (Analysis paralysis), להיעשות נוקשה וביקורתי.
+
+המצב שבו הוא תקוע: "${situation}"
+
+תפקידך הוא לשמש ככפתור חילוץ מהיר ומותאם אישית לפרופיל הספציפי שלו.
+1. שיקוף קצר ונרמול (Validation) — דבר אל הלב של הפרופיל.
+2. פעולה מיידית לוויסות רגשי/פיזיולוגי המתאימה לפרופיל שלו.
+3. 3 המלצות "תכלס" לפעולה מיידית כדי לחלץ אותו מהמצב.`;
+
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-2.0-flash",
+    contents: [{ role: 'user', parts: [{ text: situation }] }],
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
+};
+
+```
