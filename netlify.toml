@@ -12,20 +12,18 @@
   targetPort = 5173
   framework = "#custom"
 
-# ניתוב ה-API
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
   force = true
 
-# ניתוב ל-SPA (חשוב כדי שהניווט באתר יעבוד)
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# הגדרות האבטחה (Headers) - מונעות את ה-X האדומים
+# הגדרות אבטחה בטוחות שלא שוברות את העיצוב
 [[headers]]
   for = "/*"
   [headers.values]
@@ -35,5 +33,3 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Cross-Origin-Resource-Policy = "same-origin"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
-    # ה-CSP המורחב שמאפשר לאתר לעבוד בצורה תקינה
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://hftznunvlktdjesraycl.supabase.co;"
