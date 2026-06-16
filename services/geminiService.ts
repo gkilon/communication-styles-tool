@@ -1,4 +1,4 @@
-import { Scores, UserProfile } from '../types';
+import { Scores, UserProfile, BackgroundData } from '../types';
 
 export interface SimulationMessage {
   sender: 'user' | 'ai';
@@ -116,21 +116,50 @@ const SAFETY_SETTINGS = [
   { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
 ];
 
-export const getAiCoachAdvice = async (scores: Scores, userInput: string): Promise<string> => {
+function buildBackgroundContext(bg?: BackgroundData | null): string {
+  if (!bg) return '';
+  const parts: string[] = [];
+  if (bg.gender === 'female') {
+    parts.push('המשתמש/ת היא אישה — השתמש בלשון נקבה בכל פניה אליה ("את", "יכולה", "ביצעת", "תוכלי" וכו\').');
+  } else if (bg.gender === 'male') {
+    parts.push('המשתמש הוא גבר — השתמש בלשון זכר בכל פניה אליו ("אתה", "יכול", "ביצעת", "תוכל" וכו\').');
+  }
+  if (bg.isManager === 'yes') {
+    parts.push('המשתמש/ת הוא/היא מנהל/ת — תן התייחסות למיומנויות ניהול, ניהול שיחות עם עובדים, מתן משוב, ומנהיגות.');
+  } else if (bg.isManager === 'no') {
+    parts.push('המשתמש/ת אינו/ה מנהל/ת — התמקד במיומנויות תקשורת בין עמיתים, מול מנהל ומול גורמים חיצוניים.');
+  }
+  if (bg.goal) {
+    const goalLabels: Record<string, string> = {
+      self_awareness: 'ללמוד על עצמי ועל סגנון התקשורת שלי',
+      management_tools: 'לקבל כלים לניהול טוב יותר',
+      team_dynamics: 'לשפר את הדינמיקה בצוות שלי',
+      relationships: 'לשפר מערכות יחסים ספציפיות',
+    };
+    const goalText = goalLabels[bg.goal] || bg.goal;
+    parts.push(`מטרת המשתמש/ת מהשאלון: "${goalText}" — ודא שהאימון מכוון למטרה זו.`);
+  }
+  return parts.length > 0 ? `\n\nמידע רקע על המשתמש/ת (השתמש בו לכל אורך השיחה):\n${parts.join('\n')}` : '';
+}
+
+export const getAiCoachAdvice = async (scores: Scores, userInput: string, backgroundData?: BackgroundData | null): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
+    const bgContext = buildBackgroundContext(backgroundData);
     const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
+${bgContext}
 
 ${COLOR_TRAITS}
 
 הנחיות לאימון מותאם אישית:
 1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה. אם הדומיננטיות חזקה מאוד, ציין את עוצמתה.
-2. כשהמשתמש פונה אליך בפעם הראשונה ולא שאל שאלה ספציפית — שאל אותו שאלת פתיחה אחת קצרה: "מה מביא אותך כאן היום? יש מצב ספציפי, אדם מסוים, או אתגר שאתה רוצה לעבוד עליו?" — ואז המתן לתשובתו.
-3. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שהוא תיאר, ולא לדוגמאות גנריות.
-4. הצע דרכים פרקטיות כיצד הפרופיל הספציפי שלו (עם הניואנסים המספריים) יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון שלו.
-5. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
+2. פנה תמיד במין הנכון לפי מידע הרקע. זהו כלל מחייב.
+3. כשהמשתמש/ת פונה אליך בפעם הראשונה ולא שאל/ה שאלה ספציפית — שאל/י שאלת פתיחה אחת קצרה המותאמת למטרה שציין/ה: אם המטרה היא כלי לניהול — שאל על אתגר ניהולי ספציפי. אחרת — שאל מה מביא אותו/ה כאן. המתן לתשובה.
+4. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שתואר, לא לדוגמאות גנריות.
+5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון.
+6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-2.0-flash",
@@ -150,20 +179,23 @@ ${COLOR_TRAITS}
   }
 };
 
-export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void): Promise<string> => {
+export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
+  const bgContext = buildBackgroundContext(backgroundData);
   const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
+${bgContext}
 
 ${COLOR_TRAITS}
 
 הנחיות לאימון מותאם אישית:
 1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה. אם הדומיננטיות חזקה מאוד, ציין את עוצמתה.
-2. כשהמשתמש פונה אליך בפעם הראשונה ולא שאל שאלה ספציפית — שאל אותו שאלת פתיחה אחת קצרה: "מה מביא אותך כאן היום? יש מצב ספציפי, אדם מסוים, או אתגר שאתה רוצה לעבוד עליו?" — ואז המתן לתשובתו.
-3. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שהוא תיאר, ולא לדוגמאות גנריות.
-4. הצע דרכים פרקטיות כיצד הפרופיל הספציפי שלו (עם הניואנסים המספריים) יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון שלו.
-5. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
+2. פנה תמיד במין הנכון לפי מידע הרקע. זהו כלל מחייב.
+3. כשהמשתמש/ת פונה אליך בפעם הראשונה ולא שאל/ה שאלה ספציפית — שאל שאלת פתיחה אחת קצרה המותאמת למטרה שציין/ה. המתן לתשובה.
+4. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שתואר, לא לדוגמאות גנריות.
+5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון.
+6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.`;
 
   return callGeminiApiStream('generateContent', {
     model: "gemini-2.0-flash",

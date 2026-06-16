@@ -1,23 +1,27 @@
 
 import { db, auth } from '../firebaseConfig';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc } from 'firebase/firestore';
-import { Scores, UserProfile, Team } from '../types';
+import { Scores, UserProfile, Team, BackgroundData } from '../types';
 import { User } from 'firebase/auth';
 
 // --- USERS & RESULTS ---
 
 // שמירת תוצאות המשתמש בבסיס הנתונים
-export const saveUserResults = async (scores: Scores) => {
+export const saveUserResults = async (scores: Scores, backgroundData?: BackgroundData) => {
   const user = auth.currentUser;
   if (!user) return;
 
   const userRef = doc(db, "users", user.uid);
   
   try {
-    await setDoc(userRef, {
+    const payload: any = {
       scores: scores,
       completedAt: new Date().toISOString()
-    }, { merge: true });
+    };
+    if (backgroundData) {
+      payload.backgroundData = backgroundData;
+    }
+    await setDoc(userRef, payload, { merge: true });
     console.log("Results saved successfully");
   } catch (error) {
     console.error("Error saving results:", error);

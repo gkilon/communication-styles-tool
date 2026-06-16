@@ -21,6 +21,12 @@ export interface Profile {
   weaknesses: string[];
 }
 
+export interface BackgroundData {
+  gender: 'male' | 'female' | 'other' | '';
+  isManager: 'yes' | 'no' | '';
+  goal: string;
+}
+
 export interface UserProfile {
   uid: string;
   email: string;
@@ -30,6 +36,7 @@ export interface UserProfile {
   role: 'user' | 'admin';
   completedAt?: string; // ISO Date string
   scores?: Scores;
+  backgroundData?: BackgroundData;
 }
 
 export interface Team {

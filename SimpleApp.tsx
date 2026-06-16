@@ -5,7 +5,8 @@ import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { PasswordScreen } from './components/PasswordScreen';
 import { AuthScreen } from './components/AuthScreen';
-import { Scores } from './types';
+import { BackgroundQuestionsScreen } from './components/BackgroundQuestionsScreen';
+import { Scores, BackgroundData } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
 import { isFirebaseInitialized } from './firebaseConfig';
 import { saveUserResults } from './services/firebaseService';
@@ -19,6 +20,9 @@ const STORAGE_KEY_ANSWERS = 'comm_style_answers';
 const STORAGE_KEY_STEP = 'comm_style_step';
 const STORAGE_KEY_INDEX = 'comm_style_index';
 const STORAGE_KEY_AUTH = 'comm_style_is_auth';
+const STORAGE_KEY_BG = 'comm_style_background';
+
+const DEFAULT_BACKGROUND: BackgroundData = { gender: '', isManager: '', goal: '' };
 
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   // Persistence initialization for Authentication
@@ -29,8 +33,10 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   const [showTeamAuth, setShowTeamAuth] = useState(false);
   
   // Persistence initialization for Progress
-  const [step, setStep] = useState<'intro' | 'questionnaire' | 'results'>(() => {
+  const [step, setStep] = useState<'intro' | 'background' | 'questionnaire' | 'results'>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_STEP);
+    // Guard: if saved step is 'background', reset to 'intro' to avoid getting stuck
+    if (saved === 'background') return 'intro';
     return (saved as any) || 'intro';
   });
   
@@ -44,13 +50,22 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     return saved ? JSON.parse(saved) : {};
   });
 
+  const [backgroundData, setBackgroundData] = useState<BackgroundData>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_BG);
+    return saved ? JSON.parse(saved) : DEFAULT_BACKGROUND;
+  });
+
   // Save progress and auth state to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_ANSWERS, JSON.stringify(answers));
-    localStorage.setItem(STORAGE_KEY_STEP, step);
+    // Don't persist 'background' step — always re-show from 'intro' on refresh
+    if (step !== 'background') {
+      localStorage.setItem(STORAGE_KEY_STEP, step);
+    }
     localStorage.setItem(STORAGE_KEY_INDEX, currentQuestionIndex.toString());
     localStorage.setItem(STORAGE_KEY_AUTH, isAuthenticated.toString());
-  }, [answers, step, currentQuestionIndex, isAuthenticated]);
+    localStorage.setItem(STORAGE_KEY_BG, JSON.stringify(backgroundData));
+  }, [answers, step, currentQuestionIndex, isAuthenticated, backgroundData]);
 
   // Sync with Firebase User if available
   useEffect(() => {
@@ -83,7 +98,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   // Keep results updated in cloud if user is logged in
   useEffect(() => {
     if (step === 'results' && scores && user) {
-        saveUserResults(scores).catch(err => console.error("Firebase save error:", err));
+        saveUserResults(scores, backgroundData).catch(err => console.error("Firebase save error:", err));
     }
   }, [step, scores, user]);
 
@@ -95,17 +110,34 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     return false;
   };
 
-  const handleStart = () => setStep('questionnaire');
+  // After intro, always show background questions first (if not returning to existing progress)
+  const handleStart = () => {
+    const hasAnswers = Object.keys(answers).length > 0;
+    if (hasAnswers) {
+      // Returning user: go straight to questionnaire to resume
+      setStep('questionnaire');
+    } else {
+      setStep('background');
+    }
+  };
+
+  const handleBackgroundComplete = (data: BackgroundData) => {
+    setBackgroundData(data);
+    setStep('questionnaire');
+  };
+
   const handleSubmit = () => setStep('results');
   
   const handleReset = () => {
     if (!window.confirm("האם אתה בטוח שברצונך למחוק את כל התשובות ולהתחיל מחדש?")) return;
     setAnswers({});
     setCurrentQuestionIndex(0);
+    setBackgroundData(DEFAULT_BACKGROUND);
     setStep('intro');
     localStorage.removeItem(STORAGE_KEY_ANSWERS);
     localStorage.removeItem(STORAGE_KEY_STEP);
     localStorage.removeItem(STORAGE_KEY_INDEX);
+    localStorage.removeItem(STORAGE_KEY_BG);
   };
 
   const handleEditAnswers = () => {
@@ -121,6 +153,12 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
         if (auth.currentUser) signOut(auth);
     });
   };
+
+  // Gender-aware welcome text
+  const isFemale = backgroundData.gender === 'female';
+  const welcomeBackText = isFemale ? 'ברוכה השבה!' : 'ברוך השב!';
+  const continueText = isFemale ? 'המשיכי מאיפה שעצרת' : 'המשך מאיפה שעצרתי';
+  const deleteText = isFemale ? 'מחקי הכל והתחילי מחדש' : 'מחק הכל והתחל מחדש';
 
   return (
     <div className="min-h-screen bg-transparent text-white p-4 sm:p-8 font-sans dir-rtl flex flex-col items-center overflow-y-auto pb-20">
@@ -161,15 +199,24 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                       <div className="space-y-6">
                         {Object.keys(answers).length > 0 && (
                           <div className="max-w-md mx-auto bg-cyan-900/40 border border-cyan-500/50 p-6 rounded-2xl text-center mb-8 shadow-2xl animate-fade-in">
-                            <h4 className="text-xl font-bold text-white mb-2">ברוך השב!</h4>
+                            <h4 className="text-xl font-bold text-white mb-2">{welcomeBackText}</h4>
                             <p className="text-gray-300 mb-4 text-sm">זיהינו שמילאת חלק מהשאלון בעבר. איך תרצה להמשיך?</p>
                             <div className="flex flex-col gap-3">
-                                <button onClick={handleStart} className="w-full text-white bg-cyan-600 hover:bg-cyan-500 py-3 rounded-xl font-bold transition-all shadow-lg">המשך מאיפה שעצרתי</button>
-                                <button onClick={handleReset} className="w-full text-gray-400 border border-gray-700 hover:bg-gray-800 py-2 rounded-xl text-xs transition-all">מחק הכל והתחל מחדש</button>
+                                <button onClick={handleStart} className="w-full text-white bg-cyan-600 hover:bg-cyan-500 py-3 rounded-xl font-bold transition-all shadow-lg">{continueText}</button>
+                                <button onClick={handleReset} className="w-full text-gray-400 border border-gray-700 hover:bg-gray-800 py-2 rounded-xl text-xs transition-all">{deleteText}</button>
                             </div>
                           </div>
                         )}
                         <IntroScreen onStart={handleStart} />
+                      </div>
+                    )}
+                    {step === 'background' && (
+                      <div className="w-full flex justify-center">
+                        <BackgroundQuestionsScreen
+                          data={backgroundData}
+                          onChange={setBackgroundData}
+                          onSubmit={() => handleBackgroundComplete(backgroundData)}
+                        />
                       </div>
                     )}
                     {step === 'questionnaire' && (
@@ -184,6 +231,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                     {step === 'results' && scores && (
                         <ResultsScreen 
                           scores={scores} 
+                          backgroundData={backgroundData}
                           onReset={handleReset} 
                           onEdit={handleEditAnswers} 
                           onLogout={handleLogout} 

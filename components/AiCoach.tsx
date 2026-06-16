@@ -1,11 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Scores } from '../types';
-import { getAiCoachAdvice, getAiCoachAdviceStream, translateText } from '../services/geminiService';
+import { Scores, BackgroundData } from '../types';
+import { getAiCoachAdviceStream, translateText } from '../services/geminiService';
 import { SparklesIcon } from './icons/Icons';
 
 interface AiCoachProps {
   scores: Scores;
+  backgroundData?: BackgroundData | null;
 }
 
 interface Message {
@@ -113,7 +114,7 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const AiCoach: React.FC<AiCoachProps> = ({ scores }) => {
+export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
   const [userInput, setUserInput] = useState('');
   const [conversation, setConversation] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
