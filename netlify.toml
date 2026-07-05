@@ -12,11 +12,6 @@
   targetPort = 5173
   framework = "#custom"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-  force = true
 
 [[redirects]]
   from = "/*"
