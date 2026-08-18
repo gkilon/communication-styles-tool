@@ -15,7 +15,7 @@ export default async (req: Request) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-    const modelName = payload.model || "gemini-2.0-flash";
+    const modelName = payload.model || "gemini-3.6-flash";
 
     // Helper for streaming
     if (action.endsWith('Stream')) {
