@@ -1,11 +1,19 @@
-
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebaseConfig';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { getAllUsers, createTeam, getTeams, updateUserTeam } from '../services/firebaseService';
+import { 
+  getAllUsers, 
+  createTeam, 
+  getTeams, 
+  updateUserTeam, 
+  getAccessCodes, 
+  createAccessCode, 
+  AccessCodeRecord 
+} from '../services/firebaseService';
 import { UserProfile, Team, Scores } from '../types';
 import { ArrowLeftIcon } from './icons/Icons';
 import { TeamAiCoach } from './TeamAiCoach';
+import { KeyRound, Copy, Check, Plus, ExternalLink } from 'lucide-react';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -14,6 +22,7 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [accessCodes, setAccessCodes] = useState<AccessCodeRecord[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
@@ -23,6 +32,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [newTeamName, setNewTeamName] = useState('');
   const [createTeamStatus, setCreateTeamStatus] = useState<{msg: string, type: 'success' | 'error' | ''}>({msg:'', type:''});
   
+  // Access Code Creation Form
+  const [newCodeName, setNewCodeName] = useState('');
+  const [newCodeTeam, setNewCodeTeam] = useState('');
+  const [newCodeLimit, setNewCodeLimit] = useState(50);
+  const [codeStatus, setCodeStatus] = useState<{msg: string, type: 'success' | 'error' | ''}>({msg:'', type:''});
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+
   const [showMap, setShowMap] = useState(false);
   
   // Questionnaire Password Management
@@ -60,9 +76,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     setLoading(true);
     setError(null);
     try {
-      const [usersData, teamsData] = await Promise.all([getAllUsers(), getTeams()]);
+      const [usersData, teamsData, codesData] = await Promise.all([
+        getAllUsers(), 
+        getTeams(),
+        getAccessCodes()
+      ]);
       setUsers(usersData);
       setTeams(teamsData);
+      setAccessCodes(codesData);
     } catch (err: any) {
       console.error("Failed to load admin data", err);
       if (err.code === 'permission-denied' || err.message?.includes('permission-denied')) {
@@ -73,6 +94,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCreateAccessCode = async () => {
+    if (!newCodeName.trim()) return;
+    setCodeStatus({ msg: 'יוצר קוד...', type: '' });
+    try {
+      await createAccessCode({
+        code: newCodeName.trim(),
+        teamName: newCodeTeam.trim() || 'General',
+        dailyLimit: Number(newCodeLimit) || 50,
+        type: 'team'
+      });
+      setNewCodeName('');
+      setNewCodeTeam('');
+      setCodeStatus({ msg: 'קוד הרישיון נוצר בהצלחה!', type: 'success' });
+      loadData();
+      setTimeout(() => setCodeStatus({ msg: '', type: '' }), 3000);
+    } catch (err: any) {
+      setCodeStatus({ msg: err.message || 'שגיאה ביצירת קוד', type: 'error' });
+    }
+  };
+
+  const copyCodeLink = (code: string) => {
+    const url = `${window.location.origin}/?code=${encodeURIComponent(code)}`;
+    navigator.clipboard.writeText(url);
+    setCopiedCodeId(code);
+    setTimeout(() => setCopiedCodeId(null), 2500);
   };
 
   const handleCreateTeam = async () => {
@@ -253,6 +301,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                         <div className="text-gray-400 text-sm mb-1">צוותים פעילים</div>
                         <div className="text-4xl font-black text-white">{loading ? '...' : teams.length}</div>
                     </div>
+                </div>
+            </div>
+
+            {/* License Codes & Client Invite Links Generator */}
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-cyan-500/30">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <KeyRound className="w-5 h-5 text-cyan-400" />
+                        <span>יצירת קודי רישיון וקישורי לקוח (Access Codes)</span>
+                    </h3>
+                    <span className="text-xs text-gray-400">הנפקת רישיון אישי או צוותי בלחיצה</span>
+                </div>
+
+                {/* Form */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                    <input 
+                        type="text" 
+                        value={newCodeName}
+                        onChange={(e) => setNewCodeName(e.target.value.toUpperCase())}
+                        placeholder="קוד רישיון (למשל: HAPOALIM-2026)"
+                        className="bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-sm uppercase"
+                    />
+                    <input 
+                        type="text" 
+                        value={newCodeTeam}
+                        onChange={(e) => setNewCodeTeam(e.target.value)}
+                        placeholder="שיוך לצוות (למשל: בנק הפועלים)"
+                        className="bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    />
+                    <button 
+                        onClick={handleCreateAccessCode}
+                        disabled={!newCodeName.trim() || loading}
+                        className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 px-6 rounded-xl disabled:opacity-50 transition-all shadow-lg flex items-center justify-center gap-2 text-sm"
+                    >
+                        <Plus className="w-4 h-4" />
+                        <span>צור קוד רישיון</span>
+                    </button>
+                </div>
+                {codeStatus.msg && (
+                    <p className={`mb-4 text-xs font-bold ${codeStatus.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                        {codeStatus.msg}
+                    </p>
+                )}
+
+                {/* List of Active Codes */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {accessCodes.map(c => (
+                        <div key={c.id || c.code} className="bg-gray-900/60 p-3.5 rounded-xl border border-gray-700 flex items-center justify-between group hover:border-cyan-500/50 transition-all">
+                            <div className="overflow-hidden">
+                                <div className="text-cyan-300 font-mono font-bold text-sm truncate">{c.code || c.id}</div>
+                                <div className="text-[11px] text-gray-400 truncate">צוות: {c.teamName || 'General'}</div>
+                            </div>
+                            <button 
+                                onClick={() => copyCodeLink(c.code || c.id)}
+                                className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white px-3 py-1.5 rounded-lg transition-all text-xs font-bold border border-cyan-600/30 flex items-center gap-1.5"
+                                title="העתק קישור ישיר"
+                            >
+                                {copiedCodeId === (c.code || c.id) ? (
+                                    <>
+                                        <Check className="w-3.5 h-3.5 text-green-400" />
+                                        <span className="text-green-400">הועתק!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Copy className="w-3.5 h-3.5" />
+                                        <span>העתק לינק</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    ))}
+                    {accessCodes.length === 0 && (
+                        <p className="text-gray-500 text-xs italic col-span-3">טרם נוצרו קודי רישיון מותאמים אישית (קודי ברירת מחדל כמו INSPIRE ו-GILAD פעילים).</p>
+                    )}
                 </div>
             </div>
 

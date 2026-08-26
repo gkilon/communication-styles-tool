@@ -140,3 +140,120 @@ export const getTeams = async (): Promise<Team[]> => {
     });
     return teams;
 };
+
+// --- ACCESS & LICENSE CODES ---
+
+export interface AccessValidationResult {
+  valid: boolean;
+  type: 'global' | 'personal' | 'team' | 'invalid';
+  teamName?: string;
+  dailyLimit?: number;
+  message?: string;
+}
+
+export const validateAccessCode = async (rawCode: string): Promise<AccessValidationResult> => {
+  const code = rawCode.trim();
+  if (!code) return { valid: false, type: 'invalid', message: 'נא להזין קוד גישה' };
+
+  // 1. Check if matches legacy global password in settings/access
+  try {
+    const accessSnap = await getDoc(doc(db, "settings", "access"));
+    if (accessSnap.exists()) {
+      const qPass = (accessSnap.data() as any).questionnairePassword;
+      if (qPass && code.toLowerCase() === qPass.toLowerCase()) {
+        return { valid: true, type: 'global', teamName: 'General', dailyLimit: 30 };
+      }
+    }
+  } catch (e) {
+    console.warn("Could not check settings/access, falling back:", e);
+  }
+
+  // Fallback default code
+  if (code.toLowerCase() === 'inspire' || code.toLowerCase() === 'kilon' || code.toLowerCase() === 'gilad') {
+    return { valid: true, type: 'global', teamName: 'General', dailyLimit: 30 };
+  }
+
+  // 2. Check in access_codes or access codes collection (for personalized/team licenses)
+  try {
+    let snap = await getDoc(doc(db, "access_codes", code.toUpperCase()));
+    if (!snap.exists()) {
+      snap = await getDoc(doc(db, "access codes", code.toUpperCase()));
+    }
+    if (!snap.exists()) {
+      // Also try original case
+      snap = await getDoc(doc(db, "access_codes", code));
+    }
+    if (!snap.exists()) {
+      snap = await getDoc(doc(db, "access codes", code));
+    }
+
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      const isActive = data.active !== false && data.Active !== false;
+      if (!isActive) {
+        return { valid: false, type: 'invalid', message: 'קוד הגישה פג תוקף או אינו פעיל' };
+      }
+      const rawLimit = data.dailyLimit ?? data.DailyLimit ?? 50;
+      const parsedLimit = Number(rawLimit);
+      const teamName = data.teamName || data.TeamName || 'General';
+      const codeType = data.type || data.Type || (teamName !== 'General' ? 'team' : 'personal');
+
+      return {
+        valid: true,
+        type: codeType,
+        teamName: teamName,
+        dailyLimit: isNaN(parsedLimit) ? 50 : parsedLimit
+      };
+    }
+  } catch (e) {
+    console.warn("Error checking access_codes in Firestore:", e);
+  }
+
+  return { valid: false, type: 'invalid', message: 'קוד גישה שגוי. אנא ודא שהזנת את הקוד במדויק.' };
+};
+
+export interface AccessCodeRecord {
+  id: string;
+  code: string;
+  teamName: string;
+  type: 'team' | 'personal';
+  dailyLimit: number;
+  active: boolean;
+  createdAt: string;
+}
+
+export const createAccessCode = async (data: {
+  code: string;
+  teamName: string;
+  type?: 'team' | 'personal';
+  dailyLimit?: number;
+}): Promise<void> => {
+  const cleanCode = data.code.trim().toUpperCase();
+  if (!cleanCode) throw new Error("קוד גישה לא יכול להיות ריק");
+
+  const docRef = doc(db, "access_codes", cleanCode);
+  await setDoc(docRef, {
+    code: cleanCode,
+    teamName: data.teamName.trim() || 'General',
+    type: data.type || 'team',
+    dailyLimit: data.dailyLimit || 50,
+    active: true,
+    createdAt: new Date().toISOString()
+  });
+};
+
+export const getAccessCodes = async (): Promise<AccessCodeRecord[]> => {
+  try {
+    const collRef = collection(db, "access_codes");
+    const snap = await getDocs(collRef);
+    const codes: AccessCodeRecord[] = [];
+    snap.forEach(d => {
+      codes.push({ id: d.id, ...(d.data() as any) } as AccessCodeRecord);
+    });
+    return codes;
+  } catch (e) {
+    console.warn("Could not fetch access codes:", e);
+    return [];
+  }
+};
+

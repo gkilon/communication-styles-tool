@@ -82,21 +82,28 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         href="https://kilon-consulting.com/" 
         target="_blank" 
         rel="noopener noreferrer"
-        className="group transition-all duration-300 transform hover:scale-105"
+        className="group transition-all duration-300 transform hover:scale-105 inline-block text-center"
       >
-        <div className="flex flex-col items-center">
-          <div className="flex items-center text-2xl md:text-3xl tracking-tight">
-            <span className="text-white font-light">GILAD</span>
-            <span className="text-white font-black ml-2">KILON</span>
-            <span className="text-cyan-500 font-black ml-1 leading-none text-3xl">.</span>
-          </div>
-          <div className="text-gray-500 text-[8px] md:text-[9px] font-bold tracking-[0.3em] uppercase mt-1 border-t border-gray-800 pt-1 w-full text-center">
-            MANAGEMENT CONSULTING
-          </div>
+        {/* Main logo row */}
+        <div className="flex items-baseline justify-center leading-none">
+          <span className="text-gray-300 font-light" style={{ fontSize: 'clamp(1.8rem, 5vw, 2.6rem)', letterSpacing: '0.05em' }}>
+            GILAD&nbsp;
+          </span>
+          <span className="text-white font-black" style={{ fontSize: 'clamp(1.8rem, 5vw, 2.6rem)', letterSpacing: '0.02em' }}>
+            KILON
+          </span>
+          <span className="text-cyan-400 font-black" style={{ fontSize: 'clamp(2.2rem, 6vw, 3.1rem)', lineHeight: 1, marginLeft: '3px' }}>
+            .
+          </span>
+        </div>
+        {/* Subtitle */}
+        <div className="text-gray-500 font-semibold uppercase text-center" style={{ fontSize: '0.58rem', letterSpacing: '0.32em', marginTop: '8px', borderTop: '1px solid rgba(75,85,99,0.5)', paddingTop: '7px' }}>
+          MANAGEMENT CONSULTING
         </div>
       </a>
     </div>
   );
+
 
   if (isAdminMode) {
     return (
