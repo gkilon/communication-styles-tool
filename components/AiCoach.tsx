@@ -156,7 +156,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
         const next = [...prev];
         const last = next[next.length - 1];
         if (last && last.sender === 'ai' && !last.text) {
-            last.text = "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב.";
+            last.text = error?.message || "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב.";
         }
         return next;
       });

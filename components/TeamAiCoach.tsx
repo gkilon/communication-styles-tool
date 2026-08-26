@@ -49,8 +49,8 @@ export const TeamAiCoach: React.FC<TeamAiCoachProps> = ({ users, teamName }) => 
             // Update the Hebrew translation in real-time
             setTranslations(prev => ({ ...prev, 'HE': chunk }));
         });
-    } catch (e) {
-        setAiResponse("אירעה שגיאה בקבלת הייעוץ. אנא נסה שוב.");
+    } catch (e: any) {
+        setAiResponse(e?.message || "אירעה שגיאה בקבלת הייעוץ. אנא נסה שוב.");
     } finally {
         setIsLoading(false);
     }

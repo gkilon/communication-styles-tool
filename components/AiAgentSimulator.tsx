@@ -27,8 +27,8 @@ export const AiAgentSimulator: React.FC<AiAgentSimulatorProps> = ({ scores }) =>
     try {
       const result = await generatePromptAnalysis(scores, selectedTask, promptInput);
       setAnalysis(result);
-    } catch (err) {
-      setAnalysis("אירעה שגיאה בטעינת הניתוח.");
+    } catch (err: any) {
+      setAnalysis(err?.message || "אירעה שגיאה בטעינת הניתוח.");
     } finally {
       setIsLoading(false);
     }

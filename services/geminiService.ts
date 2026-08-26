@@ -1,4 +1,5 @@
 import { Scores, UserProfile, BackgroundData } from '../types';
+import { auth } from '../firebaseConfig';
 
 export interface SimulationMessage {
   sender: 'user' | 'ai';
@@ -9,10 +10,16 @@ export interface SimulationMessage {
  * Shared helper to call our Netlify Function backend.
  */
 async function callGeminiApi(action: string, payload: any): Promise<any> {
+  const currentUserId = auth?.currentUser?.uid;
+  const enrichedPayload = {
+    ...payload,
+    userId: currentUserId || payload?.userId || null
+  };
+
   const response = await fetch('/api/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, payload })
+    body: JSON.stringify({ action, payload: enrichedPayload })
   });
 
   if (!response.ok) {
