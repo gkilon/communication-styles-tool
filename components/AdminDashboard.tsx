@@ -9,12 +9,15 @@ import {
   getAccessCodes, 
   createAccessCode, 
   updateTeamDetails,
+  deleteTeam,
+  deleteAccessCode,
   AccessCodeRecord 
 } from '../services/firebaseService';
 import { UserProfile, Team, Scores } from '../types';
 import { ArrowLeftIcon } from './icons/Icons';
 import { TeamAiCoach } from './TeamAiCoach';
-import { KeyRound, Copy, Check, Plus, ExternalLink, Building2, BookOpen, Upload, Sparkles, Save, FileText } from 'lucide-react';
+import { KeyRound, Copy, Check, Plus, ExternalLink, Building2, BookOpen, Upload, Sparkles, Save, FileText, Trash2 } from 'lucide-react';
+
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -149,7 +152,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       }
   };
 
+  const handleDeleteTeam = async (teamId: string, teamName: string) => {
+    if (!window.confirm(`האם אתה בטוח שברצונך למחוק את הארגון / הסדנה "${teamName}"?`)) return;
+    try {
+      await deleteTeam(teamId);
+      if (selectedTeamForEdit === teamId) setSelectedTeamForEdit('');
+      if (filterTeam === teamName) setFilterTeam('');
+      loadData();
+    } catch (e: any) {
+      alert("שגיאה במחיקת הארגון: " + (e.message || 'נסה שוב'));
+    }
+  };
+
+  const handleDeleteAccessCode = async (codeId: string) => {
+    if (!window.confirm(`האם אתה בטוח שברצונך למחוק את קוד הגישה "${codeId}"?`)) return;
+    try {
+      await deleteAccessCode(codeId);
+      loadData();
+    } catch (e: any) {
+      alert("שגיאה במחיקת הקוד: " + (e.message || 'נסה שוב'));
+    }
+  };
+
   // Enterprise Knowledge & Co-Branding Handlers
+
   const handleSelectTeamForEdit = (teamId: string) => {
     setSelectedTeamForEdit(teamId);
     setKnowledgeStatus({ msg: '', type: '' });
@@ -416,31 +442,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                         <div key={c.id || c.code} className="bg-gray-900/60 p-3.5 rounded-xl border border-gray-700 flex items-center justify-between group hover:border-cyan-500/50 transition-all">
                             <div className="overflow-hidden">
                                 <div className="text-cyan-300 font-mono font-bold text-sm truncate">{c.code || c.id}</div>
-                                <div className="text-[11px] text-gray-400 truncate">צוות: {c.teamName || 'General'}</div>
+                                <div className="text-[11px] text-gray-400 truncate">שיוך: {c.teamName || 'General'}</div>
                             </div>
-                            <button 
-                                onClick={() => copyCodeLink(c.code || c.id)}
-                                className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white px-3 py-1.5 rounded-lg transition-all text-xs font-bold border border-cyan-600/30 flex items-center gap-1.5"
-                                title="העתק קישור ישיר"
-                            >
-                                {copiedCodeId === (c.code || c.id) ? (
-                                    <>
-                                        <Check className="w-3.5 h-3.5 text-green-400" />
-                                        <span className="text-green-400">הועתק!</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Copy className="w-3.5 h-3.5" />
-                                        <span>העתק לינק</span>
-                                    </>
-                                )}
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                                <button 
+                                    onClick={() => copyCodeLink(c.code || c.id)}
+                                    className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white px-3 py-1.5 rounded-lg transition-all text-xs font-bold border border-cyan-600/30 flex items-center gap-1.5"
+                                    title="העתק קישור ישיר"
+                                >
+                                    {copiedCodeId === (c.code || c.id) ? (
+                                        <>
+                                            <Check className="w-3.5 h-3.5 text-green-400" />
+                                            <span className="text-green-400">הועתק!</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="w-3.5 h-3.5" />
+                                            <span>העתק לינק</span>
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteAccessCode(c.id || c.code)}
+                                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all border border-transparent hover:border-red-500/30"
+                                    title="מחק קוד גישה"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     ))}
                     {accessCodes.length === 0 && (
                         <p className="text-gray-500 text-xs italic col-span-3">טרם נוצרו קודי רישיון מותאמים אישית (קודי ברירת מחדל כמו INSPIRE ו-GILAD פעילים).</p>
                     )}
                 </div>
+
             </div>
 
             {/* Enterprise AI Knowledge Base & Co-Branding Panel */}
@@ -618,10 +654,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 )}
             </div>
 
-            {/* Teams Management & Links Section */}
+            {/* Teams & Organizations Management & Links Section */}
             <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-gray-700">
                 <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <span>🔗</span> ניהול צוותים וקישורי הרשמה
+                    <span>🏢</span> ניהול ארגונים / סדנאות וקישורי גישה
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -629,24 +665,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                         <div key={team.id} className="bg-gray-900/50 p-4 rounded-xl border border-gray-700 flex items-center justify-between group hover:border-cyan-500/50 transition-all">
                             <div className="overflow-hidden">
                                 <div className="text-white font-bold truncate">{team.name}</div>
+                                {team.companyName && (
+                                    <div className="text-xs text-indigo-300 font-medium truncate">{team.companyName}</div>
+                                )}
                                 <div className="text-[10px] text-gray-500 truncate">ID: {team.id}</div>
                             </div>
-                            <button 
-                                onClick={() => {
-                                    const url = `${window.location.origin}/?team=${encodeURIComponent(team.name)}`;
-                                    navigator.clipboard.writeText(url);
-                                    alert(`הקישור לצוות "${team.name}" הועתק ללוח!`);
-                                }}
-                                className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-400 hover:text-white p-2 rounded-lg transition-all text-xs font-bold border border-cyan-600/30"
-                                title="העתק קישור ייעודי"
-                            >
-                                העתק קישור
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                                <button 
+                                    onClick={() => {
+                                        const url = `${window.location.origin}/?team=${encodeURIComponent(team.name)}`;
+                                        navigator.clipboard.writeText(url);
+                                        alert(`הקישור לארגון / סדנה "${team.name}" הועתק ללוח!`);
+                                    }}
+                                    className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-400 hover:text-white px-2.5 py-1.5 rounded-lg transition-all text-xs font-bold border border-cyan-600/30"
+                                    title="העתק קישור ייעודי"
+                                >
+                                    העתק קישור
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteTeam(team.id, team.name)}
+                                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all border border-transparent hover:border-red-500/30"
+                                    title="מחק ארגון/צוות"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     ))}
-                    {teams.length === 0 && <p className="text-gray-500 text-sm italic">טרם נוצרו צוותים.</p>}
+                    {teams.length === 0 && <p className="text-gray-500 text-sm italic">טרם נוצרו ארגונים / צוותים.</p>}
                 </div>
             </div>
+
 
             {/* Data Table & Map */}
             <div className="bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border border-gray-700">

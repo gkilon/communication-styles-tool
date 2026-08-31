@@ -1,8 +1,9 @@
 
 import { db, auth } from '../firebaseConfig';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Scores, UserProfile, Team, BackgroundData } from '../types';
 import { User } from 'firebase/auth';
+
 
 // --- USERS & RESULTS ---
 
@@ -182,7 +183,18 @@ export const updateTeamDetails = async (teamId: string, data: Partial<Team>): Pr
   await updateDoc(teamRef, payload);
 };
 
+export const deleteTeam = async (teamId: string): Promise<void> => {
+  const teamRef = doc(db, "teams", teamId);
+  await deleteDoc(teamRef);
+};
+
+export const deleteAccessCode = async (codeId: string): Promise<void> => {
+  const codeRef = doc(db, "access_codes", codeId);
+  await deleteDoc(codeRef);
+};
+
 export const getTeamByName = async (teamName: string): Promise<Team | null> => {
+
   try {
     const teamsRef = collection(db, "teams");
     const q = query(teamsRef, where("name", "==", teamName.trim()));
