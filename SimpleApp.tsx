@@ -4,12 +4,11 @@ import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { PasswordScreen } from './components/PasswordScreen';
-import { AuthScreen } from './components/AuthScreen';
 import { BackgroundQuestionsScreen } from './components/BackgroundQuestionsScreen';
-import { Scores, BackgroundData } from './types';
+import { Scores, BackgroundData, UserSession } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
 import { isFirebaseInitialized } from './firebaseConfig';
-import { saveUserResults } from './services/firebaseService';
+import { saveUserResults, saveWorkshopGuestResults } from './services/firebaseService';
 
 interface SimpleAppProps {
   onAdminLoginAttempt: (email: string, pass: string) => Promise<void>;
@@ -21,16 +20,21 @@ const STORAGE_KEY_STEP = 'comm_style_step';
 const STORAGE_KEY_INDEX = 'comm_style_index';
 const STORAGE_KEY_AUTH = 'comm_style_is_auth';
 const STORAGE_KEY_BG = 'comm_style_background';
+const STORAGE_KEY_SESSION = 'comm_style_session';
 
 const DEFAULT_BACKGROUND: BackgroundData = { gender: '', isManager: '', goal: '' };
 
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
+  // Session tracking (Personal vs Workshop)
+  const [session, setSession] = useState<UserSession | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_SESSION);
+    return saved ? JSON.parse(saved) : null;
+  });
+
   // Persistence initialization for Authentication
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem(STORAGE_KEY_AUTH) === 'true';
   });
-  
-  const [showTeamAuth, setShowTeamAuth] = useState(false);
   
   // Persistence initialization for Progress
   const [step, setStep] = useState<'intro' | 'background' | 'questionnaire' | 'results'>(() => {
@@ -65,13 +69,15 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     localStorage.setItem(STORAGE_KEY_INDEX, currentQuestionIndex.toString());
     localStorage.setItem(STORAGE_KEY_AUTH, isAuthenticated.toString());
     localStorage.setItem(STORAGE_KEY_BG, JSON.stringify(backgroundData));
-  }, [answers, step, currentQuestionIndex, isAuthenticated, backgroundData]);
+    if (session) {
+      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(session));
+    }
+  }, [answers, step, currentQuestionIndex, isAuthenticated, backgroundData, session]);
 
   // Sync with Firebase User if available
   useEffect(() => {
     if (user) {
         setIsAuthenticated(true);
-        setShowTeamAuth(false);
     }
   }, [user]);
 
@@ -95,20 +101,29 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     return newScores;
   }, [step, answers]);
 
-  // Keep results updated in cloud if user is logged in
+  // Save to DB ONLY if team/workshop participant or registered user
   useEffect(() => {
-    if (step === 'results' && scores && user) {
+    if (step === 'results' && scores) {
+      if (user) {
         saveUserResults(scores, backgroundData).catch(err => console.error("Firebase save error:", err));
+      } else if (session?.type === 'team' && session.participantId && session.displayName) {
+        saveWorkshopGuestResults(
+          session.participantId, 
+          session.displayName, 
+          session.teamName || 'General', 
+          scores, 
+          backgroundData
+        ).catch(err => console.error("Workshop guest save error:", err));
+      }
+      // Note: Personal sessions (session?.type === 'personal') intentionally do NOT save anything to DB!
     }
-  }, [step, scores, user]);
+  }, [step, scores, user, session]);
 
-  const handleSimpleAuthenticate = (password: string) => {
-    if (password.toLowerCase() === 'inspire') {
-      setIsAuthenticated(true);
-      return true;
-    }
-    return false;
+  const handleAuthenticate = (newSession: UserSession) => {
+    setSession(newSession);
+    setIsAuthenticated(true);
   };
+
 
   // After intro, always show background questions first (if not returning to existing progress)
   const handleStart = () => {
@@ -147,7 +162,9 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   const handleLogout = () => {
     if (!window.confirm("האם לצאת מהמערכת? (התשובות ישמרו בדפדפן זה)")) return;
     setIsAuthenticated(false);
+    setSession(null);
     localStorage.removeItem(STORAGE_KEY_AUTH);
+    localStorage.removeItem(STORAGE_KEY_SESSION);
     import('firebase/auth').then(({ signOut, getAuth }) => {
         const auth = getAuth();
         if (auth.currentUser) signOut(auth);
@@ -163,11 +180,27 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   return (
     <div className="min-h-screen bg-transparent text-white p-4 sm:p-8 font-sans dir-rtl flex flex-col items-center overflow-y-auto pb-20">
       <div className="w-full max-w-6xl mx-auto">
-        <header className="text-center mb-12 relative">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-cyan-400 tracking-wide drop-shadow-lg py-4">
+        <header className="text-center mb-10 relative">
+          {/* Co-Branding Banner if present */}
+          {session?.companyName && (
+            <div className="inline-flex items-center gap-3 bg-gray-800/90 border border-cyan-500/30 px-5 py-2 rounded-full mb-3 shadow-lg">
+              <span className="text-xs text-gray-400 font-semibold">סדנת מנהלים:</span>
+              <span className="text-sm text-cyan-300 font-black">{session.companyName}</span>
+              {session.logoUrl && (
+                <img 
+                  src={session.logoUrl} 
+                  alt={session.companyName} 
+                  className="h-6 max-w-[100px] object-contain border-r border-gray-700 pr-3 mr-1" 
+                  onError={(e) => (e.currentTarget.style.display = 'none')} 
+                />
+              )}
+            </div>
+          )}
+
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-cyan-400 tracking-wide drop-shadow-lg py-2">
              שאלון סגנונות תקשורת
           </h1>
-          <p className="text-gray-300 mt-2 text-xl font-light">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
+          <p className="text-gray-300 mt-1 text-lg font-light">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
           
           {isAuthenticated && (
             <div className="absolute top-0 left-0 flex gap-2">
@@ -181,19 +214,16 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
           )}
         </header>
 
+
         <main className="w-full flex justify-center">
             {!isAuthenticated ? (
-                showTeamAuth ? (
-                    <AuthScreen onLoginSuccess={() => setIsAuthenticated(true)} onBack={() => setShowTeamAuth(false)} />
-                ) : (
-                    <PasswordScreen 
-                        onAuthenticate={handleSimpleAuthenticate} 
-                        onAdminLogin={onAdminLoginAttempt}
-                        onTeamLoginClick={() => setShowTeamAuth(true)}
-                        hasDatabaseConnection={isFirebaseInitialized}
-                    />
-                )
+                <PasswordScreen 
+                    onAuthenticate={handleAuthenticate} 
+                    onAdminLogin={onAdminLoginAttempt}
+                    hasDatabaseConnection={isFirebaseInitialized}
+                />
             ) : (
+
                 <div className="w-full">
                     {step === 'intro' && (
                       <div className="space-y-6">

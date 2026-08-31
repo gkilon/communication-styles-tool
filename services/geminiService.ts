@@ -11,9 +11,48 @@ export interface SimulationMessage {
  */
 async function callGeminiApi(action: string, payload: any): Promise<any> {
   const currentUserId = auth?.currentUser?.uid;
+  
+  // Read enterprise context and knowledge from session if available
+  let sessionData: any = null;
+  try {
+    const rawSession = localStorage.getItem('comm_style_session');
+    if (rawSession) sessionData = JSON.parse(rawSession);
+  } catch (e) {}
+
+  // Build enterprise context prompt addition
+  let enterpriseContextPrompt = "";
+  if (sessionData) {
+    if (sessionData.companyName) {
+      enterpriseContextPrompt += `\n\n[הקשר ארגוני]: סדנה עבור חברת/ארגון "${sessionData.companyName}".`;
+    }
+    if (sessionData.orgContext) {
+      enterpriseContextPrompt += `\n[רקע ותרבות ארגונית של החברה]:\n${sessionData.orgContext}`;
+    }
+    if (sessionData.knowledgeBase) {
+      enterpriseContextPrompt += `\n[חומרי אבחון, סקרי אקלים, דוחות ודגשים ניהוליים של הארגון]:\n${sessionData.knowledgeBase}`;
+      enterpriseContextPrompt += `\nהנחיה חשובה למאמן ה-AI: עליך להתבסס על חומרי האבחון והידע הארגוני שלמעלה כדי להעניק ניתוח מותאם אישית, דוגמאות מציאותיות וטיפים שמתאימים במדויק לשפת הארגון, לאתגרים שלו ולתרבות הפנימית.`;
+    }
+  }
+
+  // Inject into systemInstruction or append to prompt
+  let enrichedConfig = { ...(payload.config || {}) };
+  if (enterpriseContextPrompt) {
+    if (enrichedConfig.systemInstruction) {
+      if (typeof enrichedConfig.systemInstruction === 'string') {
+        enrichedConfig.systemInstruction = enrichedConfig.systemInstruction + enterpriseContextPrompt;
+      } else if (enrichedConfig.systemInstruction.parts) {
+        enrichedConfig.systemInstruction.parts.push({ text: enterpriseContextPrompt });
+      }
+    } else {
+      enrichedConfig.systemInstruction = enterpriseContextPrompt;
+    }
+  }
+
   const enrichedPayload = {
     ...payload,
-    userId: currentUserId || payload?.userId || null
+    config: enrichedConfig,
+    userId: currentUserId || payload?.userId || null,
+    accessCode: sessionData?.accessCode || null
   };
 
   const response = await fetch('/api/gemini', {
@@ -33,6 +72,7 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
 
   return response;
 }
+
 
 /**
  * Shared helper for streaming responses from our Netlify Function.

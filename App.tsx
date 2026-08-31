@@ -84,7 +84,8 @@ export const App: React.FC = () => {
                  
                  if (profile?.role === 'admin' || 
                      currentUser.email === 'admin@manager.com' || 
-                     currentUser.email === 'gilad@kilon.org') {
+                     currentUser.email === 'gilad@kilon.org' ||
+                     currentUser.email === 'gkilon@gmail.com') {
                      console.log("Admin access granted");
                      setView('admin');
                  } else {

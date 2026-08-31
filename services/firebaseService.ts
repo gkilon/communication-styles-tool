@@ -6,7 +6,7 @@ import { User } from 'firebase/auth';
 
 // --- USERS & RESULTS ---
 
-// שמירת תוצאות המשתמש בבסיס הנתונים
+// שמירת תוצאות המשתמש בבסיס הנתונים (למשתמש מחובר)
 export const saveUserResults = async (scores: Scores, backgroundData?: BackgroundData) => {
   const user = auth.currentUser;
   if (!user) return;
@@ -28,6 +28,38 @@ export const saveUserResults = async (scores: Scores, backgroundData?: Backgroun
     throw error;
   }
 };
+
+// שמירת תוצאות של משתתף בסדנה צוותית (ללא צורך בהרשמה / אימייל)
+export const saveWorkshopGuestResults = async (
+  participantId: string, 
+  displayName: string, 
+  teamName: string, 
+  scores: Scores, 
+  backgroundData?: BackgroundData
+) => {
+  if (!isFirebaseInitialized || !participantId) return;
+
+  const userRef = doc(db, "users", participantId);
+  try {
+    const payload: any = {
+      uid: participantId,
+      displayName: displayName.trim(),
+      team: teamName.trim() || 'General',
+      scores: scores,
+      role: 'user',
+      isGuest: true,
+      completedAt: new Date().toISOString()
+    };
+    if (backgroundData) {
+      payload.backgroundData = backgroundData;
+    }
+    await setDoc(userRef, payload, { merge: true });
+    console.log("Workshop guest results saved successfully for:", displayName);
+  } catch (error) {
+    console.error("Error saving workshop guest results:", error);
+  }
+};
+
 
 // עדכון צוות של משתמש קיים
 export const updateUserTeam = async (uid: string, newTeamName: string) => {
@@ -141,12 +173,40 @@ export const getTeams = async (): Promise<Team[]> => {
     return teams;
 };
 
+export const updateTeamDetails = async (teamId: string, data: Partial<Team>): Promise<void> => {
+  const teamRef = doc(db, "teams", teamId);
+  const payload: any = {
+    ...data,
+    updatedAt: new Date().toISOString()
+  };
+  await updateDoc(teamRef, payload);
+};
+
+export const getTeamByName = async (teamName: string): Promise<Team | null> => {
+  try {
+    const teamsRef = collection(db, "teams");
+    const q = query(teamsRef, where("name", "==", teamName.trim()));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const docData = snap.docs[0];
+      return { id: docData.id, ...(docData.data() as any) } as Team;
+    }
+  } catch (e) {
+    console.warn("Error finding team by name:", e);
+  }
+  return null;
+};
+
 // --- ACCESS & LICENSE CODES ---
 
 export interface AccessValidationResult {
   valid: boolean;
   type: 'global' | 'personal' | 'team' | 'invalid';
   teamName?: string;
+  companyName?: string;
+  logoUrl?: string;
+  orgContext?: string;
+  knowledgeBase?: string;
   dailyLimit?: number;
   message?: string;
 }
@@ -154,6 +214,20 @@ export interface AccessValidationResult {
 export const validateAccessCode = async (rawCode: string): Promise<AccessValidationResult> => {
   const code = rawCode.trim();
   if (!code) return { valid: false, type: 'invalid', message: 'נא להזין קוד גישה' };
+
+  // Helper to attach team enterprise data if found
+  const enrichWithTeamData = async (res: AccessValidationResult): Promise<AccessValidationResult> => {
+    if (res.teamName && res.teamName !== 'General') {
+      const teamObj = await getTeamByName(res.teamName);
+      if (teamObj) {
+        res.companyName = teamObj.companyName;
+        res.logoUrl = teamObj.logoUrl;
+        res.orgContext = teamObj.orgContext;
+        res.knowledgeBase = teamObj.knowledgeBase;
+      }
+    }
+    return res;
+  };
 
   // 1. Check if matches legacy global password in settings/access
   try {
@@ -180,7 +254,6 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
       snap = await getDoc(doc(db, "access codes", code.toUpperCase()));
     }
     if (!snap.exists()) {
-      // Also try original case
       snap = await getDoc(doc(db, "access_codes", code));
     }
     if (!snap.exists()) {
@@ -198,19 +271,45 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
       const teamName = data.teamName || data.TeamName || 'General';
       const codeType = data.type || data.Type || (teamName !== 'General' ? 'team' : 'personal');
 
-      return {
+      const initialResult: AccessValidationResult = {
         valid: true,
         type: codeType,
         teamName: teamName,
+        companyName: data.companyName || data.CompanyName,
+        logoUrl: data.logoUrl || data.LogoUrl,
+        orgContext: data.orgContext || data.OrgContext,
+        knowledgeBase: data.knowledgeBase || data.KnowledgeBase,
         dailyLimit: isNaN(parsedLimit) ? 50 : parsedLimit
       };
+
+      return await enrichWithTeamData(initialResult);
     }
   } catch (e) {
     console.warn("Error checking access_codes in Firestore:", e);
   }
 
+  // 3. Check directly if code is a team name
+  try {
+    const directTeam = await getTeamByName(code);
+    if (directTeam) {
+      return {
+        valid: true,
+        type: 'team',
+        teamName: directTeam.name,
+        companyName: directTeam.companyName,
+        logoUrl: directTeam.logoUrl,
+        orgContext: directTeam.orgContext,
+        knowledgeBase: directTeam.knowledgeBase,
+        dailyLimit: 50
+      };
+    }
+  } catch (e) {
+    console.warn("Error checking direct team name:", e);
+  }
+
   return { valid: false, type: 'invalid', message: 'קוד גישה שגוי. אנא ודא שהזנת את הקוד במדויק.' };
 };
+
 
 export interface AccessCodeRecord {
   id: string;

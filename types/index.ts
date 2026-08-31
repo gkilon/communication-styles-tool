@@ -44,4 +44,23 @@ export interface Team {
   name: string;
   createdAt: string;
   memberCount: number;
+  companyName?: string;
+  logoUrl?: string;
+  orgContext?: string; // Short cultural & DNA description
+  knowledgeBase?: string; // Diagnostic materials, surveys, leadership framework
+  updatedAt?: string;
 }
+
+export interface UserSession {
+  type: 'personal' | 'team';
+  teamName?: string;
+  companyName?: string;
+  logoUrl?: string;
+  orgContext?: string;
+  knowledgeBase?: string;
+  displayName?: string;
+  participantId?: string;
+  accessCode?: string;
+}
+
+
