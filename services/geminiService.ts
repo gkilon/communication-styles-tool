@@ -715,23 +715,93 @@ export const transcribeAudio = async (audioBase64: string, mimeType: string): Pr
   }
 };
 
-export async function translateText(text: string, targetLanguage: string): Promise<string> {
+export async function translateText(text: string, targetLanguage: string = 'English'): Promise<string> {
+  if (!text || !text.trim()) return '';
   try {
+    const systemInstruction = `You are a top-tier executive coach, organizational psychologist, and expert English translator.
+Your task is to translate the provided Hebrew text into high-level, fluent, natural business and executive English.
+
+CRITICAL TRANSLATION RULES:
+1. Preserve markdown syntax exactly: keep headers (###), bold tags (**text**), bullet points (* or -), numbered lists, line breaks, and paragraph structures intact.
+2. Color / Communication Styles Model terminology:
+   - "אדום" / "הנחוש" -> "Red" / "The Driven / Dominant Style"
+   - "צהוב" / "המשפיע" -> "Yellow" / "The Influencing / Expressive Style"
+   - "ירוק" / "התומך" -> "Green" / "The Supportive / Steady Style"
+   - "כחול" / "המדויק" -> "Blue" / "The Analytical / Precise Style"
+   - "סגנונות תקשורת" -> "Communication Styles"
+   - "חוזקות" -> "Key Strengths"
+   - "אזורים לפיתוח / שטחים מתים" -> "Development Areas / Blind Spots"
+   - "המלצות לפעולה / תכלס" -> "Actionable Recommendations"
+3. Tone: insightful, empowering, professional, clear, and native English.
+4. Return ONLY the translated English content without introductory or concluding conversational text.`;
+
     const response = await callGeminiApi('generateContent', {
       model: "gemini-3.6-flash",
       contents: text,
       config: {
-        systemInstruction: `You are a professional translator. Translate the following text into ${targetLanguage}.`,
-        temperature: 0.3,
+        systemInstruction,
+        temperature: 0.2,
         safetySettings: SAFETY_SETTINGS
       }
     });
 
     const data = await response.json();
-    return data.text || "לא התקבלה תשובה.";
+    return (data.text || '').trim() || text;
   } catch (error: any) {
     console.error("Translation error:", error);
     throw error;
+  }
+}
+
+export async function translateAnalysisToEnglish(analysis: {
+  general: string;
+  strengths: string;
+  weaknesses: string;
+  recommendations: string;
+}): Promise<{
+  general: string;
+  strengths: string;
+  weaknesses: string;
+  recommendations: string;
+}> {
+  try {
+    const prompt = `Translate each section of the following Communication Style profile analysis from Hebrew into professional, polished executive English.
+
+Input JSON:
+${JSON.stringify(analysis, null, 2)}
+
+Return strictly a JSON object with the exact same keys ("general", "strengths", "weaknesses", "recommendations") containing the English translations.`;
+
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: `You are an expert executive coach and English translator. Translate Hebrew personality/communication profile analysis into polished English. Preserve all line breaks and markdown formatting inside each field. Output valid JSON with keys: general, strengths, weaknesses, recommendations.`,
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        safetySettings: SAFETY_SETTINGS
+      }
+    });
+
+    const data = await response.json();
+    const rawText = data.text || '';
+    const parsed = typeof rawText === 'string' ? JSON.parse(rawText.replace(/```json\n?|```/g, '').trim()) : rawText;
+
+    return {
+      general: parsed.general || analysis.general,
+      strengths: parsed.strengths || analysis.strengths,
+      weaknesses: parsed.weaknesses || analysis.weaknesses,
+      recommendations: parsed.recommendations || analysis.recommendations,
+    };
+  } catch (err) {
+    console.warn("Structured translation fallback:", err);
+    const [general, strengths, weaknesses, recommendations] = await Promise.all([
+      translateText(analysis.general, 'English'),
+      translateText(analysis.strengths, 'English'),
+      translateText(analysis.weaknesses, 'English'),
+      translateText(analysis.recommendations, 'English')
+    ]);
+    return { general, strengths, weaknesses, recommendations };
   }
 }
 

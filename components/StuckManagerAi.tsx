@@ -21,16 +21,16 @@ const PRESET_QUESTIONS = [
 
 const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   const [currentText, setCurrentText] = useState(text);
-  const [currentLang, setCurrentLang] = useState<string>('HE');
-  const [translations, setTranslations] = useState<Record<string, string>>({ 'HE': text });
-  const [loadingLang, setLoadingLang] = useState<string | null>(null);
+  const [currentLang, setCurrentLang] = useState<'HE' | 'EN'>('HE');
+  const [translations, setTranslations] = useState<{ HE: string; EN?: string }>({ HE: text });
+  const [isLoading, setIsLoading] = useState(false);
   const [htmlContent, setHtmlContent] = useState('');
 
   useEffect(() => {
-    if (text !== translations['HE']) {
-        setTranslations({ 'HE': text });
-        setCurrentText(text);
-        setCurrentLang('HE');
+    if (text !== translations.HE) {
+      setTranslations({ HE: text });
+      setCurrentText(text);
+      setCurrentLang('HE');
     }
   }, [text]);
 
@@ -51,28 +51,27 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
     renderMarkdown();
   }, [currentText]);
 
-  const handleTranslate = async (lang: string, langName: string) => {
+  const handleTranslate = async (lang: 'HE' | 'EN') => {
     if (lang === currentLang) return;
-    if (translations[lang]) {
-      setCurrentText(translations[lang]);
+    if (lang === 'EN' && !translations.EN) {
+      setIsLoading(true);
+      try {
+        const translated = await translateText(text, 'English');
+        setTranslations(prev => ({ ...prev, EN: translated }));
+        setCurrentText(translated);
+        setCurrentLang('EN');
+      } catch (error) {
+        console.error("Translation fail:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      setCurrentText(translations[lang] || text);
       setCurrentLang(lang);
-      return;
-    }
-
-    setLoadingLang(lang);
-    try {
-      const translated = await translateText(text, langName);
-      setTranslations(prev => ({ ...prev, [lang]: translated }));
-      setCurrentText(translated);
-      setCurrentLang(lang);
-    } catch (error) {
-      console.error("Translation fail:", error);
-    } finally {
-      setLoadingLang(null);
     }
   };
 
-  const isRtl = currentLang === 'HE' || currentLang === 'AR';
+  const isRtl = currentLang === 'HE';
 
   if (!text) return null;
 
@@ -84,28 +83,37 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
       
-      <div className={`flex gap-1 pt-3 border-t border-white/5 no-print ${isRtl ? 'justify-end' : 'justify-start'}`}>
-        {[
-          { id: 'HE', name: 'עברית', label: 'עב' },
-          { id: 'EN', name: 'English', label: 'EN' },
-          { id: 'RU', name: 'Русский', label: 'RU' },
-          { id: 'AR', name: 'العربية', label: 'AR' }
-        ].map(l => (
-          <button
-            key={l.id}
-            onClick={() => handleTranslate(l.id, l.name)}
-            disabled={loadingLang !== null}
-            className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all flex items-center justify-center min-w-[24px] ${
-              currentLang === l.id 
-                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' 
-                : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent'
-            }`}
-          >
-            {loadingLang === l.id ? (
-              <div className="w-2 h-2 border border-white/30 border-t-white rounded-full animate-spin"></div>
-            ) : l.label}
-          </button>
-        ))}
+      <div className={`flex items-center gap-1.5 pt-3 border-t border-white/10 no-print ${isRtl ? 'justify-end' : 'justify-start'}`}>
+        <span className="text-[10px] text-gray-400 ml-1">שפה / Lang:</span>
+        <button
+          onClick={() => handleTranslate('HE')}
+          disabled={isLoading}
+          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center justify-center ${
+            currentLang === 'HE' 
+              ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40 shadow-sm' 
+              : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+          }`}
+        >
+          עברית
+        </button>
+        <button
+          onClick={() => handleTranslate('EN')}
+          disabled={isLoading}
+          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center justify-center gap-1 ${
+            currentLang === 'EN' 
+              ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40 shadow-sm' 
+              : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+          }`}
+        >
+          {isLoading ? (
+            <>
+              <div className="w-2.5 h-2.5 border border-white/30 border-t-white rounded-full animate-spin"></div>
+              <span>תרגום...</span>
+            </>
+          ) : (
+            <span>English</span>
+          )}
+        </button>
       </div>
     </div>
   );

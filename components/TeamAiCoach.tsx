@@ -10,21 +10,14 @@ interface TeamAiCoachProps {
   teamName: string;
 }
 
-type Lang = 'HE' | 'EN' | 'RU' | 'AR';
-
-const LANG_CONFIG: Record<Lang, { name: string, label: string, dir: 'rtl' | 'ltr' }> = {
-  HE: { name: 'עברית', label: 'עב', dir: 'rtl' },
-  EN: { name: 'English', label: 'EN', dir: 'ltr' },
-  RU: { name: 'Русский', label: 'RU', dir: 'ltr' },
-  AR: { name: 'العربية', label: 'AR', dir: 'rtl' }
-};
+type Lang = 'HE' | 'EN';
 
 export const TeamAiCoach: React.FC<TeamAiCoachProps> = ({ users, teamName }) => {
   const [challenge, setChallenge] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentLang, setCurrentLang] = useState<Lang>('HE');
-  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translations, setTranslations] = useState<{ HE?: string; EN?: string }>({});
   const [loadingLang, setLoadingLang] = useState<Lang | null>(null);
 
   // Reset translations when a brand new response starts
@@ -46,8 +39,7 @@ export const TeamAiCoach: React.FC<TeamAiCoachProps> = ({ users, teamName }) => 
     try {
         await getTeamAiAdviceStream(users, challenge, (chunk) => {
             setAiResponse(chunk);
-            // Update the Hebrew translation in real-time
-            setTranslations(prev => ({ ...prev, 'HE': chunk }));
+            setTranslations(prev => ({ ...prev, HE: chunk }));
         });
     } catch (e: any) {
         setAiResponse(e?.message || "אירעה שגיאה בקבלת הייעוץ. אנא נסה שוב.");
@@ -58,33 +50,31 @@ export const TeamAiCoach: React.FC<TeamAiCoachProps> = ({ users, teamName }) => 
 
   const handleTranslate = async (lang: Lang) => {
     if (lang === currentLang) return;
-    if (translations[lang]) {
-        setCurrentLang(lang);
-        return;
-    }
+    if (lang === 'EN' && !translations.EN) {
+      const sourceText = translations.HE || aiResponse;
+      if (!sourceText) return;
 
-    const sourceText = translations['HE'] || aiResponse;
-    if (!sourceText) return;
-
-    setLoadingLang(lang);
-    try {
-        const translated = await translateText(sourceText, LANG_CONFIG[lang].name);
-        setTranslations(prev => ({ ...prev, [lang]: translated }));
-        setCurrentLang(lang);
-    } catch (error) {
-        console.error("Translation fail:", error);
-        alert("שגיאה בתרגום. אנא נסה שוב.");
-    } finally {
-        setLoadingLang(null);
+      setLoadingLang('EN');
+      try {
+          const translated = await translateText(sourceText, 'English');
+          setTranslations(prev => ({ ...prev, EN: translated }));
+          setCurrentLang('EN');
+      } catch (error) {
+          console.error("Translation fail:", error);
+          alert("שגיאה בתרגום לאנגלית. אנא נסה שוב.");
+      } finally {
+          setLoadingLang(null);
+      }
+    } else {
+      setCurrentLang(lang);
     }
   };
 
   const renderResponse = () => {
-      const text = translations[currentLang] || aiResponse;
+      const text = (currentLang === 'EN' && translations.EN) ? translations.EN : (translations.HE || aiResponse);
       if (!text) return null;
       
-      const config = LANG_CONFIG[currentLang];
-      const isRtl = config.dir === 'rtl';
+      const isRtl = currentLang === 'HE';
 
       let htmlContent = '';
       const marked = (window as any).marked;
@@ -165,21 +155,36 @@ export const TeamAiCoach: React.FC<TeamAiCoachProps> = ({ users, teamName }) => 
                         <Globe className="w-4 h-4" />
                         <span>{currentLang === 'HE' ? 'שפה:' : 'Language:'}</span>
                     </div>
-                    <div className="flex gap-1">
-                        {(Object.keys(LANG_CONFIG) as Lang[]).map(l => (
-                            <button
-                                key={l}
-                                onClick={() => handleTranslate(l)}
-                                disabled={loadingLang !== null || isLoading}
-                                className={`px-2.5 py-1 rounded-md text-[10px] font-black transition-all ${
-                                    currentLang === l
-                                        ? 'bg-cyan-600 text-white shadow-lg'
-                                        : 'bg-gray-800 text-gray-200 hover:text-white hover:bg-gray-700'
-                                }`}
-                            >
-                                {loadingLang === l ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : LANG_CONFIG[l].label}
-                            </button>
-                        ))}
+                    <div className="flex items-center bg-gray-800/80 p-1 rounded-lg border border-gray-700/60 gap-1">
+                        <button
+                            onClick={() => handleTranslate('HE')}
+                            disabled={loadingLang !== null || isLoading}
+                            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
+                                currentLang === 'HE'
+                                    ? 'bg-cyan-600 text-white shadow-md'
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                            }`}
+                        >
+                            עברית
+                        </button>
+                        <button
+                            onClick={() => handleTranslate('EN')}
+                            disabled={loadingLang !== null || isLoading}
+                            className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                currentLang === 'EN'
+                                    ? 'bg-cyan-600 text-white shadow-md'
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                            }`}
+                        >
+                            {loadingLang === 'EN' ? (
+                                <>
+                                    <Loader2 className="w-3 h-3 animate-spin text-cyan-300" />
+                                    <span>Translating...</span>
+                                </>
+                            ) : (
+                                <span>English</span>
+                            )}
+                        </button>
                     </div>
                 </div>
             )}
