@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getTeams, validateAccessCode, AccessValidationResult } from '../services/firebaseService';
+import { getTeams, validateAccessCode, getTeamByName, AccessValidationResult } from '../services/firebaseService';
 import { Team, UserSession } from '../types';
 import { Users, User, ShieldCheck, KeyRound } from 'lucide-react';
 
@@ -63,7 +63,12 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
             // Direct personal login!
             onAuthenticate({
               type: 'personal',
-              accessCode: codeParam.toUpperCase()
+              accessCode: codeParam.toUpperCase(),
+              teamName: res.teamName,
+              companyName: res.companyName,
+              logoUrl: res.logoUrl,
+              orgContext: res.orgContext,
+              knowledgeBase: res.knowledgeBase
             });
           }
         } else {
@@ -92,7 +97,11 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         onAuthenticate({
           type: 'personal',
           accessCode: personalCode.trim().toUpperCase(),
-          teamName: validation.teamName
+          teamName: validation.teamName,
+          companyName: validation.companyName,
+          logoUrl: validation.logoUrl,
+          orgContext: validation.orgContext,
+          knowledgeBase: validation.knowledgeBase
         });
       } else {
         setPersonalError(validation.message || 'קוד שגוי');
@@ -130,6 +139,10 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         }
       }
 
+      // Fetch the team's co-branding/org context/knowledge base (needed even when
+      // lockedTeamName came straight from a ?team= link, since that path skips validateAccessCode)
+      const teamData = await getTeamByName(resolvedTeam);
+
       setWorkshopLoading(false);
       const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       onAuthenticate({
@@ -137,7 +150,11 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         displayName: participantName.trim(),
         teamName: resolvedTeam,
         participantId: guestId,
-        accessCode: teamToUse.toUpperCase()
+        accessCode: teamToUse.toUpperCase(),
+        companyName: teamData?.companyName,
+        logoUrl: teamData?.logoUrl,
+        orgContext: teamData?.orgContext,
+        knowledgeBase: teamData?.knowledgeBase
       });
     } catch (err) {
       setWorkshopLoading(false);
@@ -414,4 +431,3 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
     </div>
   );
 };
-
