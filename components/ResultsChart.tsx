@@ -58,12 +58,6 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ scores }) => {
         <div className="absolute top-4 right-4 text-white font-black text-shadow-lg text-lg z-20">אדום</div>
         <div className="absolute bottom-4 left-4 text-white font-black text-shadow-lg text-lg z-20">ירוק</div>
         <div className="absolute bottom-4 right-4 text-white font-black text-shadow-lg text-lg z-20">צהוב</div>
-        
-        {/* Center Point Indicator */}
-        <motion.div 
-          initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 1.4, type: 'spring' }}
-          className="absolute w-5 h-5 bg-white rounded-full border-[3px] border-black shadow-[0_0_15px_white] transform -translate-x-1/2 -translate-y-1/2 z-30" style={{ left: `${bPercent}%`, top: `${cPercent}%` }}>
-        </motion.div>
       </div>
       
        <motion.div 
