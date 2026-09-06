@@ -374,25 +374,6 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
     console.warn("Error checking access_codes in Firestore:", e);
   }
 
-  // 3. Check directly if code is a team name
-  try {
-    const directTeam = await getTeamByName(code);
-    if (directTeam) {
-      return {
-        valid: true,
-        type: 'team',
-        teamName: directTeam.name,
-        companyName: directTeam.companyName,
-        logoUrl: directTeam.logoUrl,
-        orgContext: directTeam.orgContext,
-        knowledgeBase: directTeam.knowledgeBase,
-        dailyLimit: 50
-      };
-    }
-  } catch (e) {
-    console.warn("Error checking direct team name:", e);
-  }
-
   return { valid: false, type: 'invalid', message: 'קוד גישה שגוי. אנא ודא שהזנת את הקוד במדויק.' };
 };
 

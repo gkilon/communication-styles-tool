@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getTeams, validateAccessCode, getTeamByName, AccessValidationResult } from '../services/firebaseService';
-import { Team, UserSession } from '../types';
+import { validateAccessCode, getTeamByName, AccessValidationResult } from '../services/firebaseService';
+import { UserSession } from '../types';
 import { Users, User, ShieldCheck, KeyRound } from 'lucide-react';
 
 interface PasswordScreenProps {
@@ -25,7 +25,6 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
   // Workshop / Team State
   const [participantName, setParticipantName] = useState('');
   const [teamCodeOrName, setTeamCodeOrName] = useState('');
-  const [availableTeams, setAvailableTeams] = useState<Team[]>([]);
   const [workshopError, setWorkshopError] = useState('');
   const [workshopLoading, setWorkshopLoading] = useState(false);
   const [lockedTeamName, setLockedTeamName] = useState<string | null>(null);
@@ -42,8 +41,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
     const codeParam = params.get('code');
     const teamParam = params.get('team');
 
-    // Fetch existing teams for dropdown if available
-    getTeams().then(teams => setAvailableTeams(teams)).catch(() => {});
+    // (No public team listing — joining requires a valid access code or a direct ?team= link the admin shared.)
 
     if (teamParam) {
       setActiveTab('workshop');
@@ -130,13 +128,16 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
 
     setWorkshopLoading(true);
     try {
-      // Validate code/team if entered as code
+      // Validate the code — required unless we arrived via a locked (?team=) link the admin shared directly.
       let resolvedTeam = teamToUse;
       if (!lockedTeamName) {
         const val = await validateAccessCode(teamToUse);
-        if (val.valid && val.teamName) {
-          resolvedTeam = val.teamName;
+        if (!val.valid) {
+          setWorkshopLoading(false);
+          setWorkshopError(val.message || 'קוד סדנה שגוי או לא קיים');
+          return;
         }
+        resolvedTeam = val.teamName || teamToUse;
       }
 
       // Fetch the team's co-branding/org context/knowledge base (needed even when
@@ -372,29 +373,15 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
 
             {!lockedTeamName && (
               <div>
-                <label className="block text-gray-400 text-xs mb-1.5 font-semibold mr-1">קוד סדנה / שם צוות:</label>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={teamCodeOrName}
-                    onChange={(e) => setTeamCodeOrName(e.target.value)}
-                    placeholder="למשל: ALPHA-2026"
-                    className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3.5 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500 text-base font-mono uppercase"
-                    dir="ltr"
-                  />
-                  {availableTeams.length > 0 && (
-                    <select
-                      value={teamCodeOrName}
-                      onChange={(e) => setTeamCodeOrName(e.target.value)}
-                      className="w-full bg-gray-900/80 border border-gray-700 rounded-xl py-2.5 px-3 text-xs text-gray-300 focus:ring-2 focus:ring-cyan-500 cursor-pointer text-center"
-                    >
-                      <option value="">-- או בחר צוות קיים מהרשימה --</option>
-                      {availableTeams.map(t => (
-                        <option key={t.id} value={t.name}>{t.name}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                <label className="block text-gray-400 text-xs mb-1.5 font-semibold mr-1">קוד סדנה:</label>
+                <input
+                  type="text"
+                  value={teamCodeOrName}
+                  onChange={(e) => setTeamCodeOrName(e.target.value)}
+                  placeholder="למשל: ALPHA-2026"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3.5 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500 text-base font-mono uppercase"
+                  dir="ltr"
+                />
               </div>
             )}
 
