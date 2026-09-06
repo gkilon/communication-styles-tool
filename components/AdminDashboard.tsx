@@ -11,9 +11,13 @@ import {
   updateTeamDetails,
   deleteTeam,
   deleteAccessCode,
+  getOrganizations,
+  createOrganization,
+  updateOrganizationDetails,
+  deleteOrganization,
   AccessCodeRecord 
 } from '../services/firebaseService';
-import { UserProfile, Team, Scores } from '../types';
+import { UserProfile, Team, Organization, Scores } from '../types';
 import { ArrowLeftIcon } from './icons/Icons';
 import { TeamAiCoach } from './TeamAiCoach';
 import { KeyRound, Copy, Check, Plus, ExternalLink, Building2, BookOpen, Upload, Sparkles, Save, FileText, Trash2 } from 'lucide-react';
@@ -26,6 +30,7 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [accessCodes, setAccessCodes] = useState<AccessCodeRecord[]>([]);
   
   const [loading, setLoading] = useState(true);
@@ -34,7 +39,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   
   const [filterTeam, setFilterTeam] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamOrgId, setNewTeamOrgId] = useState('');
   const [createTeamStatus, setCreateTeamStatus] = useState<{msg: string, type: 'success' | 'error' | ''}>({msg:'', type:''});
+
+  // Organizations (top-level branding/context, shared by one or more teams)
+  const [newOrgName, setNewOrgName] = useState('');
+  const [createOrgStatus, setCreateOrgStatus] = useState<{msg: string, type: 'success' | 'error' | ''}>({msg:'', type:''});
+  const [selectedOrgForEdit, setSelectedOrgForEdit] = useState<string>('');
+  const [orgCompanyName, setOrgCompanyName] = useState('');
+  const [orgLogoUrl, setOrgLogoUrl] = useState('');
+  const [orgOrgContext, setOrgOrgContext] = useState('');
+  const [orgKnowledgeBase, setOrgKnowledgeBase] = useState('');
+  const [orgKnowledgeStatus, setOrgKnowledgeStatus] = useState<{msg: string, type: 'success' | 'error' | ''}>({msg:'', type:''});
   
   // Enterprise Knowledge & Co-Branding State
   const [selectedTeamForEdit, setSelectedTeamForEdit] = useState<string>('');
@@ -90,14 +106,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     setLoading(true);
     setError(null);
     try {
-      const [usersData, teamsData, codesData] = await Promise.all([
+      const [usersData, teamsData, codesData, orgsData] = await Promise.all([
         getAllUsers(), 
         getTeams(),
-        getAccessCodes()
+        getAccessCodes(),
+        getOrganizations()
       ]);
       setUsers(usersData);
       setTeams(teamsData);
       setAccessCodes(codesData);
+      setOrganizations(orgsData);
     } catch (err: any) {
       console.error("Failed to load admin data", err);
       if (err.code === 'permission-denied' || err.message?.includes('permission-denied')) {
@@ -141,8 +159,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       if (!newTeamName.trim()) return;
       setCreateTeamStatus({msg: 'יוצר...', type: ''});
       try {
-          await createTeam(newTeamName.trim());
+          await createTeam(newTeamName.trim(), newTeamOrgId || undefined);
           setNewTeamName('');
+          setNewTeamOrgId('');
           setCreateTeamStatus({msg: 'הצוות נוצר בהצלחה!', type: 'success'});
           loadData(); 
           setTimeout(() => setCreateTeamStatus({msg: '', type: ''}), 3000);
@@ -158,6 +177,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       await deleteTeam(teamId);
       if (selectedTeamForEdit === teamId) setSelectedTeamForEdit('');
       if (filterTeam === teamName) setFilterTeam('');
+      loadData();
+    } catch (e: any) {
+      alert("שגיאה במחיקת הארגון: " + (e.message || 'נסה שוב'));
+    }
+  };
+
+  // Organizations Handlers
+
+  const handleCreateOrganization = async () => {
+      if (!newOrgName.trim()) return;
+      setCreateOrgStatus({msg: 'יוצר...', type: ''});
+      try {
+          await createOrganization(newOrgName.trim());
+          setNewOrgName('');
+          setCreateOrgStatus({msg: 'הארגון נוצר בהצלחה!', type: 'success'});
+          loadData();
+          setTimeout(() => setCreateOrgStatus({msg: '', type: ''}), 3000);
+      } catch (e: any) {
+          setCreateOrgStatus({msg: e.message || 'שגיאה ביצירת הארגון', type: 'error'});
+      }
+  };
+
+  const handleSelectOrgForEdit = (orgId: string) => {
+    setSelectedOrgForEdit(orgId);
+    setOrgKnowledgeStatus({ msg: '', type: '' });
+    const found = organizations.find(o => o.id === orgId);
+    if (found) {
+      setOrgCompanyName(found.companyName || '');
+      setOrgLogoUrl(found.logoUrl || '');
+      setOrgOrgContext(found.orgContext || '');
+      setOrgKnowledgeBase(found.knowledgeBase || '');
+    } else {
+      setOrgCompanyName('');
+      setOrgLogoUrl('');
+      setOrgOrgContext('');
+      setOrgKnowledgeBase('');
+    }
+  };
+
+  const handleSaveOrganization = async () => {
+    if (!selectedOrgForEdit) return;
+    setOrgKnowledgeStatus({ msg: 'שומר ידע ארגוני ומיתוג...', type: '' });
+    try {
+      await updateOrganizationDetails(selectedOrgForEdit, {
+        companyName: orgCompanyName.trim(),
+        logoUrl: orgLogoUrl.trim(),
+        orgContext: orgOrgContext.trim(),
+        knowledgeBase: orgKnowledgeBase.trim()
+      });
+      setOrgKnowledgeStatus({ msg: 'הידע הארגוני, המיתוג והחומרים נשמרו בהצלחה!', type: 'success' });
+      loadData();
+      setTimeout(() => setOrgKnowledgeStatus({ msg: '', type: '' }), 4000);
+    } catch (err: any) {
+      setOrgKnowledgeStatus({ msg: err.message || 'שגיאה בשמירת הידע הארגוני', type: 'error' });
+    }
+  };
+
+  const handleDeleteOrganization = async (orgId: string, orgName: string) => {
+    const teamsUnder = teams.filter(t => t.organizationId === orgId);
+    const warning = teamsUnder.length > 0
+      ? `לארגון "${orgName}" יש ${teamsUnder.length} צוותים משויכים. מחיקת הארגון לא תמחק אותם, אבל הם יאבדו את המיתוג וההקשר שירשו ממנו. להמשיך?`
+      : `האם אתה בטוח שברצונך למחוק את הארגון "${orgName}"?`;
+    if (!window.confirm(warning)) return;
+    try {
+      await deleteOrganization(orgId);
+      if (selectedOrgForEdit === orgId) setSelectedOrgForEdit('');
       loadData();
     } catch (e: any) {
       alert("שגיאה במחיקת הארגון: " + (e.message || 'נסה שוב'));
@@ -395,6 +480,166 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 </div>
             </div>
 
+            {/* Organizations Management: create an org first, then teams underneath it */}
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-xl mb-8 border-2 border-purple-500/40">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300">
+                        <Building2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-white">ניהול ארגונים</h3>
+                        <p className="text-xs text-gray-400">
+                            ארגון מחזיק את המיתוג וההקשר המשותף (לוגו, תרבות, חומרי אבחון). כל צוות ששייך לארגון יורש אותם אוטומטית, ויכול לדייק/לדרוס אותם ברמת הצוות בנפרד.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Create org form */}
+                <div className="flex flex-col sm:flex-row gap-3 mt-4 mb-4">
+                    <input
+                        type="text"
+                        value={newOrgName}
+                        onChange={(e) => setNewOrgName(e.target.value)}
+                        placeholder="שם הארגון (לדוגמה: רשות ניירות ערך)"
+                        className="flex-1 bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <button
+                        onClick={handleCreateOrganization}
+                        disabled={!newOrgName.trim() || loading}
+                        className="bg-purple-600 hover:bg-purple-500 text-white font-black py-3 px-8 rounded-xl disabled:opacity-50 transition-all shadow-lg"
+                    >
+                        צור ארגון
+                    </button>
+                </div>
+                {createOrgStatus.msg && (
+                    <p className={`mb-4 text-sm font-bold ${createOrgStatus.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                        {createOrgStatus.msg}
+                    </p>
+                )}
+
+                {/* List of orgs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+                    {organizations.map(org => {
+                        const teamCount = teams.filter(t => t.organizationId === org.id).length;
+                        return (
+                            <div key={org.id} className="bg-gray-900/50 p-4 rounded-xl border border-gray-700 flex items-center justify-between group hover:border-purple-500/50 transition-all">
+                                <div className="overflow-hidden">
+                                    <div className="text-white font-bold truncate">{org.name}</div>
+                                    <div className="text-[11px] text-gray-400 truncate">{teamCount} צוותים משויכים</div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <button
+                                        onClick={() => handleSelectOrgForEdit(org.id)}
+                                        className="bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white px-2.5 py-1.5 rounded-lg transition-all text-xs font-bold border border-purple-600/30"
+                                    >
+                                        ערוך מיתוג
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteOrganization(org.id, org.name)}
+                                        className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all border border-transparent hover:border-red-500/30"
+                                        title="מחק ארגון"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {organizations.length === 0 && <p className="text-gray-500 text-sm italic">טרם נוצרו ארגונים. אפשר גם לדלג ולהגדיר לוגו/הקשר ישירות ברמת הצוות, בלי ארגון-אב.</p>}
+                </div>
+
+                {/* Org branding/context editor */}
+                {selectedOrgForEdit ? (
+                    <div className="space-y-6 pt-4 border-t border-gray-700/80">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-gray-300 text-xs font-bold mb-1.5 flex items-center gap-1.5">
+                                    <Building2 className="w-4 h-4 text-cyan-400" />
+                                    <span>שם החברה / הארגון הממותג:</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={orgCompanyName}
+                                    onChange={(e) => setOrgCompanyName(e.target.value)}
+                                    placeholder="למשל: בנק הפועלים / צ'ק פוינט / שטראוס"
+                                    className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-gray-300 text-xs font-bold mb-1.5">
+                                    קישור ללוגו החברה (Logo URL):
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="url"
+                                        value={orgLogoUrl}
+                                        onChange={(e) => setOrgLogoUrl(e.target.value)}
+                                        placeholder="https://example.com/logo.png"
+                                        className="flex-1 bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500"
+                                        dir="ltr"
+                                    />
+                                    {orgLogoUrl && (
+                                        <div className="w-12 h-12 bg-white/10 rounded-xl p-1 flex items-center justify-center border border-gray-700 overflow-hidden">
+                                            <img src={orgLogoUrl} alt="Logo" className="max-h-full max-w-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-gray-300 text-xs font-bold mb-1.5 flex items-center gap-1.5">
+                                <BookOpen className="w-4 h-4 text-yellow-400" />
+                                <span>הקשר ותרבות ארגונית (דגשים קצרים ל-AI):</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={orgOrgContext}
+                                onChange={(e) => setOrgOrgContext(e.target.value)}
+                                placeholder="למשל: סביבת עבודה בלחץ גבוה, דגש על שיתוף פעולה בין פיתוח למכירות, הנהלה עם סגנון תוצאתי..."
+                                className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-gray-300 text-xs font-bold mb-1.5 flex items-center gap-1.5">
+                                <FileText className="w-4 h-4 text-green-400" />
+                                <span>חומרי אבחון, סקרי אקלים, דוחות ודגשים ניהוליים (Knowledge Base):</span>
+                            </label>
+                            <textarea
+                                rows={6}
+                                value={orgKnowledgeBase}
+                                onChange={(e) => setOrgKnowledgeBase(e.target.value)}
+                                placeholder="הדבק כאן דוח אבחון ארגוני, סקרי עובדים, סיכומי ראיונות, ערכי חברה, או כל חומר רקע רלוונטי שהמוח של ה-AI צריך לקרוא ולהתייחס אליו בניתוח המשתתפים..."
+                                className="w-full bg-gray-900 text-white border border-gray-700 rounded-xl p-4 text-sm focus:ring-2 focus:ring-purple-500 leading-relaxed font-mono"
+                            />
+                            <p className="text-[11px] text-gray-500 mt-1">
+                                💡 כל הצוותים תחת הארגון הזה יורשים את השדות האלה אוטומטית, אלא אם דרסו אותם ספציפית ברמת הצוות.
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+                            <button
+                                onClick={handleSaveOrganization}
+                                className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-sm"
+                            >
+                                <Save className="w-4 h-4" />
+                                <span>שמור מיתוג והקשר ארגוני</span>
+                            </button>
+                            {orgKnowledgeStatus.msg && (
+                                <p className={`text-sm font-bold ${orgKnowledgeStatus.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                                    {orgKnowledgeStatus.msg}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-6 text-center text-gray-500 bg-gray-900/40 rounded-xl border border-gray-800">
+                        <p className="text-sm">בחר "ערוך מיתוג" באחד הארגונים למעלה כדי להגדיר לוגו, הקשר וחומרי אבחון ברמת הארגון.</p>
+                    </div>
+                )}
+            </div>
+
             {/* License Codes & Client Invite Links Generator */}
             <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-cyan-500/30">
                 <div className="flex items-center justify-between mb-4">
@@ -414,13 +659,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                         placeholder="קוד רישיון (למשל: HAPOALIM-2026)"
                         className="bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-sm uppercase"
                     />
-                    <input 
-                        type="text" 
+                    <select
                         value={newCodeTeam}
                         onChange={(e) => setNewCodeTeam(e.target.value)}
-                        placeholder="שיוך לצוות (למשל: בנק הפועלים)"
                         className="bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
-                    />
+                    >
+                        <option value="">ללא שיוך (קוד אישי/כללי)</option>
+                        {teams.map(t => (
+                            <option key={t.id} value={t.name}>
+                                {t.name}{t.organizationId ? ` — ${organizations.find(o => o.id === t.organizationId)?.name || ''}` : ''}
+                            </option>
+                        ))}
+                    </select>
                     <button 
                         onClick={handleCreateAccessCode}
                         disabled={!newCodeName.trim() || loading}
@@ -514,6 +764,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
                 {selectedTeamForEdit ? (
                     <div className="space-y-6 pt-4 border-t border-gray-700/80">
+                        {(() => {
+                            const currentTeam = teams.find(t => t.id === selectedTeamForEdit);
+                            const parentOrg = currentTeam?.organizationId ? organizations.find(o => o.id === currentTeam.organizationId) : null;
+                            if (!parentOrg) return null;
+                            return (
+                                <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl px-4 py-2.5 text-xs text-purple-200">
+                                    הצוות הזה שייך לארגון <span className="font-bold">{parentOrg.name}</span>. כל שדה שתשאיר ריק כאן ימשיך לרשת אוטומטית את הערך מהארגון — מלא כאן רק את מה שאתה רוצה לדייק ספציפית לצוות הזה.
+                                </div>
+                            );
+                        })()}
                         {/* Row 1: Co-Branding (Company Name & Logo) */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
@@ -630,7 +890,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
             {/* Create Team Section */}
             <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-gray-700">
-                <h3 className="text-lg font-bold text-white mb-4">פתיחת צוות / סדנה חדשה</h3>
+                <h3 className="text-lg font-bold text-white mb-1">פתיחת צוות / סדנה חדשה</h3>
+                <p className="text-xs text-gray-400 mb-4">אם הצוות שייך לארגון קיים, בחר אותו כאן — הצוות יירש ממנו אוטומטית לוגו והקשר ארגוני (אפשר לדייק/לדרוס אחר כך ברמת הצוות).</p>
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                     <input 
                         type="text" 
@@ -639,6 +900,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                         placeholder="שם הצוות (לדוגמה: הנהלה בכירה)"
                         className="flex-1 bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     />
+                    <select
+                        value={newTeamOrgId}
+                        onChange={(e) => setNewTeamOrgId(e.target.value)}
+                        className="bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    >
+                        <option value="">ללא ארגון-אב</option>
+                        {organizations.map(o => (
+                            <option key={o.id} value={o.id}>{o.name}</option>
+                        ))}
+                    </select>
                     <button 
                         onClick={handleCreateTeam}
                         disabled={!newTeamName.trim() || loading}
@@ -656,15 +927,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
             {/* Teams & Organizations Management & Links Section */}
             <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-gray-700">
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <span>🏢</span> ניהול ארגונים / סדנאות וקישורי גישה
+                <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
+                    <span>🏢</span> ניהול צוותים וקישורי גישה
                 </h3>
+                <p className="text-xs text-gray-400 mb-4">זה הקישור היחיד שצריך לשלוח למשתתפים של הצוות הזה — הוא הולך ישר לפי שם הצוות (?team=), בלי צורך בקוד גישה נפרד.</p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {teams.map(team => (
+                    {teams.map(team => {
+                        const parentOrg = team.organizationId ? organizations.find(o => o.id === team.organizationId) : null;
+                        return (
                         <div key={team.id} className="bg-gray-900/50 p-4 rounded-xl border border-gray-700 flex items-center justify-between group hover:border-cyan-500/50 transition-all">
                             <div className="overflow-hidden">
                                 <div className="text-white font-bold truncate">{team.name}</div>
+                                {parentOrg && (
+                                    <div className="text-[11px] text-purple-300 font-medium truncate">ארגון: {parentOrg.name}</div>
+                                )}
                                 {team.companyName && (
                                     <div className="text-xs text-indigo-300 font-medium truncate">{team.companyName}</div>
                                 )}
@@ -675,7 +952,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                     onClick={() => {
                                         const url = `${window.location.origin}/?team=${encodeURIComponent(team.name)}`;
                                         navigator.clipboard.writeText(url);
-                                        alert(`הקישור לארגון / סדנה "${team.name}" הועתק ללוח!`);
+                                        alert(`הקישור לצוות "${team.name}" הועתק ללוח!`);
                                     }}
                                     className="bg-cyan-600/20 hover:bg-cyan-600 text-cyan-400 hover:text-white px-2.5 py-1.5 rounded-lg transition-all text-xs font-bold border border-cyan-600/30"
                                     title="העתק קישור ייעודי"
@@ -691,7 +968,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                                 </button>
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
                     {teams.length === 0 && <p className="text-gray-500 text-sm italic">טרם נוצרו ארגונים / צוותים.</p>}
                 </div>
             </div>
