@@ -36,7 +36,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
 
-  const isFemale = backgroundData?.gender === 'female';
   const isManager = backgroundData?.isManager === 'yes';
 
   const handleDownloadPdf = async () => {
@@ -89,15 +88,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
       setIsGeneratingPdf(false);
     }
   };
-
-  // Gender-conjugated summary text
-  const summaryText1 = isFemale
-    ? "הניתוח שלעיל נגזר ממפת הפרופיל המשולבת שלך — לא מאחוזים מבודדים, אלא מהדינמיקה שבין הצבעים השונים. המפה חושפת את הנטיות הטבעיות שלך, את הסגנונות שמגיעים לך בקלות, ואת אלה שדורשים ממך מאמץ מודע."
-    : "הניתוח שלעיל נגזר ממפת הפרופיל המשולבת שלך — לא מאחוזים מבודדים, אלא מהדינמיקה שבין הצבעים השונים. המפה חושפת את הנטיות הטבעיות שלך, את הסגנונות שמגיעים לך בקלות, ואת אלה שדורשים ממך מאמץ מודע.";
-
-  const summaryText2 = isFemale
-    ? "סגנון תקשורת אינו גזר דין — הוא נקודת פתיחה. כל תכונה שמגדירה אותך היום היא גם שריר שניתן לאמן. ההמלצות בדוח זה נועדו לא לשנות מי שאת, אלא להרחיב את הטווח שלך ולאפשר לך לתקשר אפקטיבית עם כל סגנון — בכל מצב."
-    : "סגנון תקשורת אינו גזר דין — הוא נקודת פתיחה. כל תכונה שמגדירה אותך היום היא גם שריר שניתן לאמן. ההמלצות בדוח זה נועדו לא לשנות מי שאתה, אלא להרחיב את הטווח שלך ולאפשר לך לתקשר אפקטיבית עם כל סגנון — בכל מצב.";
 
   const managerTag = isManager ? '#מנהיגות_וניהול' : '#תקשורת_עמיתים';
 
@@ -160,27 +150,31 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 </div>
               </div>
 
+              {/* Quick orientation — a short intro before the detailed map & analysis below */}
+              <div className="bg-gradient-to-br from-slate-800/40 to-cyan-900/20 p-8 rounded-[2rem] border border-dashed border-cyan-500/30 relative overflow-hidden z-10 shadow-lg backdrop-blur-sm mb-8">
+                <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-3">
+                  <span className="text-cyan-400 text-2xl">📌</span> לפני שנצלול לפרטים — התמונה בקצרה
+                </h3>
+                <p className="text-xs text-gray-400 mb-4">הקשר כללי לניתוח המפורט שמופיע מטה</p>
+                <ul className="space-y-2.5 text-gray-300 leading-relaxed">
+                  <li className="flex gap-2"><span className="text-emerald-400 font-bold">חוזקה מרכזית:</span><span>{profileAnalysis.quickStrength}</span></li>
+                  <li className="flex gap-2"><span className="text-amber-400 font-bold">אזור לפיתוח:</span><span>{profileAnalysis.quickWeakness}</span></li>
+                  <li className="flex gap-2"><span className="text-purple-400 font-bold">המלצה מרכזית:</span><span>{profileAnalysis.quickRecommendation}</span></li>
+                </ul>
+                <div className="mt-6 flex gap-3 flex-wrap">
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מפה_משולבת</span>
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מודעות_עצמית</span>
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{managerTag}</span>
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#תקשורת_אפקטיבית</span>
+                </div>
+              </div>
+
               <div className="flex flex-col lg:flex-row gap-8 mb-8 items-stretch relative z-10">
                 <div className="flex-none lg:w-[40%] bg-glass-light p-6 rounded-[2rem] border border-glass-border shadow-inner backdrop-blur-sm">
                   <ResultsChart scores={scores} />
                 </div>
                 <div className="flex-1 bg-glass-light p-6 rounded-[2rem] border border-glass-border shadow-inner backdrop-blur-sm">
                   <CombinedAnalysis analysis={profileAnalysis} />
-                </div>
-              </div>
-
-              {/* Summary box */}
-              <div className="bg-gradient-to-br from-slate-800/40 to-cyan-900/20 p-8 rounded-[2rem] border border-dashed border-cyan-500/30 relative overflow-hidden z-10 shadow-lg backdrop-blur-sm">
-                <h3 className="text-xl font-bold text-white mb-5 flex items-center gap-3">
-                  <span className="text-cyan-400 text-2xl">📝</span> סיכום והמלצות מפתח
-                </h3>
-                <p className="text-gray-300 leading-relaxed text-lg font-light mb-3">{summaryText1}</p>
-                <p className="text-gray-400 leading-relaxed text-base font-light">{summaryText2}</p>
-                <div className="mt-6 flex gap-3 flex-wrap">
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מפה_משולבת</span>
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מודעות_עצמית</span>
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{managerTag}</span>
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#תקשורת_אפקטיבית</span>
                 </div>
               </div>
             </div>

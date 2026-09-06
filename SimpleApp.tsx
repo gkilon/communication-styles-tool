@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
@@ -183,17 +182,19 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
         <header className="text-center mb-10 relative">
           {/* Co-Branding Banner if present */}
           {session?.companyName && (
-            <div className="inline-flex items-center gap-3 bg-gray-800/90 border border-cyan-500/30 px-5 py-2 rounded-full mb-3 shadow-lg">
-              <span className="text-xs text-gray-400 font-semibold">סדנת מנהלים:</span>
-              <span className="text-sm text-cyan-300 font-black">{session.companyName}</span>
+            <div className="flex flex-col items-center gap-3 mb-5">
               {session.logoUrl && (
-                <img 
-                  src={session.logoUrl} 
-                  alt={session.companyName} 
-                  className="h-6 max-w-[100px] object-contain border-r border-gray-700 pr-3 mr-1" 
-                  onError={(e) => (e.currentTarget.style.display = 'none')} 
+                <img
+                  src={session.logoUrl}
+                  alt={session.companyName}
+                  className="h-20 sm:h-24 max-w-[280px] object-contain drop-shadow-2xl"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
                 />
               )}
+              <div className="inline-flex items-center gap-3 bg-gray-800/90 border border-cyan-500/30 px-5 py-2 rounded-full shadow-lg">
+                <span className="text-xs text-gray-400 font-semibold">סדנת מנהלים:</span>
+                <span className="text-sm text-cyan-300 font-black">{session.companyName}</span>
+              </div>
             </div>
           )}
 

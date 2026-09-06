@@ -5,6 +5,9 @@ interface Analysis {
   strengths: string;
   weaknesses: string;
   recommendations: string;
+  quickStrength: string;
+  quickWeakness: string;
+  quickRecommendation: string;
 }
 
 // Data store for color characteristics
@@ -64,7 +67,10 @@ export const generateProfileAnalysis = (scores: Scores): Analysis => {
       general: "לא ניתן היה לקבוע פרופיל דומיננטי. ייתכן שהתשובות היו מאוזנות לחלוטין.",
       strengths: "היכולת לראות את כל הצדדים באופן שווה.",
       weaknesses: "קושי בקבלת החלטה על נתיב פעולה מועדף.",
-      recommendations: "נסה לבחון באילו מצבים אתה מרגיש יותר בנוח כדי לזהות נטיות טבעיות."
+      recommendations: "נסה לבחון באילו מצבים אתה מרגיש יותר בנוח כדי לזהות נטיות טבעיות.",
+      quickStrength: "רואה את כל הצדדים באופן שווה",
+      quickWeakness: "קושי בהעדפת נתיב פעולה ברור",
+      quickRecommendation: "לשים לב באילו מצבים אתה מרגיש הכי בנוח"
     };
   }
 
@@ -79,10 +85,10 @@ export const generateProfileAnalysis = (scores: Scores): Analysis => {
 
   // --- Generate Analysis Texts Dynamically ---
 
-  // 1. General Analysis — no raw percentages, focus on the combined map
-  let general = `הפרופיל שלך מראה דומיננטיות ברורה של הסגנון ה${dominantData.name} — ${dominantData.adjective}. המשמעות היא ש${dominantData.general} המפה המשולבת שלך מגלה כיצד הנטיות הללו מתבטאות בפועל בצמתי ההתנהגות השונים.`;
+  // 1. General Analysis — trait-led, color name kept to a single small mention
+  let general = `הפרופיל שלך מראה נטייה ברורה וחזקה להיות ${dominantData.adjective} (במודל המקצועי: סגנון ${dominantData.name} דומיננטי). המשמעות היא ש${dominantData.general} המפה המשולבת שלך מגלה כיצד הנטיות הללו מתבטאות בפועל בצמתי ההתנהגות השונים.`;
   if (secondaryPercentage > 20) {
-    general += ` לצד זה, הסגנון ה${secondaryData.name} (${secondaryData.adjective}) נוכח בצורה משמעותית בפרופיל שלך. שילוב זה — ${dominantData.name} ו${secondaryData.name} — מעניק לך גישה ייחודית: `;
+    general += ` לצד זה, יש בך גם מידה משמעותית של האופי ה${secondaryData.adjective}. השילוב הזה מעניק לך גישה ייחודית: `;
     if ((dominant === 'red' && secondary === 'yellow') || (dominant === 'yellow' && secondary === 'red')) {
         general += "אתה מנהיג כריזמטי שיודע להניע אנשים הן דרך הצבת יעדים ברורים והן דרך יצירת התלהבות וחזון משותף. האנרגיה שאתה משדר מושכת אחרים לפעולה, ובה בעת אתה מסוגל לשמור על כיוון ומיקוד.";
     } else if ((dominant === 'red' && secondary === 'blue') || (dominant === 'blue' && secondary === 'red')) {
@@ -97,38 +103,43 @@ export const generateProfileAnalysis = (scores: Scores): Analysis => {
         general += "אתה איש צוות אמין ומסור, המשלב בין יסודיות ושאיפה לאיכות לבין סבלנות ורצון אמיתי לתמוך באחרים. המפה שלך מצביעה על עוגן יציב בכל סביבת עבודה.";
     }
   } else {
-    general += ` הפרופיל שלך ממוקד ביותר — צבע דומיננטי אחד בולט בבירור על פני האחרים. זה הופך את סגנון התקשורת שלך לעקבי ומזוהה, ומאפשר לסביבה שלך לדעת למה לצפות ממך.`;
+    general += ` הפרופיל שלך ממוקד ביותר — נטייה אחת בולטת בבירור על פני האחרות. זה הופך את סגנון התקשורת שלך לעקבי ומזוהה, ומאפשר לסביבה שלך לדעת למה לצפות ממך.`;
   }
   
-  // 2. Strengths Analysis — deeper, map-oriented
-  let strengths = `החוזקות הטבעיות שלך נובעות ישירות מהסגנון ה${dominantData.name}: ${dominantData.strengths.slice(0, 3).join(', ')}. `;
+  // 2. Strengths Analysis — deeper, map-oriented, no color naming
+  let strengths = `החוזקות הטבעיות שלך: ${dominantData.strengths.slice(0, 3).join(', ')}. `;
   strengths += `אלה אינן רק תכונות — הן מתבטאות בהתנהגות יומיומית ומשפיעות על האופן שבו אחרים חווים אותך בשיחה, בישיבה, ובמצבי לחץ. `;
   if (secondaryPercentage > 20) {
-      strengths += `הסגנון ה${secondaryData.name} מעשיר את הפרופיל ב${secondaryData.strengths[0]} וב${secondaryData.strengths[1]}. `;
+      strengths += `הצד ה${secondaryData.adjective} שבך מעשיר את הפרופיל ב${secondaryData.strengths[0]} וב${secondaryData.strengths[1]}. `;
       if ((dominant === 'red' && secondary === 'blue') || (dominant === 'blue' && secondary === 'red')) {
         strengths += "השילוב הזה מאפשר לך להוביל פרויקטים מורכבים מקצה לקצה — מהרעיון הראשוני ועד לביצוע המדויק — מה שהופך אותך לנכס בכל צוות.";
       } else if ((dominant === 'yellow' && secondary === 'green') || (dominant === 'green' && secondary === 'yellow')) {
-        strengths += "שני הצבעים גם יחד מאפשרים לך לבנות אמון בצורה מהירה ואמיתית — אנשים מרגישים שאתה 'בשבילם', וזה פותח דלתות שלוגיקה בלבד לא תפתח.";
+        strengths += "שני הצדדים גם יחד מאפשרים לך לבנות אמון בצורה מהירה ואמיתית — אנשים מרגישים שאתה 'בשבילם', וזה פותח דלתות שלוגיקה בלבד לא תפתח.";
       } else {
         strengths += "הגמישות הנובעת מהשילוב הזה מאפשרת לך להתאים את עצמך למגוון רחב של אנשים ומצבים, ולהיות אפקטיבי גם כשהנסיבות משתנות.";
       }
   }
 
-  // 3. Weaknesses/Development Areas Analysis — deeper, candid but constructive
-  let weaknesses = `כל סגנון חזק מגיע עם 'צד צל'. הדומיננטיות של ה${dominantData.name} עלולה להוביל ל${dominantData.weaknesses[0]} ול${dominantData.weaknesses[1]} — לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `;
+  // 3. Weaknesses/Development Areas Analysis — deeper, candid but constructive, no color naming
+  let weaknesses = `כל סגנון חזק מגיע עם 'צד צל'. הנטייה שלך להיות ${dominantData.adjective} עלולה להוביל ל${dominantData.weaknesses[0]} ול${dominantData.weaknesses[1]} — לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `;
   weaknesses += `חשוב להכיר בכך שהחוזקה הגדולה ביותר, כשהיא מופעלת בעוצמה יתרה, היא גם נקודת הפגיעות. `;
   if (secondaryPercentage > 20) {
-      weaknesses += `השילוב עם ה${secondaryData.name} יכול להעצים נקודת עיוורון ספציפית: ${secondaryData.weaknesses[0]}. `;
+      weaknesses += `השילוב עם הצד ה${secondaryData.adjective} יכול להעצים נקודת עיוורון ספציפית: ${secondaryData.weaknesses[0]}. `;
   }
-  weaknesses += `המפה המשולבת גם מגלה שהסגנון ה${weakestData.name} נמוך יחסית — מה שאומר שתכונות כמו ${weakestData.strengths[0]} ו${weakestData.strengths[1]} לא מגיעות אליך באופן אוטומטי. זהו אזור פיתוח שדורש מאמץ מודע, אך גם מסמן לאן הצמיחה הגדולה ביותר שלך יכולה להגיע.`;
+  weaknesses += `המפה המשולבת גם מגלה שהנטייה להיות ${weakestData.adjective} נמוכה יחסית אצלך — מה שאומר שתכונות כמו ${weakestData.strengths[0]} ו${weakestData.strengths[1]} לא מגיעות אליך באופן אוטומטי. זהו אזור פיתוח שדורש מאמץ מודע, אך גם מסמן לאן הצמיחה הגדולה ביותר שלך יכולה להגיע.`;
 
-  // 4. Recommendations Analysis
+  // 4. Recommendations Analysis — no color naming
   let recommendations = `ההמלצה הראשונה עבורך: ${dominantData.recommendation_focus}. `;
-  recommendations += `נסה לשאול את עצמך בשיחות מפתח: "איך צבע ${weakestData.name} היה מתייחס לרגע הזה?" — לאו דווקא כדי לשנות את עצמך, אלא כדי להרחיב את ה'תפריט' שלך. `;
+  recommendations += `נסה לשאול את עצמך בשיחות מפתח: "איך מישהו ${weakestData.adjective} היה מתייחס לרגע הזה?" — לאו דווקא כדי לשנות את עצמך, אלא כדי להרחיב את ה'תפריט' שלך. `;
   if (secondaryPercentage > 20) {
-    recommendations += `הכוח של הפרופיל שלך טמון בשילוב — ה${dominantData.name} וה${secondaryData.name} יחדיו. נסה לאמץ גם כלים מה${secondaryData.name}: ${secondaryData.recommendation_focus}. `;
+    recommendations += `הכוח של הפרופיל שלך טמון בשילוב שבין הצד ה${dominantData.adjective} לצד ה${secondaryData.adjective} שבך. נסה לאמץ גם כלים מהצד הזה: ${secondaryData.recommendation_focus}. `;
   }
   recommendations += `ההמלצה המרכזית: ${weakestData.recommendation_focus}, גם כשזה לא מרגיש טבעי. זה יהפוך אותך מ'מומחה בסגנון שלי' לאדם שיכול לדבר בשפה של כל סגנון — וזה ההבדל בין תקשורת טובה לתקשורת מצוינת.`;
 
-  return { general, strengths, weaknesses, recommendations };
+  // Short one-line versions for the "at a glance" summary box — plain trait language, no color names
+  const quickStrength = `${dominantData.strengths[0]} ו${dominantData.strengths[1]}`;
+  const quickWeakness = `${dominantData.weaknesses[0]}, ו${weakestData.strengths[0]} לא מגיע אליך באופן טבעי`;
+  const quickRecommendation = `${dominantData.recommendation_focus}, ולתרגל ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`;
+
+  return { general, strengths, weaknesses, recommendations, quickStrength, quickWeakness, quickRecommendation };
 };
