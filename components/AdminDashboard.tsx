@@ -60,6 +60,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [teamKnowledgeBase, setTeamKnowledgeBase] = useState('');
   const [knowledgeStatus, setKnowledgeStatus] = useState<{msg: string, type: 'success' | 'error' | ''}>({msg:'', type:''});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const teamLogoInputRef = useRef<HTMLInputElement>(null);
+  const orgLogoInputRef = useRef<HTMLInputElement>(null);
 
   // Access Code Creation Form
   const [newCodeName, setNewCodeName] = useState('');
@@ -294,6 +296,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     } catch (err: any) {
       setKnowledgeStatus({ msg: err.message || 'שגיאה בשמירת הידע הארגוני', type: 'error' });
     }
+  };
+
+  // Turns a chosen image file into a small, self-contained data URI (no external hosting
+  // needed, so no hotlinking/CORS blocks like we hit with the ISA logo URL). Downsizes on
+  // a canvas first so the result stays well under Firestore's per-field size limit.
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setLogoUrl: (url: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (!dataUrl) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 160;
+        const scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { setLogoUrl(dataUrl); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        setLogoUrl(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => setLogoUrl(dataUrl); // fallback: use the original file as-is
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -567,19 +599,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                             </div>
                             <div>
                                 <label className="block text-gray-300 text-xs font-bold mb-1.5">
-                                    קישור ללוגו החברה (Logo URL):
+                                    לוגו החברה:
                                 </label>
                                 <div className="flex gap-2">
                                     <input
                                         type="url"
                                         value={orgLogoUrl}
                                         onChange={(e) => setOrgLogoUrl(e.target.value)}
-                                        placeholder="https://example.com/logo.png"
+                                        placeholder="הדבק קישור, או פשוט העלה קובץ מהמחשב ←"
                                         className="flex-1 bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500"
                                         dir="ltr"
                                     />
+                                    <input
+                                        type="file"
+                                        ref={orgLogoInputRef}
+                                        onChange={(e) => handleLogoFileUpload(e, setOrgLogoUrl)}
+                                        accept="image/*"
+                                        className="hidden"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => orgLogoInputRef.current?.click()}
+                                        className="bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs px-3 rounded-xl flex items-center gap-1.5 transition-all border border-gray-600 whitespace-nowrap"
+                                    >
+                                        <Upload className="w-3.5 h-3.5" />
+                                        <span>העלה קובץ</span>
+                                    </button>
                                     {orgLogoUrl && (
-                                        <div className="w-12 h-12 bg-white/10 rounded-xl p-1 flex items-center justify-center border border-gray-700 overflow-hidden">
+                                        <div className="w-12 h-12 bg-white/10 rounded-xl p-1 flex items-center justify-center border border-gray-700 overflow-hidden flex-shrink-0">
                                             <img src={orgLogoUrl} alt="Logo" className="max-h-full max-w-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
                                         </div>
                                     )}
@@ -791,19 +838,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                             </div>
                             <div>
                                 <label className="block text-gray-300 text-xs font-bold mb-1.5">
-                                    קישור ללוגו החברה (Logo URL):
+                                    לוגו החברה:
                                 </label>
                                 <div className="flex gap-2">
                                     <input
                                         type="url"
                                         value={teamLogoUrl}
                                         onChange={(e) => setTeamLogoUrl(e.target.value)}
-                                        placeholder="https://example.com/logo.png"
+                                        placeholder="הדבק קישור, או פשוט העלה קובץ מהמחשב ←"
                                         className="flex-1 bg-gray-900 text-white border border-gray-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500"
                                         dir="ltr"
                                     />
+                                    <input
+                                        type="file"
+                                        ref={teamLogoInputRef}
+                                        onChange={(e) => handleLogoFileUpload(e, setTeamLogoUrl)}
+                                        accept="image/*"
+                                        className="hidden"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => teamLogoInputRef.current?.click()}
+                                        className="bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs px-3 rounded-xl flex items-center gap-1.5 transition-all border border-gray-600 whitespace-nowrap"
+                                    >
+                                        <Upload className="w-3.5 h-3.5" />
+                                        <span>העלה קובץ</span>
+                                    </button>
                                     {teamLogoUrl && (
-                                        <div className="w-12 h-12 bg-white/10 rounded-xl p-1 flex items-center justify-center border border-gray-700 overflow-hidden">
+                                        <div className="w-12 h-12 bg-white/10 rounded-xl p-1 flex items-center justify-center border border-gray-700 overflow-hidden flex-shrink-0">
                                             <img src={teamLogoUrl} alt="Logo" className="max-h-full max-w-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
                                         </div>
                                     )}
