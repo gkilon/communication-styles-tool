@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores, BackgroundData } from '../types';
 import { getAiCoachAdviceStream, translateText } from '../services/geminiService';
@@ -188,7 +187,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
       
       <div 
         ref={scrollRef}
-        className="bg-gray-900/80 rounded-2xl h-[440px] overflow-y-auto mb-6 border border-gray-700/50 p-6 shadow-inner scroll-smooth"
+        className="bg-gray-900/80 rounded-2xl h-[65dvh] min-h-[440px] max-h-[720px] overflow-y-auto mb-6 border border-gray-700/50 p-6 shadow-inner scroll-smooth"
       >
         {conversation.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6">

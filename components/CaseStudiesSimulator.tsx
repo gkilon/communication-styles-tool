@@ -314,7 +314,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                         </button>
                     </div>
 
-                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px]">
+                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[min(65dvh,700px)]">
                         {conversation.length === 0 && (
                             <div className="h-full flex flex-col items-center justify-center text-center text-gray-500">
                                 <span className="text-4xl mb-2">🎤</span>
