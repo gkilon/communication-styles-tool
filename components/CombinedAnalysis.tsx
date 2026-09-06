@@ -98,31 +98,31 @@ export const CombinedAnalysis: React.FC<CombinedAnalysisProps> = ({ analysis: in
         </div>
 
         <div className="group transition-all duration-300">
-          <h4 className="text-lg font-black text-emerald-400 mb-2 flex items-center gap-2 group-hover:text-emerald-300">
+          <h4 className="text-lg font-black text-white mb-2 flex items-center gap-2 group-hover:text-cyan-400">
             <span className="opacity-50 text-sm">02</span>
             {currentLang === 'HE' ? 'חוזקות' : 'Key Strengths'}
           </h4>
-          <p className="bg-emerald-900/5 p-4 rounded-xl border border-emerald-900/20 group-hover:border-emerald-500/30 transition-all font-light whitespace-pre-line">
+          <p className="bg-slate-800/20 p-4 rounded-xl border border-slate-700/30 group-hover:border-cyan-500/30 transition-all font-light whitespace-pre-line">
             {currentAnalysis.strengths}
           </p>
         </div>
 
         <div className="group transition-all duration-300">
-          <h4 className="text-lg font-black text-amber-400 mb-2 flex items-center gap-2 group-hover:text-amber-300">
+          <h4 className="text-lg font-black text-white mb-2 flex items-center gap-2 group-hover:text-cyan-400">
             <span className="opacity-50 text-sm">03</span>
             {currentLang === 'HE' ? 'אזורים לפיתוח' : 'Development Areas'}
           </h4>
-          <p className="bg-amber-900/5 p-4 rounded-xl border border-amber-900/20 group-hover:border-amber-500/30 transition-all font-light whitespace-pre-line">
+          <p className="bg-slate-800/20 p-4 rounded-xl border border-slate-700/30 group-hover:border-cyan-500/30 transition-all font-light whitespace-pre-line">
             {currentAnalysis.weaknesses}
           </p>
         </div>
 
         <div className="group transition-all duration-300">
-          <h4 className="text-lg font-black text-purple-400 mb-2 flex items-center gap-2 group-hover:text-purple-300">
+          <h4 className="text-lg font-black text-white mb-2 flex items-center gap-2 group-hover:text-cyan-400">
             <span className="opacity-50 text-sm">04</span>
             {currentLang === 'HE' ? 'המלצות לפעולה' : 'Action Recommendations'}
           </h4>
-          <p className="bg-purple-900/5 p-4 rounded-xl border border-purple-900/20 group-hover:border-purple-500/30 transition-all font-light whitespace-pre-line">
+          <p className="bg-slate-800/20 p-4 rounded-xl border border-slate-700/30 group-hover:border-cyan-500/30 transition-all font-light whitespace-pre-line">
             {currentAnalysis.recommendations}
           </p>
         </div>

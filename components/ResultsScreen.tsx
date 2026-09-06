@@ -157,9 +157,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 </h3>
                 <p className="text-xs text-gray-400 mb-4">הקשר כללי לניתוח המפורט שמופיע מטה</p>
                 <ul className="space-y-2.5 text-gray-300 leading-relaxed">
-                  <li className="flex gap-2"><span className="text-emerald-400 font-bold">חוזקה מרכזית:</span><span>{profileAnalysis.quickStrength}</span></li>
-                  <li className="flex gap-2"><span className="text-amber-400 font-bold">אזור לפיתוח:</span><span>{profileAnalysis.quickWeakness}</span></li>
-                  <li className="flex gap-2"><span className="text-purple-400 font-bold">המלצה מרכזית:</span><span>{profileAnalysis.quickRecommendation}</span></li>
+                  <li className="flex gap-2"><span className="text-white font-bold">חוזקה מרכזית:</span><span>{profileAnalysis.quickStrength}</span></li>
+                  <li className="flex gap-2"><span className="text-white font-bold">אזור לפיתוח:</span><span>{profileAnalysis.quickWeakness}</span></li>
+                  <li className="flex gap-2"><span className="text-white font-bold">המלצה מרכזית:</span><span>{profileAnalysis.quickRecommendation}</span></li>
                 </ul>
                 <div className="mt-6 flex gap-3 flex-wrap">
                   <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מפה_משולבת</span>
