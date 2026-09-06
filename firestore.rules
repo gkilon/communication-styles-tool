@@ -19,6 +19,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ORGANIZATIONS
+    match /organizations/{orgId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // TEAMS
     match /teams/{teamId} {
       allow read: if true;

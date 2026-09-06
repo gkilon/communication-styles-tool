@@ -1,4 +1,3 @@
-
 export interface QuestionPair {
   id: string;
   pair: [string, string];
@@ -39,15 +38,27 @@ export interface UserProfile {
   backgroundData?: BackgroundData;
 }
 
+export interface Organization {
+  id: string;
+  name: string;
+  createdAt: string;
+  companyName?: string;
+  logoUrl?: string;
+  orgContext?: string; // Short cultural & DNA description
+  knowledgeBase?: string; // Diagnostic materials, surveys, leadership framework
+  updatedAt?: string;
+}
+
 export interface Team {
   id: string;
   name: string;
   createdAt: string;
   memberCount: number;
+  organizationId?: string; // Parent Organization. When set, unset fields below fall back to the org's.
   companyName?: string;
   logoUrl?: string;
-  orgContext?: string; // Short cultural & DNA description
-  knowledgeBase?: string; // Diagnostic materials, surveys, leadership framework
+  orgContext?: string; // Short cultural & DNA description — overrides the org's if set
+  knowledgeBase?: string; // Diagnostic materials, surveys, leadership framework — overrides the org's if set
   updatedAt?: string;
 }
 
@@ -62,5 +73,3 @@ export interface UserSession {
   participantId?: string;
   accessCode?: string;
 }
-
-

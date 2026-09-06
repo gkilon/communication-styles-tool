@@ -1,7 +1,6 @@
-
 import { db, auth } from '../firebaseConfig';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Scores, UserProfile, Team, BackgroundData } from '../types';
+import { Scores, UserProfile, Team, Organization, BackgroundData } from '../types';
 import { User } from 'firebase/auth';
 
 
@@ -145,9 +144,67 @@ export const getAllUsers = async () => {
     return users;
 };
 
+// --- ORGANIZATIONS MANAGEMENT ---
+// An Organization holds shared branding/context (logo, culture, knowledge base).
+// A Team belongs to (at most) one Organization via organizationId, and can override
+// any of the inherited fields individually — an unset field on the Team falls back
+// to the Organization's value (see getTeamByName below).
+
+export const createOrganization = async (orgName: string) => {
+    const orgsRef = collection(db, "organizations");
+    const q = query(orgsRef, where("name", "==", orgName));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+        throw new Error("שם הארגון כבר קיים במערכת");
+    }
+
+    const docRef = await addDoc(orgsRef, {
+        name: orgName,
+        createdAt: new Date().toISOString()
+    });
+    return docRef.id;
+};
+
+export const getOrganizations = async (): Promise<Organization[]> => {
+    const orgsRef = collection(db, "organizations");
+    const querySnapshot = await getDocs(orgsRef);
+    const orgs: Organization[] = [];
+    querySnapshot.forEach((doc) => {
+        orgs.push({ id: doc.id, ...(doc.data() as any) } as Organization);
+    });
+    return orgs;
+};
+
+export const getOrganizationById = async (orgId: string): Promise<Organization | null> => {
+  try {
+    const snap = await getDoc(doc(db, "organizations", orgId));
+    if (snap.exists()) {
+      return { id: snap.id, ...(snap.data() as any) } as Organization;
+    }
+  } catch (e) {
+    console.warn("Error fetching organization:", e);
+  }
+  return null;
+};
+
+export const updateOrganizationDetails = async (orgId: string, data: Partial<Organization>): Promise<void> => {
+  const orgRef = doc(db, "organizations", orgId);
+  const payload: any = {
+    ...data,
+    updatedAt: new Date().toISOString()
+  };
+  await updateDoc(orgRef, payload);
+};
+
+export const deleteOrganization = async (orgId: string): Promise<void> => {
+  const orgRef = doc(db, "organizations", orgId);
+  await deleteDoc(orgRef);
+};
+
 // --- TEAMS MANAGEMENT ---
 
-export const createTeam = async (teamName: string) => {
+export const createTeam = async (teamName: string, organizationId?: string) => {
     const teamsRef = collection(db, "teams");
     const q = query(teamsRef, where("name", "==", teamName));
     const querySnapshot = await getDocs(q);
@@ -156,11 +213,14 @@ export const createTeam = async (teamName: string) => {
         throw new Error("שם הצוות כבר קיים במערכת");
     }
 
-    await addDoc(teamsRef, {
+    const payload: any = {
         name: teamName,
         createdAt: new Date().toISOString(),
         memberCount: 0
-    });
+    };
+    if (organizationId) payload.organizationId = organizationId;
+
+    await addDoc(teamsRef, payload);
 };
 
 export const getTeams = async (): Promise<Team[]> => {
@@ -201,7 +261,21 @@ export const getTeamByName = async (teamName: string): Promise<Team | null> => {
     const snap = await getDocs(q);
     if (!snap.empty) {
       const docData = snap.docs[0];
-      return { id: docData.id, ...(docData.data() as any) } as Team;
+      const team = { id: docData.id, ...(docData.data() as any) } as Team;
+
+      // Merge in the parent organization's branding/context for any field
+      // the team hasn't overridden itself.
+      if (team.organizationId) {
+        const org = await getOrganizationById(team.organizationId);
+        if (org) {
+          team.companyName = team.companyName ?? org.companyName;
+          team.logoUrl = team.logoUrl ?? org.logoUrl;
+          team.orgContext = team.orgContext ?? org.orgContext;
+          team.knowledgeBase = team.knowledgeBase ?? org.knowledgeBase;
+        }
+      }
+
+      return team;
     }
   } catch (e) {
     console.warn("Error finding team by name:", e);
@@ -367,4 +441,3 @@ export const getAccessCodes = async (): Promise<AccessCodeRecord[]> => {
     return [];
   }
 };
-
