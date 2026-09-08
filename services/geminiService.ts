@@ -55,11 +55,25 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
     accessCode: sessionData?.accessCode || null
   };
 
-  const response = await fetch('/api/gemini', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, payload: enrichedPayload })
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s — Gemini 3.6 Flash's own model card notes occasional slowness
+
+  let response: Response;
+  try {
+    response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload: enrichedPayload }),
+      signal: controller.signal
+    });
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      throw new Error('הבקשה ל-AI ארכה יותר מדי זמן (מעל 45 שניות) ובוטלה. זה קורה לפעמים עם המודל - נסה שוב.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     try {
@@ -76,24 +90,39 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
 
 /**
  * Shared helper for streaming responses from our Netlify Function.
+ * Retries once on transient failure (Gemini 3.6 Flash's own model card notes
+ * occasional slowness/timeout issues) — but not on rate-limit (429) errors,
+ * which already carry their own retry-after messaging.
  */
 async function callGeminiApiStream(action: string, payload: any, onChunk: (chunk: string) => void): Promise<string> {
-  const response = await callGeminiApi(action + 'Stream', payload);
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('Failed to get stream reader');
+  const attempt = async (): Promise<string> => {
+    const response = await callGeminiApi(action + 'Stream', payload);
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('Failed to get stream reader');
 
-  let fullText = "";
-  const decoder = new TextDecoder();
+    let fullText = "";
+    const decoder = new TextDecoder();
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value, { stream: true });
-    fullText += chunk;
-    onChunk(fullText);
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      fullText += chunk;
+      onChunk(fullText);
+    }
+
+    return fullText;
+  };
+
+  try {
+    return await attempt();
+  } catch (e: any) {
+    const isRateLimit = e.message?.includes('429') || e.message?.includes('rateLimited') || e.message?.includes('הגעת למגבלת');
+    if (isRateLimit) throw e;
+    // One quiet retry after a short pause for transient errors (network blips, occasional model-side timeouts/500s)
+    await new Promise(res => setTimeout(res, 1200));
+    return attempt();
   }
-
-  return fullText;
 }
 
 function getColorsFromScores(scores: Scores) {
