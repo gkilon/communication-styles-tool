@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { translations } from './translations';
 
 export type Lang = 'he' | 'en';
 
@@ -32,6 +33,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     document.documentElement.dir = dir;
     document.documentElement.lang = lang;
+    document.title = translations.shell.tabTitle[lang];
   }, [lang, dir]);
 
   return (

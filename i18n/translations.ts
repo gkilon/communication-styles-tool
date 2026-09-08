@@ -107,6 +107,7 @@ export const translations = {
     workshopBadge: { he: 'סדנת מנהלים:', en: 'Management Workshop:' },
     resetConfirm: { he: 'האם אתה בטוח שברצונך למחוק את כל התשובות ולהתחיל מחדש?', en: 'Are you sure you want to delete all answers and start over?' },
     logoutConfirm: { he: 'האם לצאת מהמערכת? (התשובות ישמרו בדפדפן זה)', en: 'Log out of the system? (Answers will remain saved in this browser)' },
+    tabTitle: { he: 'שאלון סגנונות תקשורת | Kilon Consulting', en: 'Communication Styles Questionnaire | Kilon Consulting' },
   },
   resultsChrome: {
     tabProfile: { he: 'הפרופיל שלי', en: 'My Profile' },
