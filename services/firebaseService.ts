@@ -328,11 +328,6 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
     console.warn("Could not check settings/access, falling back:", e);
   }
 
-  // Fallback default code
-  if (code.toLowerCase() === 'inspire' || code.toLowerCase() === 'kilon' || code.toLowerCase() === 'gilad') {
-    return { valid: true, type: 'global', teamName: 'General', dailyLimit: 30 };
-  }
-
   // 2. Check in access_codes or access codes collection (for personalized/team licenses)
   try {
     let snap = await getDoc(doc(db, "access_codes", code.toUpperCase()));

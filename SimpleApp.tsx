@@ -5,7 +5,7 @@ import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { PasswordScreen } from './components/PasswordScreen';
 import { BackgroundQuestionsScreen } from './components/BackgroundQuestionsScreen';
-import { LanguageSelectScreen } from './components/LanguageSelectScreen';
+import { LanguageToggle } from './components/LanguageToggle';
 import { Scores, BackgroundData, UserSession } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
 import { isFirebaseInitialized } from './firebaseConfig';
@@ -28,7 +28,7 @@ const STORAGE_KEY_SESSION = 'comm_style_session';
 const DEFAULT_BACKGROUND: BackgroundData = { gender: '', isManager: '', goal: '' };
 
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
-  const { dir, hasChosen } = useLanguage();
+  const { dir } = useLanguage();
   const { t } = useT();
 
   // Session tracking (Personal vs Workshop)
@@ -185,8 +185,8 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
 
   return (
     <div className="min-h-screen bg-transparent text-white p-4 sm:p-8 font-sans flex flex-col items-center overflow-y-auto pb-20" dir={dir}>
+      <LanguageToggle />
       <div className="w-full max-w-6xl mx-auto">
-        {hasChosen && (
         <header className="text-center mb-10 relative">
           {/* Co-Branding Banner if present */}
           {session?.companyName && (
@@ -222,13 +222,10 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
             </div>
           )}
         </header>
-        )}
 
 
         <main className="w-full flex justify-center">
-            {!hasChosen ? (
-                <LanguageSelectScreen />
-            ) : !isAuthenticated ? (
+            {!isAuthenticated ? (
                 <PasswordScreen 
                     onAuthenticate={handleAuthenticate} 
                     onAdminLogin={onAdminLoginAttempt}

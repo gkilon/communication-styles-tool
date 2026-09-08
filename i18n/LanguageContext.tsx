@@ -6,15 +6,12 @@ interface LanguageContextValue {
   lang: Lang;
   setLang: (l: Lang) => void;
   dir: 'rtl' | 'ltr';
-  /** True once the participant has explicitly chosen a language for this session. */
-  hasChosen: boolean;
 }
 
 const LanguageContext = createContext<LanguageContextValue>({
   lang: 'he',
   setLang: () => {},
   dir: 'rtl',
-  hasChosen: false,
 });
 
 const STORAGE_KEY_LANG = 'comm_style_lang';
@@ -24,11 +21,9 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const saved = localStorage.getItem(STORAGE_KEY_LANG);
     return saved === 'en' || saved === 'he' ? saved : 'he';
   });
-  const [hasChosen, setHasChosen] = useState<boolean>(() => !!localStorage.getItem(STORAGE_KEY_LANG));
 
   const setLang = (l: Lang) => {
     setLangState(l);
-    setHasChosen(true);
     localStorage.setItem(STORAGE_KEY_LANG, l);
   };
 
@@ -40,7 +35,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [lang, dir]);
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang, dir, hasChosen }}>
+    <LanguageContext.Provider value={{ lang, setLang, dir }}>
       {children}
     </LanguageContext.Provider>
   );
