@@ -1,13 +1,17 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
 import { PasswordScreen } from './components/PasswordScreen';
 import { BackgroundQuestionsScreen } from './components/BackgroundQuestionsScreen';
+import { LanguageSelectScreen } from './components/LanguageSelectScreen';
 import { Scores, BackgroundData, UserSession } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
 import { isFirebaseInitialized } from './firebaseConfig';
 import { saveUserResults, saveWorkshopGuestResults } from './services/firebaseService';
+import { useLanguage } from './i18n/LanguageContext';
+import { useT } from './i18n/useT';
 
 interface SimpleAppProps {
   onAdminLoginAttempt: (email: string, pass: string) => Promise<void>;
@@ -24,6 +28,9 @@ const STORAGE_KEY_SESSION = 'comm_style_session';
 const DEFAULT_BACKGROUND: BackgroundData = { gender: '', isManager: '', goal: '' };
 
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
+  const { dir, hasChosen } = useLanguage();
+  const { t } = useT();
+
   // Session tracking (Personal vs Workshop)
   const [session, setSession] = useState<UserSession | null>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_SESSION);
@@ -143,7 +150,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   const handleSubmit = () => setStep('results');
   
   const handleReset = () => {
-    if (!window.confirm("האם אתה בטוח שברצונך למחוק את כל התשובות ולהתחיל מחדש?")) return;
+    if (!window.confirm(t('shell', 'resetConfirm'))) return;
     setAnswers({});
     setCurrentQuestionIndex(0);
     setBackgroundData(DEFAULT_BACKGROUND);
@@ -159,7 +166,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
   };
 
   const handleLogout = () => {
-    if (!window.confirm("האם לצאת מהמערכת? (התשובות ישמרו בדפדפן זה)")) return;
+    if (!window.confirm(t('shell', 'logoutConfirm'))) return;
     setIsAuthenticated(false);
     setSession(null);
     localStorage.removeItem(STORAGE_KEY_AUTH);
@@ -172,13 +179,14 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
 
   // Gender-aware welcome text
   const isFemale = backgroundData.gender === 'female';
-  const welcomeBackText = isFemale ? 'ברוכה השבה!' : 'ברוך השב!';
-  const continueText = isFemale ? 'המשיכי מאיפה שעצרת' : 'המשך מאיפה שעצרתי';
-  const deleteText = isFemale ? 'מחקי הכל והתחילי מחדש' : 'מחק הכל והתחל מחדש';
+  const welcomeBackText = isFemale ? t('welcomeBack', 'titleFemale') : t('welcomeBack', 'titleMale');
+  const continueText = isFemale ? t('welcomeBack', 'continueFemale') : t('welcomeBack', 'continueMale');
+  const deleteText = isFemale ? t('welcomeBack', 'deleteFemale') : t('welcomeBack', 'deleteMale');
 
   return (
-    <div className="min-h-screen bg-transparent text-white p-4 sm:p-8 font-sans dir-rtl flex flex-col items-center overflow-y-auto pb-20">
+    <div className="min-h-screen bg-transparent text-white p-4 sm:p-8 font-sans flex flex-col items-center overflow-y-auto pb-20" dir={dir}>
       <div className="w-full max-w-6xl mx-auto">
+        {hasChosen && (
         <header className="text-center mb-10 relative">
           {/* Co-Branding Banner if present */}
           {session?.companyName && (
@@ -192,16 +200,16 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                 />
               )}
               <div className="inline-flex items-center gap-3 bg-gray-800/90 border border-cyan-500/30 px-5 py-2 rounded-full shadow-lg">
-                <span className="text-xs text-gray-400 font-semibold">סדנת מנהלים:</span>
+                <span className="text-xs text-gray-400 font-semibold">{t('shell', 'workshopBadge')}</span>
                 <span className="text-sm text-cyan-300 font-black">{session.companyName}</span>
               </div>
             </div>
           )}
 
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-cyan-400 tracking-wide drop-shadow-lg py-2">
-             שאלון סגנונות תקשורת
+             {t('shell', 'title')}
           </h1>
-          <p className="text-gray-300 mt-1 text-lg font-light">גלה את פרופיל התקשורת שלך וקבל תובנות מבוססות AI</p>
+          <p className="text-gray-300 mt-1 text-lg font-light">{t('shell', 'subtitle')}</p>
           
           {isAuthenticated && (
             <div className="absolute top-0 left-0 flex gap-2">
@@ -209,15 +217,18 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                   onClick={handleLogout} 
                   className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-3 py-1 bg-gray-800/50 transition-colors"
                 >
-                  יציאה
+                  {t('common', 'logout')}
                 </button>
             </div>
           )}
         </header>
+        )}
 
 
         <main className="w-full flex justify-center">
-            {!isAuthenticated ? (
+            {!hasChosen ? (
+                <LanguageSelectScreen />
+            ) : !isAuthenticated ? (
                 <PasswordScreen 
                     onAuthenticate={handleAuthenticate} 
                     onAdminLogin={onAdminLoginAttempt}
@@ -231,7 +242,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
                         {Object.keys(answers).length > 0 && (
                           <div className="max-w-md mx-auto bg-cyan-900/40 border border-cyan-500/50 p-6 rounded-2xl text-center mb-8 shadow-2xl animate-fade-in">
                             <h4 className="text-xl font-bold text-white mb-2">{welcomeBackText}</h4>
-                            <p className="text-gray-300 mb-4 text-sm">זיהינו שמילאת חלק מהשאלון בעבר. איך תרצה להמשיך?</p>
+                            <p className="text-gray-300 mb-4 text-sm">{t('welcomeBack', 'body')}</p>
                             <div className="flex flex-col gap-3">
                                 <button onClick={handleStart} className="w-full text-white bg-cyan-600 hover:bg-cyan-500 py-3 rounded-xl font-bold transition-all shadow-lg">{continueText}</button>
                                 <button onClick={handleReset} className="w-full text-gray-400 border border-gray-700 hover:bg-gray-800 py-2 rounded-xl text-xs transition-all">{deleteText}</button>

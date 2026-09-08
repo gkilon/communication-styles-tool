@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { validateAccessCode, getTeamByName, AccessValidationResult } from '../services/firebaseService';
 import { UserSession } from '../types';
 import { Users, User, ShieldCheck, KeyRound } from 'lucide-react';
+import { useT } from '../i18n/useT';
 
 interface PasswordScreenProps {
   onAuthenticate: (session: UserSession) => void;
@@ -14,6 +15,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
   onAdminLogin, 
   hasDatabaseConnection = true 
 }) => {
+  const { t } = useT();
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'personal' | 'workshop'>('personal');
   
@@ -71,7 +73,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
           }
         } else {
           setPersonalCode(codeParam);
-          setPersonalError(res.message || 'קוד גישה לא תקין');
+          setPersonalError(res.message || t('password', 'invalidCode'));
         }
       });
     }
@@ -82,7 +84,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
     e.preventDefault();
     setPersonalError('');
     if (!personalCode.trim()) {
-      setPersonalError('אנא הזן קוד גישה או סיסמה');
+      setPersonalError(t('password', 'personalMissing'));
       return;
     }
 
@@ -102,11 +104,11 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
           knowledgeBase: validation.knowledgeBase
         });
       } else {
-        setPersonalError(validation.message || 'קוד שגוי');
+        setPersonalError(validation.message || t('password', 'wrongCode'));
       }
     } catch (err: any) {
       setPersonalLoading(false);
-      setPersonalError('שגיאה באימות הקוד. אנא נסה שוב.');
+      setPersonalError(t('password', 'codeCheckError'));
     }
   };
 
@@ -116,13 +118,13 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
     setWorkshopError('');
 
     if (!participantName.trim()) {
-      setWorkshopError('אנא רשום את שמך המלא');
+      setWorkshopError(t('password', 'fullNameMissing'));
       return;
     }
 
     const teamToUse = lockedTeamName || teamCodeOrName.trim();
     if (!teamToUse) {
-      setWorkshopError('אנא הזן קוד סדנה או בחר צוות');
+      setWorkshopError(t('password', 'workshopCodeMissing'));
       return;
     }
 
@@ -134,7 +136,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         const val = await validateAccessCode(teamToUse);
         if (!val.valid) {
           setWorkshopLoading(false);
-          setWorkshopError(val.message || 'קוד סדנה שגוי או לא קיים');
+          setWorkshopError(val.message || t('password', 'invalidWorkshopCode'));
           return;
         }
         resolvedTeam = val.teamName || teamToUse;
@@ -159,7 +161,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
       });
     } catch (err) {
       setWorkshopLoading(false);
-      setWorkshopError('שגיאה בכניסה לסדנה. אנא נסה שוב.');
+      setWorkshopError(t('password', 'joinError'));
     }
   };
 
@@ -168,7 +170,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
     e.preventDefault();
     setAdminError('');
     if (!adminEmail || !adminPassword) {
-      setAdminError('אנא מלא אימייל וסיסמה');
+      setAdminError(t('password', 'adminMissing'));
       return;
     }
     if (!onAdminLogin) return;
@@ -177,7 +179,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
     try {
       await onAdminLogin(adminEmail, adminPassword);
     } catch (err: any) {
-      setAdminError('פרטי התחברות שגויים');
+      setAdminError(t('password', 'adminWrong'));
     } finally {
       setAdminLoading(false);
     }
@@ -217,7 +219,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         <Branding />
         <h2 className="text-2xl font-bold text-gray-200 mb-6 flex items-center justify-center gap-2">
           <ShieldCheck className="w-6 h-6 text-cyan-400" />
-          <span>כניסת מנהל מערכת</span>
+          <span>{t('password', 'adminTitle')}</span>
         </h2>
         <form onSubmit={handleAdminSubmit} className="space-y-4" autoComplete="off">
           <input
@@ -225,7 +227,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
             value={adminEmail}
             onChange={(e) => setAdminEmail(e.target.value)}
             className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500"
-            placeholder="אימייל מנהל"
+            placeholder={t('password', 'adminEmailPlaceholder')}
             dir="ltr"
           />
           <input
@@ -233,7 +235,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
             className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500"
-            placeholder="סיסמת מנהל"
+            placeholder={t('password', 'adminPasswordPlaceholder')}
             dir="ltr"
           />
           {adminError && <p className="text-red-400 text-sm font-bold">{adminError}</p>}
@@ -242,14 +244,14 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
             disabled={adminLoading}
             className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3.5 px-8 rounded-xl transition-all shadow-lg"
           >
-            {adminLoading ? 'מתחבר...' : 'כניסת אדמין'}
+            {adminLoading ? t('password', 'adminConnecting') : t('password', 'adminSubmit')}
           </button>
         </form>
         <button 
           onClick={() => { setIsAdminMode(false); setAdminError(''); }} 
           className="mt-6 text-xs text-gray-500 hover:text-cyan-400 underline transition-colors"
         >
-          חזרה למסך הראשי
+          {t('password', 'adminBack')}
         </button>
       </div>
     );
@@ -264,9 +266,9 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
       {lockedTeamName && (
         <div className="mb-6 bg-cyan-900/40 border border-cyan-500/50 p-4 rounded-2xl text-center shadow-lg">
           <p className="text-cyan-300 font-bold text-lg">
-            🎯 הוזמנת לסדנה: <span className="text-white font-black">{lockedTeamName}</span>
+            🎯 {t('password', 'invitedTo')} <span className="text-white font-black">{lockedTeamName}</span>
           </p>
-          <p className="text-xs text-gray-400 mt-1">רשום את שמך למטה והתחל מיד בשאלון</p>
+          <p className="text-xs text-gray-400 mt-1">{t('password', 'invitedHint')}</p>
         </div>
       )}
 
@@ -282,7 +284,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
             }`}
           >
             <User className="w-4 h-4" />
-            <span>שאלון אישי</span>
+            <span>{t('password', 'tabPersonal')}</span>
           </button>
           <button
             onClick={() => setActiveTab('workshop')}
@@ -293,7 +295,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>כניסה לסדנה / צוות</span>
+            <span>{t('password', 'tabWorkshop')}</span>
           </button>
         </div>
       )}
@@ -305,9 +307,9 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
             <KeyRound className="w-8 h-8" />
           </div>
           
-          <h2 className="text-2xl md:text-3xl font-black text-white mb-2">כניסה עם קוד גישה</h2>
+          <h2 className="text-2xl md:text-3xl font-black text-white mb-2">{t('password', 'personalTitle')}</h2>
           <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-            מילוי שאלון פרטני עם דוח מלא ומאמן AI אישי.
+            {t('password', 'personalSubtitle')}
           </p>
 
           <form onSubmit={handlePersonalSubmit} className="space-y-4" autoComplete="off">
@@ -316,7 +318,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
                 type="text"
                 value={personalCode}
                 onChange={(e) => setPersonalCode(e.target.value)}
-                placeholder="הקלד קוד גישה או סיסמה"
+                placeholder={t('password', 'personalPlaceholder')}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl py-4 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500 text-lg font-mono tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-gray-600"
                 dir="ltr"
                 autoFocus
@@ -334,12 +336,12 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
               disabled={personalLoading}
               className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4 px-8 rounded-xl transition-all text-lg shadow-xl active:scale-[0.99]"
             >
-              {personalLoading ? 'בודק קוד...' : 'התחל בשאלון האישי'}
+              {personalLoading ? t('password', 'checkingCode') : t('password', 'startPersonal')}
             </button>
           </form>
 
           <div className="mt-6 pt-5 border-t border-gray-700/60 flex items-center justify-center gap-2 text-xs text-gray-500">
-            <span>🔒 פרטיות מלאה: השאלון האישי אינו שומר מידע אישי בענן</span>
+            <span>{t('password', 'privacyNote')}</span>
           </div>
         </div>
       )}
@@ -352,20 +354,20 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
           </div>
 
           <h2 className="text-2xl md:text-3xl font-black text-white mb-2">
-            {lockedTeamName ? `הצטרפות ל-${lockedTeamName}` : 'הצטרפות לסדנה צוותית'}
+            {lockedTeamName ? `${t('password', 'workshopTitleLocked')}${lockedTeamName}` : t('password', 'workshopTitle')}
           </h2>
           <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-            התוצאות שלך ישולבו במפת הסגנונות של הסדנה
+            {t('password', 'workshopSubtitle')}
           </p>
 
           <form onSubmit={handleWorkshopSubmit} className="space-y-4 text-right" autoComplete="off">
             <div>
-              <label className="block text-gray-400 text-xs mb-1.5 font-semibold mr-1">שם מלא / כינוי:</label>
+              <label className="block text-gray-400 text-xs mb-1.5 font-semibold mr-1">{t('password', 'fullNameLabel')}</label>
               <input
                 type="text"
                 value={participantName}
                 onChange={(e) => setParticipantName(e.target.value)}
-                placeholder="למשל: דני כהן"
+                placeholder={t('password', 'fullNamePlaceholder')}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3.5 px-4 text-white text-right focus:ring-2 focus:ring-cyan-500 text-base"
                 autoFocus
               />
@@ -373,12 +375,12 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
 
             {!lockedTeamName && (
               <div>
-                <label className="block text-gray-400 text-xs mb-1.5 font-semibold mr-1">קוד סדנה:</label>
+                <label className="block text-gray-400 text-xs mb-1.5 font-semibold mr-1">{t('password', 'workshopCodeLabel')}</label>
                 <input
                   type="text"
                   value={teamCodeOrName}
                   onChange={(e) => setTeamCodeOrName(e.target.value)}
-                  placeholder="למשל: ALPHA-2026"
+                  placeholder={t('password', 'workshopCodePlaceholder')}
                   className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3.5 px-4 text-white text-center focus:ring-2 focus:ring-cyan-500 text-base font-mono uppercase"
                   dir="ltr"
                 />
@@ -396,12 +398,12 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
               disabled={workshopLoading}
               className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black py-4 px-8 rounded-xl transition-all text-lg shadow-xl active:scale-[0.99] mt-2"
             >
-              {workshopLoading ? 'מצטרף...' : 'הצטרף לסדנה והתחל'}
+              {workshopLoading ? t('password', 'joining') : t('password', 'joinStart')}
             </button>
           </form>
 
           <div className="mt-6 pt-5 border-t border-gray-700/60 flex items-center justify-center gap-2 text-xs text-gray-500">
-            <span>✨ ללא צורך בהרשמה או סיסמאות</span>
+            <span>{t('password', 'noSignupNote')}</span>
           </div>
         </div>
       )}
@@ -412,9 +414,10 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
           onClick={() => { setIsAdminMode(true); setAdminError(''); }} 
           className="text-xs text-gray-600 hover:text-gray-400 uppercase tracking-widest transition-colors py-2 px-4 rounded-lg hover:bg-gray-800/40"
         >
-          כניסת מנהל מערכת
+          {t('password', 'adminEntry')}
         </button>
       </div>
     </div>
   );
 };
+

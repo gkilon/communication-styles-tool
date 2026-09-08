@@ -1,12 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores } from '../types';
 import { getSimulationResponse, getSimulationFeedback, transcribeAudio, SimulationMessage } from '../services/geminiService';
+import { useT } from '../i18n/useT';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface CaseStudiesSimulatorProps {
     scores: Scores;
 }
 
 export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scores }) => {
+    const { t } = useT();
+    const { lang, dir } = useLanguage();
     const [targetColor, setTargetColor] = useState<string>('');
     const [scenario, setScenario] = useState<string>('');
     const [relationship, setRelationship] = useState<string>('');
@@ -38,7 +42,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
             try {
                 const recognition = new SpeechRecognition();
                 recognition.continuous = false;
-                recognition.lang = 'he-IL';
+                recognition.lang = lang === 'en' ? 'en-US' : 'he-IL';
                 recognition.interimResults = false;
 
                 recognition.onresult = (event: any) => {
@@ -49,10 +53,10 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                 recognition.onend = () => setIsListening(false);
                 recognition.onerror = (event: any) => {
                     setIsListening(false);
-                    if (event.error === 'not-allowed') setSpeechError('גישה למיקרופון נדחתה. אנא אפשר גישה בהגדרות הדפדפן.');
-                    else if (event.error === 'network') setSpeechError('שגיאת רשת. נסה שוב.');
-                    else if (event.error === 'no-speech') setSpeechError('לא זוהה קול. נסה שוב.');
-                    else setSpeechError('שגיאה: ' + event.error);
+                    if (event.error === 'not-allowed') setSpeechError(t('simulator', 'micDenied'));
+                    else if (event.error === 'network') setSpeechError(t('simulator', 'networkError'));
+                    else if (event.error === 'no-speech') setSpeechError(t('simulator', 'noSpeech'));
+                    else setSpeechError(t('simulator', 'genericError') + ' ' + event.error);
                 };
                 recognitionRef.current = recognition;
                 setIsSpeechSupported(true);
@@ -60,7 +64,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                 // fall through to MediaRecorder
             }
         }
-    }, []);
+    }, [lang]);
 
     const startMediaRecorder = async () => {
         setSpeechError('');
@@ -85,9 +89,9 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                     const base64 = await blobToBase64(blob);
                     const text = await transcribeAudio(base64, mimeType.split(';')[0]);
                     if (text) setUserInput(prev => prev ? prev + ' ' + text : text);
-                    else setSpeechError('לא זוהה דיבור. נסה שנית.');
+                    else setSpeechError(t('simulator', 'noSpeechRetry'));
                 } catch (err: any) {
-                    setSpeechError(err.message || 'שגיאה בתמלול.');
+                    setSpeechError(err.message || t('simulator', 'transcriptionError'));
                 } finally {
                     setIsTranscribing(false);
                 }
@@ -97,7 +101,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
             recorder.start();
             setIsListening(true);
         } catch {
-            setSpeechError('לא ניתן לגשת למיקרופון. ודא שהדפדפן קיבל הרשאה.');
+            setSpeechError(t('simulator', 'micAccessError'));
         }
     };
 
@@ -127,7 +131,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                 recognitionRef.current.start();
                 setIsListening(true);
             } catch {
-                setSpeechError('לא ניתן להפעיל את המיקרופון.');
+                setSpeechError(t('simulator', 'micStartError'));
             }
         } else {
             startMediaRecorder();
@@ -138,24 +142,26 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
             const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = 'he-IL';
+            msg.lang = lang === 'en' ? 'en-US' : 'he-IL';
             msg.rate = 1.0;
             window.speechSynthesis.speak(msg);
         }
     };
 
+    // Internal values stay Hebrew (the AI backend's few-shot examples and behavior matrix
+    // are keyed by these exact Hebrew strings) — only the displayed label/description is translated.
     const colors = [
-        { name: 'אדום', desc: 'דומיננטי, ממוקד תוצאות, ישיר', bg: 'bg-red-900/40 border-red-500 text-red-100' },
-        { name: 'צהוב', desc: 'חברותי, מלא התלהבות, יצירתי', bg: 'bg-yellow-900/40 border-yellow-500 text-yellow-100' },
-        { name: 'ירוק', desc: 'רגיש, תומך, מחפש הרמוניה', bg: 'bg-green-900/40 border-green-500 text-green-100' },
-        { name: 'כחול', desc: 'אנליטי, מחושב, יורד לפרטים', bg: 'bg-blue-900/40 border-blue-500 text-blue-100' },
+        { name: 'אדום', label: t('simulator', 'colorRed'), desc: t('simulator', 'colorRedDesc'), bg: 'bg-red-900/40 border-red-500 text-red-100' },
+        { name: 'צהוב', label: t('simulator', 'colorYellow'), desc: t('simulator', 'colorYellowDesc'), bg: 'bg-yellow-900/40 border-yellow-500 text-yellow-100' },
+        { name: 'ירוק', label: t('simulator', 'colorGreen'), desc: t('simulator', 'colorGreenDesc'), bg: 'bg-green-900/40 border-green-500 text-green-100' },
+        { name: 'כחול', label: t('simulator', 'colorBlue'), desc: t('simulator', 'colorBlueDesc'), bg: 'bg-blue-900/40 border-blue-500 text-blue-100' },
     ];
 
     const relationships = [
-        { value: 'מנהל', label: '👔 המנהל שלי', desc: 'הוא מעליי בהיררכיה' },
-        { value: 'עובד', label: '🙋 עובד שלי', desc: 'הוא תחתיי בהיררכיה' },
-        { value: 'קולגה', label: '🤝 קולגה', desc: 'אנחנו באותה רמה' },
-        { value: 'לקוח', label: '💼 לקוח', desc: 'לקוח חיצוני' },
+        { value: 'מנהל', label: t('simulator', 'relManager'), desc: t('simulator', 'relManagerDesc') },
+        { value: 'עובד', label: t('simulator', 'relEmployee'), desc: t('simulator', 'relEmployeeDesc') },
+        { value: 'קולגה', label: t('simulator', 'relColleague'), desc: t('simulator', 'relColleagueDesc') },
+        { value: 'לקוח', label: t('simulator', 'relClient'), desc: t('simulator', 'relClientDesc') },
     ];
 
     const handleStart = () => {
@@ -179,12 +185,12 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
 
         try {
             const enrichedScenario = `${scenario} [יחס: הצד השני הוא ה${relationship} של המשתמש]`;
-            const result = await getSimulationResponse(scores, targetColor, enrichedScenario, conversation, newUserMsg.text);
+            const result = await getSimulationResponse(scores, targetColor, enrichedScenario, conversation, newUserMsg.text, lang);
             const newAiMsg: SimulationMessage = { sender: 'ai', text: result };
             setConversation([...newHistory, newAiMsg]);
             if (autoSpeak) speakText(result);
         } catch (err) {
-            setConversation([...newHistory, { sender: 'ai', text: "שגיאה בחיבור לסימולטור." }]);
+            setConversation([...newHistory, { sender: 'ai', text: t('simulator', 'connectionError') }]);
         } finally {
             setIsLoading(false);
         }
@@ -195,10 +201,10 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
         setIsLoading(true);
         try {
             const enrichedScenario = `${scenario} [יחס: הצד השני הוא ה${relationship} של המשתמש]`;
-            const result = await getSimulationFeedback(scores, targetColor, enrichedScenario, conversation);
+            const result = await getSimulationFeedback(scores, targetColor, enrichedScenario, conversation, lang);
             setFeedback(result);
         } catch (err) {
-            setFeedback("לא הצלחתי לייצר משוב.");
+            setFeedback(t('simulator', 'feedbackError'));
         } finally {
             setIsLoading(false);
         }
@@ -228,26 +234,26 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
     };
 
     return (
-        <div className="flex flex-col h-full relative">
+        <div className="flex flex-col h-full relative" dir={dir}>
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                     <div className="bg-purple-500/20 p-2 rounded-xl">
                         <span className="text-3xl">🎭</span>
                     </div>
                     <div>
-                        <h3 className="text-2xl font-bold text-white">סימולטור מציאותי</h3>
-                        <p className="text-gray-400 text-sm font-medium">תרגול שיחה קולית וכתובה מול טיפוס תקשורת</p>
+                        <h3 className="text-2xl font-bold text-white">{t('simulator', 'title')}</h3>
+                        <p className="text-gray-400 text-sm font-medium">{t('simulator', 'subtitle')}</p>
                     </div>
                 </div>
                 {isStarted && (
-                    <button onClick={handleReset} className="text-xs text-gray-400 hover:text-white underline">סיים שיחה וסגור</button>
+                    <button onClick={handleReset} className="text-xs text-gray-400 hover:text-white underline">{t('simulator', 'endConversation')}</button>
                 )}
             </div>
 
             {!isStarted && (
                 <div className="bg-gray-900/60 p-6 rounded-2xl border border-gray-700 space-y-6 animate-fade-in-up">
                     <div>
-                        <label className="block text-sm font-bold text-gray-300 mb-2">1. בחר את סגנון התקשורת של הצד השני:</label>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">{t('simulator', 'step1')}</label>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {colors.map(c => (
                                 <button
@@ -255,7 +261,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                                     onClick={() => setTargetColor(c.name)}
                                     className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center ${targetColor === c.name ? c.bg + ' ring-2 ring-white scale-105' : 'bg-gray-800 border-gray-600 hover:border-gray-500 opacity-70'}`}
                                 >
-                                    <div className="font-bold mb-1">{c.name}</div>
+                                    <div className="font-bold mb-1">{c.label}</div>
                                     <div className="text-xs opacity-80">{c.desc}</div>
                                 </button>
                             ))}
@@ -263,7 +269,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                     </div>
 
                     <div>
-                        <label className="block text-sm font-bold text-gray-300 mb-2">2. מה הקשר שלך אליו?</label>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">{t('simulator', 'step2')}</label>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {relationships.map(r => (
                                 <button
@@ -279,13 +285,13 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                     </div>
 
                     <div>
-                        <label className="block text-sm font-bold text-gray-300 mb-2">3. הגדר את התרחיש (נושא השיחה, הקשר):</label>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">{t('simulator', 'step3')}</label>
                         <input
                             type="text"
                             value={scenario}
                             onChange={e => setScenario(e.target.value)}
                             className="w-full bg-gray-800 text-white rounded-xl p-4 border border-gray-600 focus:border-purple-500 outline-none"
-                            placeholder="למשל: תכנון פרויקט חדש, פתרון קונפליקט מול לקוח..."
+                            placeholder={t('simulator', 'scenarioPlaceholder')}
                         />
                     </div>
 
@@ -294,7 +300,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                         disabled={!targetColor || !scenario.trim() || !relationship}
                         className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:grayscale text-white font-bold py-4 rounded-xl shadow-lg transition-all"
                     >
-                        התחל שיחה 🚀
+                        {t('simulator', 'startConversation')}
                     </button>
                 </div>
             )}
@@ -303,14 +309,14 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                 <div className="flex flex-col h-full bg-gray-900/60 rounded-2xl border border-gray-700 overflow-hidden relative">
                     <div className="bg-gray-800 p-3 border-b border-gray-700 flex justify-between items-center px-4">
                         <div className="text-xs text-gray-400">
-                            <span className="font-bold text-purple-400">דמות:</span> {targetColor} ({relationship}) | <span className="font-bold text-purple-400">תרחיש:</span> {scenario}
+                            <span className="font-bold text-purple-400">{t('simulator', 'characterLabel')}</span> {colors.find(c => c.name === targetColor)?.label || targetColor} ({relationships.find(r => r.value === relationship)?.label || relationship}) | <span className="font-bold text-purple-400">{t('simulator', 'scenarioLabel')}</span> {scenario}
                         </div>
                         <button
                             onClick={() => { setAutoSpeak(v => { if (v) window.speechSynthesis.cancel(); return !v; }); }}
                             className={`flex items-center gap-1 text-xs px-3 py-1 rounded-full border transition-all ${autoSpeak ? 'bg-purple-600/30 border-purple-500 text-purple-300' : 'bg-gray-700 border-gray-600 text-gray-400 hover:text-white'}`}
-                            title="מצב קולי אוטומטי"
+                            title={t('simulator', 'autoVoiceTitle')}
                         >
-                            {autoSpeak ? '🔊 קולי' : '🔇 שקט'}
+                            {autoSpeak ? t('simulator', 'voiceOn') : t('simulator', 'voiceOff')}
                         </button>
                     </div>
 
@@ -318,7 +324,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                         {conversation.length === 0 && (
                             <div className="h-full flex flex-col items-center justify-center text-center text-gray-500">
                                 <span className="text-4xl mb-2">🎤</span>
-                                <p>השיחה התחילה. שלח הודעה או דבר במיקרופון בשביל להתחיל!</p>
+                                <p>{t('simulator', 'conversationStarted')}</p>
                             </div>
                         )}
                         {conversation.map((msg, index) => (
@@ -332,9 +338,9 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                                             <button
                                                 onClick={() => speakText(msg.text)}
                                                 className="mt-2 text-xs text-gray-500 hover:text-purple-400 transition-colors flex items-center gap-1"
-                                                title="הקרא בקול"
+                                                title={t('simulator', 'readAloudTitle')}
                                             >
-                                                🔊 <span>הקרא</span>
+                                                🔊 <span>{t('simulator', 'readAloud')}</span>
                                             </button>
                                         </>
                                     )}
@@ -354,10 +360,10 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
 
                         {feedback && (
                             <div className="relative p-6 bg-emerald-900/30 border border-emerald-500/50 rounded-2xl animate-fade-in-up mt-8 group">
-                                <button onClick={() => speakText(feedback)} className="absolute -left-4 -top-4 p-3 bg-emerald-900 border border-emerald-500 rounded-full opacity-70 hover:opacity-100 transition-opacity shadow-lg flex justify-center items-center w-12 h-12" title="הקרא משוב">🔊</button>
+                                <button onClick={() => speakText(feedback)} className="absolute -left-4 -top-4 p-3 bg-emerald-900 border border-emerald-500 rounded-full opacity-70 hover:opacity-100 transition-opacity shadow-lg flex justify-center items-center w-12 h-12" title={t('simulator', 'readFeedbackTitle')}>🔊</button>
                                 <div className="flex items-center gap-2 mb-4">
                                     <span className="text-2xl">💡</span>
-                                    <h4 className="text-emerald-400 font-bold text-xl">משוב המאמן:</h4>
+                                    <h4 className="text-emerald-400 font-bold text-xl">{t('simulator', 'coachFeedback')}</h4>
                                 </div>
                                 {renderMarkdownText(feedback)}
                             </div>
@@ -373,15 +379,15 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                                         value={userInput}
                                         onChange={e => setUserInput(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                                        className="w-full bg-gray-900 text-white rounded-xl py-3 px-4 pr-14 border border-gray-600 focus:border-purple-500 outline-none"
-                                        placeholder={isTranscribing ? 'ממיר קול לטקסט...' : 'הקלד כאן...'}
+                                        className={`w-full bg-gray-900 text-white rounded-xl py-3 px-4 ${dir === 'rtl' ? 'pr-14' : 'pl-14'} border border-gray-600 focus:border-purple-500 outline-none`}
+                                        placeholder={isTranscribing ? t('simulator', 'convertingSpeech') : t('simulator', 'typeHere')}
                                         disabled={isLoading || isTranscribing}
                                     />
                                     <button
                                         onClick={toggleListen}
                                         disabled={isTranscribing || isLoading}
-                                        className={`absolute right-2 top-1.5 bottom-1.5 px-3 rounded-lg transition-all text-xl disabled:opacity-40 ${isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
-                                        title={isListening ? 'עצור הקלטה' : 'דבר למיקרופון'}
+                                        className={`absolute ${dir === 'rtl' ? 'right-2' : 'left-2'} top-1.5 bottom-1.5 px-3 rounded-lg transition-all text-xl disabled:opacity-40 ${isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+                                        title={isListening ? t('simulator', 'stopRecording') : t('simulator', 'speakToMic')}
                                     >
                                         {isTranscribing ? '⏳' : isListening ? '🔴' : '🎙️'}
                                     </button>
@@ -391,17 +397,17 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                                     disabled={!userInput.trim() || isLoading || isTranscribing}
                                     className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-6 py-3 rounded-xl disabled:opacity-50 transition-all"
                                 >
-                                    שלח
+                                    {t('common', 'send')}
                                 </button>
                             </div>
                             {isListening && !isSpeechSupported && (
-                                <p className="text-xs text-red-400 mt-2 text-right animate-pulse">🔴 מקליט... לחץ שוב לעצירה ותמלול</p>
+                                <p className={`text-xs text-red-400 mt-2 ${dir === 'rtl' ? 'text-right' : 'text-left'} animate-pulse`}>🔴 {t('simulator', 'recording')}</p>
                             )}
                             {isTranscribing && (
-                                <p className="text-xs text-purple-400 mt-2 text-right animate-pulse">⏳ ממיר את ההקלטה לטקסט...</p>
+                                <p className={`text-xs text-purple-400 mt-2 ${dir === 'rtl' ? 'text-right' : 'text-left'} animate-pulse`}>⏳ {t('simulator', 'convertingRecording')}</p>
                             )}
                             {speechError && (
-                                <p className="text-xs text-red-400 mt-2 text-right">⚠️ {speechError}</p>
+                                <p className={`text-xs text-red-400 mt-2 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>⚠️ {speechError}</p>
                             )}
 
                             {conversation.length > 0 && (
@@ -410,7 +416,7 @@ export const CaseStudiesSimulator: React.FC<CaseStudiesSimulatorProps> = ({ scor
                                     disabled={isLoading}
                                     className="w-full mt-3 bg-gray-700 hover:bg-gray-600 text-emerald-400 font-bold py-2 rounded-xl text-sm transition-all border border-gray-600"
                                 >
-                                    🔍 קבל משוב מדויק על השיחה וסיים
+                                    {t('simulator', 'getFeedback')}
                                 </button>
                             )}
                         </div>

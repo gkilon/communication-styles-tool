@@ -1,6 +1,8 @@
 
 import React from 'react';
 import { QuestionPair } from '../types';
+import { useT } from '../i18n/useT';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface QuestionSliderProps {
   question: QuestionPair;
@@ -9,6 +11,8 @@ interface QuestionSliderProps {
 }
 
 export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value, onChange }) => {
+  const { t } = useT();
+  const { dir } = useLanguage();
   const [trait1, trait2] = question.pair;
   const [desc1, desc2] = question.descriptions || ['', ''];
 
@@ -20,18 +24,18 @@ export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value,
     <div className="w-full select-none">
       {/* Trait Headers */}
       <div className="flex justify-between items-start text-white mb-10 tracking-wide gap-4">
-        {/* Right Side (Trait 1) */}
+        {/* Trait 1 — renders on the reading-start side (right in RTL, left in LTR) via automatic flex mirroring under dir */}
         <div 
-          className={`text-right w-1/2 p-4 rounded-2xl transition-all cursor-pointer border-2 ${value >= 1 && value <= 3 ? 'bg-cyan-900/40 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-gray-800/50 border-transparent hover:bg-gray-700'}`} 
+          className={`${dir === 'rtl' ? 'text-right' : 'text-left'} w-1/2 p-4 rounded-2xl transition-all cursor-pointer border-2 ${value >= 1 && value <= 3 ? 'bg-cyan-900/40 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-gray-800/50 border-transparent hover:bg-gray-700'}`} 
           onClick={() => onChange(2)}
         >
             <div className={`text-2xl sm:text-3xl font-black ${value >= 1 && value <= 3 ? 'text-cyan-300' : 'text-gray-400'}`}>{trait1}</div>
             <div className="text-sm sm:text-base text-gray-400 mt-2 leading-tight font-medium">{desc1}</div>
         </div>
         
-        {/* Left Side (Trait 2) */}
+        {/* Trait 2 — renders on the reading-end side */}
         <div 
-          className={`text-left w-1/2 p-4 rounded-2xl transition-all cursor-pointer border-2 ${value >= 4 && value <= 6 ? 'bg-cyan-900/40 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-gray-800/50 border-transparent hover:bg-gray-700'}`} 
+          className={`${dir === 'rtl' ? 'text-left' : 'text-right'} w-1/2 p-4 rounded-2xl transition-all cursor-pointer border-2 ${value >= 4 && value <= 6 ? 'bg-cyan-900/40 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-gray-800/50 border-transparent hover:bg-gray-700'}`} 
           onClick={() => onChange(5)}
         >
             <div className={`text-2xl sm:text-3xl font-black ${value >= 4 && value <= 6 ? 'text-cyan-300' : 'text-gray-400'}`}>{trait2}</div>
@@ -41,7 +45,7 @@ export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value,
       
       {/* New Visual Selection System (No Numbers) */}
       <div className="relative mb-6">
-        <p className="text-center text-gray-500 text-sm mb-4 font-bold uppercase tracking-widest">בחר את הנקודה המשקפת את הנטייה שלך</p>
+        <p className="text-center text-gray-500 text-sm mb-4 font-bold uppercase tracking-widest">{t('questionnaire', 'selectHint')}</p>
         
         <div className="flex justify-between items-center gap-2 sm:gap-4 relative px-2">
             {/* Background Line */}
@@ -71,19 +75,19 @@ export const QuestionSlider: React.FC<QuestionSliderProps> = ({ question, value,
       
       {/* Range Labels */}
       <div className="flex justify-between px-4 text-[10px] sm:text-xs font-bold text-gray-500 uppercase">
-          <span>מאוד {trait1}</span>
+          <span>{t('questionnaire', 'veryPrefix')} {trait1}</span>
           <span className="text-gray-700">|</span>
-          <span>מאוד {trait2}</span>
+          <span>{t('questionnaire', 'veryPrefix')} {trait2}</span>
       </div>
 
       <div className="text-center h-12 flex items-center justify-center mt-10">
         {!isUnanswered ? (
             <div className="animate-fade-in bg-cyan-900/30 px-8 py-3 rounded-full border border-cyan-500/30 text-cyan-300 font-bold text-lg shadow-inner">
-                {value <= 3 ? `נוטה יותר ל"${trait1}"` : `נוטה יותר ל"${trait2}"`}
+                {t('questionnaire', 'leansMoreTowards')} "{value <= 3 ? trait1 : trait2}"
             </div>
         ) : (
             <div className="text-gray-400 text-base animate-bounce font-medium bg-gray-800/50 px-6 py-2 rounded-full">
-                לחץ על העיגול שהכי מתאים לך בשורה
+                {t('questionnaire', 'clickHint')}
             </div>
         )}
       </div>

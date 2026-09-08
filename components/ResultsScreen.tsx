@@ -6,6 +6,8 @@ import { CombinedAnalysis } from './CombinedAnalysis';
 import { generateProfileAnalysis } from '../services/analysisService';
 import { AiCoach } from './AiCoach';
 import { CaseStudiesSimulator } from './CaseStudiesSimulator';
+import { useT } from '../i18n/useT';
+import { useLanguage } from '../i18n/LanguageContext';
 
 declare global {
   interface Window {
@@ -24,17 +26,19 @@ interface ResultsScreenProps {
 
 type TabId = 'profile' | 'coach' | 'simulator';
 
-const TABS: { id: TabId; label: string; emoji: string }[] = [
-  { id: 'profile', label: 'הפרופיל שלי', emoji: '🗺️' },
-  { id: 'coach', label: 'מאמן AI', emoji: '🤖' },
-  { id: 'simulator', label: 'סימולטור שיחות', emoji: '🎭' },
-];
-
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, backgroundData, onReset, onEdit, onLogout }) => {
-  const profileAnalysis = useMemo(() => generateProfileAnalysis(scores), [scores]);
+  const { t } = useT();
+  const { lang, dir } = useLanguage();
+  const profileAnalysis = useMemo(() => generateProfileAnalysis(scores, lang), [scores, lang]);
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
+
+  const TABS: { id: TabId; label: string; emoji: string }[] = [
+    { id: 'profile', label: t('resultsChrome', 'tabProfile'), emoji: '🗺️' },
+    { id: 'coach', label: t('resultsChrome', 'tabCoach'), emoji: '🤖' },
+    { id: 'simulator', label: t('resultsChrome', 'tabSimulator'), emoji: '🎭' },
+  ];
 
   const isManager = backgroundData?.isManager === 'yes';
 
@@ -82,14 +86,14 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
       pdf.save(`Communication_Profile_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
-      alert("חלה שגיאה ביצירת ה-PDF.");
+      alert(t('resultsChrome', 'pdfError'));
       if (input) input.classList.remove('pdf-export-mode');
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
-  const managerTag = isManager ? '#מנהיגות_וניהול' : '#תקשורת_עמיתים';
+  const managerTag = isManager ? t('resultsChrome', 'tagLeadership') : t('resultsChrome', 'tagPeerComm');
 
   const tabVariants = {
     hidden: { opacity: 0, x: 20 },
@@ -103,7 +107,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
       className="w-full max-w-5xl mx-auto px-2 sm:px-4 pb-24"
-      dir="rtl"
+      dir={dir}
     >
       {/* ─── Sticky Tab Bar ─── */}
       <div className="sticky top-0 z-40 pt-2 pb-3 bg-gradient-to-b from-slate-900/95 to-transparent backdrop-blur-md">
@@ -132,40 +136,40 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
         {activeTab === 'profile' && (
           <motion.div key="profile" variants={tabVariants} initial="hidden" animate="visible" exit="exit" className="space-y-6 mt-4">
             {/* PDF Wrapper */}
-            <div ref={resultsRef} className="bg-glass-dark backdrop-blur-2xl p-6 sm:p-10 rounded-[2rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-glass-border overflow-hidden text-right relative">
+            <div ref={resultsRef} className={`bg-glass-dark backdrop-blur-2xl p-6 sm:p-10 rounded-[2rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-glass-border overflow-hidden ${dir === 'rtl' ? 'text-right' : 'text-left'} relative`}>
               <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] -mr-32 -mt-32 pointer-events-none"></div>
               <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px] -ml-32 -mb-32 pointer-events-none"></div>
 
               <div className="border-b border-glass-border pb-8 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
-                <div className="text-right flex-1">
-                  <h1 className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300 mb-3 drop-shadow-sm">דו"ח סגנון תקשורת</h1>
-                  <p className="text-cyan-400 font-bold uppercase tracking-[0.2em]">ניתוח מקצועי מבוסס מודל הצבעים</p>
+                <div className={`${dir === 'rtl' ? 'text-right' : 'text-left'} flex-1`}>
+                  <h1 className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300 mb-3 drop-shadow-sm">{t('resultsChrome', 'reportTitle')}</h1>
+                  <p className="text-cyan-400 font-bold uppercase tracking-[0.2em]">{t('resultsChrome', 'reportSubtitle')}</p>
                   {backgroundData?.isManager === 'yes' && (
-                    <span className="mt-2 inline-block text-xs bg-amber-500/20 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-full font-semibold">👔 מנהל/ת</span>
+                    <span className="mt-2 inline-block text-xs bg-amber-500/20 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-full font-semibold">{t('resultsChrome', 'managerBadge')}</span>
                   )}
                 </div>
                 <div className="bg-glass-light p-5 rounded-2xl border border-glass-border text-center min-w-[180px] backdrop-blur-md">
-                  <div className="text-gray-400 text-xs font-bold uppercase mb-1 tracking-widest">תאריך הנפקה</div>
-                  <div className="text-white font-mono text-lg">{new Date().toLocaleDateString('he-IL')}</div>
+                  <div className="text-gray-400 text-xs font-bold uppercase mb-1 tracking-widest">{t('resultsChrome', 'issueDate')}</div>
+                  <div className="text-white font-mono text-lg">{new Date().toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US')}</div>
                 </div>
               </div>
 
               {/* Quick orientation — a short intro before the detailed map & analysis below */}
               <div className="bg-gradient-to-br from-slate-800/40 to-cyan-900/20 p-8 rounded-[2rem] border border-dashed border-cyan-500/30 relative overflow-hidden z-10 shadow-lg backdrop-blur-sm mb-8">
                 <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-3">
-                  <span className="text-cyan-400 text-2xl">📌</span> לפני שנצלול לפרטים — התמונה בקצרה
+                  <span className="text-cyan-400 text-2xl">📌</span> {t('resultsChrome', 'quickSummaryTitle')}
                 </h3>
-                <p className="text-xs text-gray-400 mb-4">הקשר כללי לניתוח המפורט שמופיע מטה</p>
+                <p className="text-xs text-gray-400 mb-4">{t('resultsChrome', 'quickSummarySubtitle')}</p>
                 <ul className="space-y-2.5 text-gray-300 leading-relaxed">
-                  <li className="flex gap-2"><span className="text-white font-bold">חוזקה מרכזית:</span><span>{profileAnalysis.quickStrength}</span></li>
-                  <li className="flex gap-2"><span className="text-white font-bold">אזור לפיתוח:</span><span>{profileAnalysis.quickWeakness}</span></li>
-                  <li className="flex gap-2"><span className="text-white font-bold">המלצה מרכזית:</span><span>{profileAnalysis.quickRecommendation}</span></li>
+                  <li className="flex gap-2"><span className="text-white font-bold">{t('resultsChrome', 'quickStrengthLabel')}</span><span>{profileAnalysis.quickStrength}</span></li>
+                  <li className="flex gap-2"><span className="text-white font-bold">{t('resultsChrome', 'quickWeaknessLabel')}</span><span>{profileAnalysis.quickWeakness}</span></li>
+                  <li className="flex gap-2"><span className="text-white font-bold">{t('resultsChrome', 'quickRecommendationLabel')}</span><span>{profileAnalysis.quickRecommendation}</span></li>
                 </ul>
                 <div className="mt-6 flex gap-3 flex-wrap">
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מפה_משולבת</span>
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#מודעות_עצמית</span>
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{t('resultsChrome', 'tagCombinedMap')}</span>
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{t('resultsChrome', 'tagSelfAwareness')}</span>
                   <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{managerTag}</span>
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">#תקשורת_אפקטיבית</span>
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{t('resultsChrome', 'tagEffectiveComm')}</span>
                 </div>
               </div>
 
@@ -191,12 +195,12 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 {isGeneratingPdf ? (
                   <span className="flex items-center gap-3">
                     <span className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin"></span>
-                    מפיק דו"ח...
+                    {t('resultsChrome', 'generatingPdf')}
                   </span>
                 ) : (
                   <>
                     <span className="text-2xl">📥</span>
-                    <span>הורד דו"ח PDF</span>
+                    <span>{t('resultsChrome', 'downloadPdf')}</span>
                   </>
                 )}
               </motion.button>
@@ -207,14 +211,14 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                   onClick={onEdit}
                   className="bg-glass-light hover:bg-glass-dark text-white font-bold py-3 px-6 rounded-2xl transition-all border border-glass-border text-base shadow-lg backdrop-blur-sm"
                 >
-                  עריכת תשובות
+                  {t('resultsChrome', 'editAnswers')}
                 </motion.button>
                 <motion.button
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                   onClick={onReset}
                   className="bg-red-900/10 hover:bg-red-900/30 text-red-500 font-bold py-3 px-6 rounded-2xl transition-all border border-red-900/30 text-base shadow-lg backdrop-blur-sm"
                 >
-                  איפוס
+                  {t('resultsChrome', 'resetButton')}
                 </motion.button>
               </div>
             </div>
@@ -222,7 +226,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
             {onLogout && (
               <div className="pt-4 pb-2 text-center">
                 <button onClick={onLogout} className="text-gray-500 hover:text-white underline text-sm tracking-[0.2em] font-medium uppercase transition-colors">
-                  Log Out / End Session
+                  {t('resultsChrome', 'logOutEndSession')}
                 </button>
               </div>
             )}

@@ -1,8 +1,10 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { QUESTION_PAIRS } from '../constants/questionnaireData';
+import { QUESTION_PAIRS_I18N } from '../constants/questionnaireData';
 import { QuestionSlider } from './QuestionSlider';
 import { ArrowLeftIcon, ArrowRightIcon } from './icons/Icons';
+import { useT } from '../i18n/useT';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface QuestionnaireScreenProps {
   answers: Record<string, number>;
@@ -33,9 +35,17 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
   currentQuestionIndex,
   setCurrentQuestionIndex
 }) => {
+  const { t } = useT();
+  const { lang, dir } = useLanguage();
 
-  const totalQuestions = QUESTION_PAIRS.length;
-  const currentQuestion = QUESTION_PAIRS[currentQuestionIndex];
+  const totalQuestions = QUESTION_PAIRS_I18N.length;
+  const currentQuestionBilingual = QUESTION_PAIRS_I18N[currentQuestionIndex];
+  const currentQuestion = {
+    id: currentQuestionBilingual.id,
+    pair: currentQuestionBilingual.pair[lang],
+    descriptions: currentQuestionBilingual.descriptions[lang],
+    columns: currentQuestionBilingual.columns
+  };
   
   // Check if current question has a valid answer
   const isAnswered = answers[currentQuestion.id] !== undefined && answers[currentQuestion.id] > 0;
@@ -67,17 +77,25 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
     }
   };
 
+  // In RTL, "previous" points right and "next" points left (reading flows right-to-left).
+  // In LTR, that's reversed.
+  const PrevIcon = dir === 'rtl' ? ArrowRightIcon : ArrowLeftIcon;
+  const NextIcon = dir === 'rtl' ? ArrowLeftIcon : ArrowRightIcon;
+
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
       className="bg-glass-dark p-8 md:p-12 lg:p-16 rounded-[2.5rem] shadow-2xl max-w-5xl mx-auto border border-glass-border backdrop-blur-xl relative overflow-hidden"
+      dir={dir}
     >
       <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none"></div>
       
       <div className="text-center mb-8 relative z-10">
-        <p className="text-lg text-cyan-400 tracking-widest font-bold uppercase">שאלה {currentQuestionIndex + 1} מתוך {totalQuestions}</p>
+        <p className="text-lg text-cyan-400 tracking-widest font-bold uppercase">
+          {t('questionnaire', 'questionOf', { current: currentQuestionIndex + 1, total: totalQuestions })}
+        </p>
         <ProgressBar current={currentQuestionIndex + 1} total={totalQuestions} />
       </div>
 
@@ -105,8 +123,8 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
           disabled={currentQuestionIndex === 0}
           className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold py-3 px-6 rounded-full transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed text-lg"
         >
-          <ArrowRightIcon className="w-6 h-6" />
-          <span>הקודם</span>
+          <PrevIcon className="w-6 h-6" />
+          <span>{t('common', 'previous')}</span>
         </button>
         
         <div className="flex flex-col items-center">
@@ -119,11 +137,11 @@ export const QuestionnaireScreen: React.FC<QuestionnaireScreenProps> = ({
                   : 'bg-gray-600 text-gray-400 opacity-50 cursor-not-allowed'
               }`}
             >
-              <span>{currentQuestionIndex === totalQuestions - 1 ? 'צפה בתוצאות' : 'הבא'}</span>
-              <ArrowLeftIcon className="w-6 h-6" />
+              <span>{currentQuestionIndex === totalQuestions - 1 ? t('questionnaire', 'viewResults') : t('common', 'next')}</span>
+              <NextIcon className="w-6 h-6" />
             </button>
             {!isAnswered && (
-                <span className="text-red-400 text-sm mt-2 font-medium animate-pulse">נא לבחור תשובה כדי להמשיך</span>
+                <span className="text-red-400 text-sm mt-2 font-medium animate-pulse">{t('questionnaire', 'answerToContinue')}</span>
             )}
         </div>
       </div>

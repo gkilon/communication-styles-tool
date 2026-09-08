@@ -161,6 +161,11 @@ const RESPONSE_STYLE_GUIDELINES = `הנחיות סגנון קריטיות לתש
 - אל תחזור שוב ושוב על שמות הצבעים כמסגרת לכל משפט ("בתור אדום...", "מכיוון שאתה כחול..."). דבר על ההתנהגות והתכונה עצמה ("הנטייה הטבעית שלך להיות ישיר ותכליתי") — שם הצבע יכול להופיע לכל היותר פעם אחת, בקצרה, כהערת אגב.
 - לעולם אל תייעץ למשתמש "להפוך" לצבע אחר או להעמיד פנים שהוא סגנון שאינו שלו (למשל לא "תתנהג כמו ירוק"). המטרה היא מודעות עצמית ושימוש בחוזקה של הסגנון שלו-עצמו כדי לסגור את הפער — למשל אם הוא כחול ומתקשה בהקשבה, ההמלצה היא לבנות שגרת עבודה מובנית ומתוכננת (בדיוק בסגנון הכחול המדויק) שמקצה זמן ומרחב מכוון להקשבה, לא "לזייף" חום ירוק שאינו טבעי לו.`;
 
+const getLangInstruction = (lang: 'he' | 'en' = 'he') =>
+  lang === 'en'
+    ? '\n\nCRITICAL: Respond ENTIRELY in fluent, professional English — regardless of the language of any context provided above. Do not mix in Hebrew.'
+    : '';
+
 const SAFETY_SETTINGS = [
   { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
   { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -194,7 +199,7 @@ function buildBackgroundContext(bg?: BackgroundData | null): string {
   return parts.length > 0 ? `\n\nמידע רקע על המשתמש/ת (השתמש בו לכל אורך השיחה):\n${parts.join('\n')}` : '';
 }
 
-export const getAiCoachAdvice = async (scores: Scores, userInput: string, backgroundData?: BackgroundData | null): Promise<string> => {
+export const getAiCoachAdvice = async (scores: Scores, userInput: string, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
     const bgContext = buildBackgroundContext(backgroundData);
@@ -213,7 +218,7 @@ ${COLOR_TRAITS}
 5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון.
 6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.
 
-${RESPONSE_STYLE_GUIDELINES}`;
+${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-3.6-flash",
@@ -233,7 +238,7 @@ ${RESPONSE_STYLE_GUIDELINES}`;
   }
 };
 
-export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null): Promise<string> => {
+export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
   const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
@@ -251,7 +256,7 @@ ${COLOR_TRAITS}
 5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון.
 6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.
 
-${RESPONSE_STYLE_GUIDELINES}`;
+${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
   return callGeminiApiStream('generateContent', {
     model: "gemini-3.6-flash",
@@ -264,7 +269,7 @@ ${RESPONSE_STYLE_GUIDELINES}`;
   }, onChunk);
 };
 
-export const getTeamAiAdvice = async (users: UserProfile[], challenge: string): Promise<string> => {
+export const getTeamAiAdvice = async (users: UserProfile[], challenge: string, lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     if (!challenge.trim()) return "נא להזין אתגר לניתוח.";
     const validUsers = users.filter(u => u.scores);
@@ -318,7 +323,7 @@ ${missingStr}
 3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות.
 
 ${RESPONSE_STYLE_GUIDELINES}
-(הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)`;
+(הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)${getLangInstruction(lang)}`;
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-3.6-flash",
@@ -338,7 +343,7 @@ ${RESPONSE_STYLE_GUIDELINES}
   }
 };
 
-export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: string, onChunk: (chunk: string) => void): Promise<string> => {
+export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: string, onChunk: (chunk: string) => void, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const validUsers = users.filter(u => u.scores);
   const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
   validUsers.forEach(u => {
@@ -388,7 +393,7 @@ ${missingStr}
 3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות.
 
 ${RESPONSE_STYLE_GUIDELINES}
-(הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)`;
+(הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)${getLangInstruction(lang)}`;
 
   return callGeminiApiStream('generateContent', {
     model: "gemini-3.6-flash",
@@ -507,7 +512,7 @@ function getFewShotExamples(color: string, relationship: string): string {
 /**
  * מנהל את יצירת הדיאלוג בזמן אמת - משודרג למניעת רובוטיות ופשטנות יתר.
  */
-export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], userInput: string): Promise<string> => {
+export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], userInput: string, lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
 
@@ -567,7 +572,7 @@ ${positionContext[relationship] || ''}
 2. תגובות קצרות וטבעיות של אדם עסוק: משפט אחד, מקסימום שניים בכל פעם. בדיוק כמו בשיחה משרדית אמיתית או בצ'אט ארגוני (Slack/Teams).
 3. הקשבה אקטיבית ודינמית: אם המשתמש מציב לך גבול, נפגע, מתעצבן, מציע פתרון טוב או מקלל (למשל "חתיכת אפס") - הגב לזה בצורה אנושית והגיונית! אל תתעלם ואל תמשיך "לנגן את הטקסט הקבוע שלך". אם הוא מקלל או מתפטר, הגב בהפתעה, באכזבה או בשוק מקצועי מציאותי.
 4. אל תהיה קריקטורה קיצונית של הצבע. אתה קודם כל בן אדם מקצועי שעובד בארגון, ורק אז יש לך את הנטייה הסגנונית של הצבע שלך.
-5. לעולם אל תצא מהדמות. אל תכתוב הקדמות, הסברים או סוגריים. החזר אך ורק את התגובה הישירה של הדמות.`;
+5. לעולם אל תצא מהדמות. אל תכתוב הקדמות, הסברים או סוגריים. החזר אך ורק את התגובה הישירה של הדמות.${getLangInstruction(lang)}`;
 
     const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'אתה'}: ${m.text}`).join('\n\n');
     const prompt = `היסטוריית השיחה העדכנית:\n${conversationLog}\n\nהמשתמש אומר עכשיו:\n${userInput}\n\nהגב מתוך הדמות בצורה אנושית ומציאותית (משפט-שניים):`;
@@ -593,7 +598,7 @@ ${positionContext[relationship] || ''}
 /**
  * מנגנון המשוב המעמיק - מנתח דינמיקה, סבטקסט והתמודדות עם התנגדויות גלויות וסמויות.
  */
-export const getSimulationFeedback = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[]): Promise<string> => {
+export const getSimulationFeedback = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
     const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'הקולגה (צבע ' + targetColor + ')'}: ${m.text}`).join('\n\n');
@@ -643,7 +648,7 @@ ${targetRules}
 ### 🚀 אסטרטגיה מנצחת וטיפ זהב לפעם הבאה
 [המלצה קונקרטית, עמוקה ומעשית שמורכבת משני חלקים: 
 1. שינוי תפיסתי: איך המשתמש צריך לגשת מנטלית לסיטואציה כזו בפעם הבאה בהתאם לצבעים שלו.
-2. תכלס: שכתוב מחדש של אחד המשפטים הפחות טובים מהשיחה למשפט מנצח באותו הקשר שמנטרל את ההתנגדות בצורה נכונה].`;
+2. תכלס: שכתוב מחדש של אחד המשפטים הפחות טובים מהשיחה למשפט מנצח באותו הקשר שמנטרל את ההתנגדות בצורה נכונה].${getLangInstruction(lang)}`;
 
     const response = await callGeminiApi('generateContent', {
       model: "gemini-3.6-flash",
@@ -768,59 +773,7 @@ CRITICAL TRANSLATION RULES:
   }
 }
 
-export async function translateAnalysisToEnglish(analysis: {
-  general: string;
-  strengths: string;
-  weaknesses: string;
-  recommendations: string;
-}): Promise<{
-  general: string;
-  strengths: string;
-  weaknesses: string;
-  recommendations: string;
-}> {
-  try {
-    const prompt = `Translate each section of the following Communication Style profile analysis from Hebrew into professional, polished executive English.
-
-Input JSON:
-${JSON.stringify(analysis, null, 2)}
-
-Return strictly a JSON object with the exact same keys ("general", "strengths", "weaknesses", "recommendations") containing the English translations.`;
-
-    const response = await callGeminiApi('generateContent', {
-      model: "gemini-3.6-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: `You are an expert executive coach and English translator. Translate Hebrew personality/communication profile analysis into polished English. Preserve all line breaks and markdown formatting inside each field. Output valid JSON with keys: general, strengths, weaknesses, recommendations.`,
-        temperature: 0.2,
-        responseMimeType: "application/json",
-        safetySettings: SAFETY_SETTINGS
-      }
-    });
-
-    const data = await response.json();
-    const rawText = data.text || '';
-    const parsed = typeof rawText === 'string' ? JSON.parse(rawText.replace(/```json\n?|```/g, '').trim()) : rawText;
-
-    return {
-      general: parsed.general || analysis.general,
-      strengths: parsed.strengths || analysis.strengths,
-      weaknesses: parsed.weaknesses || analysis.weaknesses,
-      recommendations: parsed.recommendations || analysis.recommendations,
-    };
-  } catch (err) {
-    console.warn("Structured translation fallback:", err);
-    const [general, strengths, weaknesses, recommendations] = await Promise.all([
-      translateText(analysis.general, 'English'),
-      translateText(analysis.strengths, 'English'),
-      translateText(analysis.weaknesses, 'English'),
-      translateText(analysis.recommendations, 'English')
-    ]);
-    return { general, strengths, weaknesses, recommendations };
-  }
-}
-
-export const getStuckManagerAdviceStream = async (scores: Scores, situation: string, onChunk: (chunk: string) => void): Promise<string> => {
+export const getStuckManagerAdviceStream = async (scores: Scores, situation: string, onChunk: (chunk: string) => void, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
 
   const systemInstruction = `אתה יועץ מנהיגות ופסיכולוג ארגוני בכיר מבית Kilon Consulting.
@@ -840,7 +793,7 @@ ${colorProfile}
 2. פעולה מיידית לוויסות רגשי/פיזיולוגי המתאימה לפרופיל שלו.
 3. 3 המלצות "תכלס" לפעולה מיידית כדי לחלץ אותו מהמצב.
 
-${RESPONSE_STYLE_GUIDELINES}`;
+${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
   return callGeminiApiStream('generateContent', {
     model: "gemini-3.6-flash",

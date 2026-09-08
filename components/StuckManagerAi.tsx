@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores } from '../types';
-import { getStuckManagerAdviceStream, translateText } from '../services/geminiService';
-import { LightbulbIcon } from './icons/Icons'; // Using an existing or standard icon, assuming LightbulbIcon or something similar. Let's use a standard SVG inline if not. Wait, I'll use an inline SVG for safety or check if Icons has it. Let's use an inline SVG.
+import { getStuckManagerAdviceStream } from '../services/geminiService';
+import { useT } from '../i18n/useT';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface StuckManagerAiProps {
   scores: Scores;
@@ -12,118 +13,61 @@ interface Message {
   text: string;
 }
 
-const PRESET_QUESTIONS = [
+const PRESET_QUESTIONS_HE = [
   "אני רותח מזעם עכשיו ועומד להתפוצץ בשיחה.",
   "אני קופא מול התנגדות של העובד ולא מוצא מילים.",
   "אני מוצף בפרטים ומרגיש שאני מאבד שליטה ומתפזר.",
   "אני בורח מהחלטה קשה כי אני מפחד לטעות."
 ];
 
-const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
-  const [currentText, setCurrentText] = useState(text);
-  const [currentLang, setCurrentLang] = useState<'HE' | 'EN'>('HE');
-  const [translations, setTranslations] = useState<{ HE: string; EN?: string }>({ HE: text });
-  const [isLoading, setIsLoading] = useState(false);
-  const [htmlContent, setHtmlContent] = useState('');
+const PRESET_QUESTIONS_EN = [
+  "I'm boiling with anger right now and about to blow up in a conversation.",
+  "I freeze up against an employee's pushback and can't find the words.",
+  "I'm overloaded with details and feel like I'm losing control and scattering.",
+  "I'm avoiding a hard decision because I'm afraid of getting it wrong."
+];
 
-  useEffect(() => {
-    if (text !== translations.HE) {
-      setTranslations({ HE: text });
-      setCurrentText(text);
-      setCurrentLang('HE');
-    }
-  }, [text]);
+const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
+  const { dir } = useLanguage();
+  const [htmlContent, setHtmlContent] = useState('');
 
   useEffect(() => {
     const renderMarkdown = () => {
       const marked = (window as any).marked;
       try {
         if (marked) {
-          const parsed = typeof marked.parse === 'function' ? marked.parse(currentText) : (typeof marked === 'function' ? marked(currentText) : currentText);
+          const parsed = typeof marked.parse === 'function' ? marked.parse(text) : (typeof marked === 'function' ? marked(text) : text);
           setHtmlContent(parsed);
         } else {
-          setHtmlContent(currentText.replace(/\n/g, '<br />'));
+          setHtmlContent(text.replace(/\n/g, '<br />'));
         }
       } catch (error) {
-        setHtmlContent(currentText.replace(/\n/g, '<br />'));
+        setHtmlContent(text.replace(/\n/g, '<br />'));
       }
     };
     renderMarkdown();
-  }, [currentText]);
-
-  const handleTranslate = async (lang: 'HE' | 'EN') => {
-    if (lang === currentLang) return;
-    if (lang === 'EN' && !translations.EN) {
-      setIsLoading(true);
-      try {
-        const translated = await translateText(text, 'English');
-        setTranslations(prev => ({ ...prev, EN: translated }));
-        setCurrentText(translated);
-        setCurrentLang('EN');
-      } catch (error) {
-        console.error("Translation fail:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
-      setCurrentText(translations[lang] || text);
-      setCurrentLang(lang);
-    }
-  };
-
-  const isRtl = currentLang === 'HE';
+  }, [text]);
 
   if (!text) return null;
 
   return (
-    <div className="space-y-4">
-      <div
-        className={`prose prose-invert max-w-none prose-p:text-gray-200 prose-p:leading-relaxed prose-ul:text-gray-200 prose-li:text-gray-200 ${isRtl ? 'dir-rtl text-right' : 'dir-ltr text-left'}`}
-        style={{ direction: isRtl ? 'rtl' : 'ltr' }}
-        dangerouslySetInnerHTML={{ __html: htmlContent }}
-      />
-      
-      <div className={`flex items-center gap-1.5 pt-3 border-t border-white/10 no-print ${isRtl ? 'justify-end' : 'justify-start'}`}>
-        <span className="text-[10px] text-gray-400 ml-1">שפה / Lang:</span>
-        <button
-          onClick={() => handleTranslate('HE')}
-          disabled={isLoading}
-          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center justify-center ${
-            currentLang === 'HE' 
-              ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40 shadow-sm' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
-          }`}
-        >
-          עברית
-        </button>
-        <button
-          onClick={() => handleTranslate('EN')}
-          disabled={isLoading}
-          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center justify-center gap-1 ${
-            currentLang === 'EN' 
-              ? 'bg-orange-500/20 text-orange-300 border border-orange-500/40 shadow-sm' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
-          }`}
-        >
-          {isLoading ? (
-            <>
-              <div className="w-2.5 h-2.5 border border-white/30 border-t-white rounded-full animate-spin"></div>
-              <span>תרגום...</span>
-            </>
-          ) : (
-            <span>English</span>
-          )}
-        </button>
-      </div>
-    </div>
+    <div
+      className={`prose prose-invert max-w-none prose-p:text-gray-200 prose-p:leading-relaxed prose-ul:text-gray-200 prose-li:text-gray-200 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
+      dir={dir}
+      dangerouslySetInnerHTML={{ __html: htmlContent }}
+    />
   );
 };
 
 export const StuckManagerAi: React.FC<StuckManagerAiProps> = ({ scores }) => {
+  const { t } = useT();
+  const { lang, dir } = useLanguage();
   const [userInput, setUserInput] = useState('');
   const [conversation, setConversation] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const PRESET_QUESTIONS = lang === 'en' ? PRESET_QUESTIONS_EN : PRESET_QUESTIONS_HE;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -152,14 +96,16 @@ export const StuckManagerAi: React.FC<StuckManagerAiProps> = ({ scores }) => {
             }
             return next;
         });
-      });
+      }, lang);
     } catch (error: any) {
       console.error("Stuck Manager AI interaction failed:", error);
       setConversation(prev => {
         const next = [...prev];
         const last = next[next.length - 1];
         if (last && last.sender === 'ai' && !last.text) {
-            last.text = error?.message || "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב.";
+            last.text = error?.message || (lang === 'en'
+              ? "Sorry, there was an error connecting to the AI service. Please check your internet connection and try again."
+              : "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב.");
         }
         return next;
       });
@@ -169,7 +115,7 @@ export const StuckManagerAi: React.FC<StuckManagerAiProps> = ({ scores }) => {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" dir={dir}>
       <div className="flex items-center gap-3 mb-6">
         <div className="bg-orange-500/20 p-2 rounded-xl">
           <svg className="w-8 h-8 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -177,8 +123,8 @@ export const StuckManagerAi: React.FC<StuckManagerAiProps> = ({ scores }) => {
           </svg>
         </div>
         <div>
-          <h3 className="text-2xl font-bold text-white">נתקעתי - חילוץ מ'מחטף אמיגדלה'</h3>
-          <p className="text-gray-400 text-sm font-medium">כפתור מצוקה למצבי הצפה: תאר מה עובר עליך, ואעזור לך לווסת חזרה לשליטה לפי הצבע שלך</p>
+          <h3 className="text-2xl font-bold text-white">{t('stuckManager', 'title')}</h3>
+          <p className="text-gray-400 text-sm font-medium">{t('stuckManager', 'subtitle')}</p>
         </div>
       </div>
       
@@ -189,13 +135,13 @@ export const StuckManagerAi: React.FC<StuckManagerAiProps> = ({ scores }) => {
         {conversation.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
             <div className="bg-gray-800/50 p-6 rounded-2xl border border-dashed border-gray-700">
-                <p className="text-gray-400 mb-4 font-medium italic">"שלום. אני כאן כדי לעזור לך כשאתה מרגיש מוצף, כועס, קופא או מאבד שליטה (Amygdala Hijack). מה קורה לך עכשיו?"</p>
+                <p className="text-gray-400 mb-4 font-medium italic">{t('stuckManager', 'greeting')}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {PRESET_QUESTIONS.map((q, i) => (
                     <button 
                       key={i} 
                       onClick={() => handleSendMessage(q)} 
-                      className="text-right text-sm bg-gray-800 hover:bg-gray-700 hover:text-orange-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm"
+                      className={`${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm bg-gray-800 hover:bg-gray-700 hover:text-orange-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm`}
                     >
                       {q}
                     </button>
@@ -231,7 +177,7 @@ export const StuckManagerAi: React.FC<StuckManagerAiProps> = ({ scores }) => {
                     <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                     <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                     <div className="w-2 h-2 bg-orange-400 rounded-full animate-bounce"></div>
-                    <span className="text-xs text-gray-500 mr-2 font-bold uppercase tracking-wider">מנתח סיטואציה...</span>
+                    <span className="text-xs text-gray-500 mr-2 font-bold uppercase tracking-wider">{t('stuckManager', 'analyzing')}</span>
                 </div>
               </div>
             </div>
@@ -245,16 +191,16 @@ export const StuckManagerAi: React.FC<StuckManagerAiProps> = ({ scores }) => {
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          placeholder="תאר מה אתה מרגיש עכשיו..."
-          className="w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 pr-5 pl-20 text-white placeholder-gray-500 focus:outline-none focus:border-orange-500 transition-all shadow-lg"
+          placeholder={t('stuckManager', 'inputPlaceholder')}
+          className={`w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 ${dir === 'rtl' ? 'pr-5 pl-20' : 'pl-5 pr-20'} text-white placeholder-gray-500 focus:outline-none focus:border-orange-500 transition-all shadow-lg`}
           disabled={isLoading}
         />
         <button
           onClick={() => handleSendMessage()}
           disabled={isLoading || !userInput.trim()}
-          className="absolute left-2 top-2 bottom-2 bg-orange-600 hover:bg-orange-500 text-white font-bold px-6 rounded-xl transition-all disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md"
+          className={`absolute ${dir === 'rtl' ? 'left-2' : 'right-2'} top-2 bottom-2 bg-orange-600 hover:bg-orange-500 text-white font-bold px-6 rounded-xl transition-all disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md`}
         >
-          {isLoading ? '...' : 'שלח'}
+          {isLoading ? '...' : t('common', 'send')}
         </button>
       </div>
     </div>

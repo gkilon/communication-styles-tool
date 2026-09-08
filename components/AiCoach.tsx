@@ -1,7 +1,10 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores, BackgroundData } from '../types';
-import { getAiCoachAdviceStream, translateText } from '../services/geminiService';
+import { getAiCoachAdviceStream } from '../services/geminiService';
 import { SparklesIcon } from './icons/Icons';
+import { useT } from '../i18n/useT';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface AiCoachProps {
   scores: Scores;
@@ -13,7 +16,7 @@ interface Message {
   text: string;
 }
 
-const PRESET_QUESTIONS = [
+const PRESET_QUESTIONS_HE = [
   "איך אוכל למנף את הפרופיל שלי כדי להתקדם ולהשפיע בארגון?",
   "איך רצוי שאתקשר עם מנהל או קולגה בעל סגנון הפוך משלי?",
   "איך להציג רעיונות ויוזמות כדי לרתום את ההנהלה והצוות?",
@@ -21,112 +24,55 @@ const PRESET_QUESTIONS = [
   "איך לנהל שיחות משוב וקונפליקטים מורכבים לפי הפרופיל שלי?"
 ];
 
+const PRESET_QUESTIONS_EN = [
+  "How can I leverage my profile to advance and influence within the organization?",
+  "How should I communicate with a manager or colleague whose style is the opposite of mine?",
+  "How do I present ideas and initiatives to win over leadership and the team?",
+  "What are my blind spots, and how do I avoid them under pressure?",
+  "How do I handle feedback conversations and complex conflicts given my profile?"
+];
 
 const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
-  const [currentText, setCurrentText] = useState(text);
-  const [currentLang, setCurrentLang] = useState<'HE' | 'EN'>('HE');
-  const [translations, setTranslations] = useState<{ HE: string; EN?: string }>({ HE: text });
-  const [isLoading, setIsLoading] = useState(false);
+  const { dir } = useLanguage();
   const [htmlContent, setHtmlContent] = useState('');
-
-  useEffect(() => {
-    if (text !== translations.HE) {
-      setTranslations({ HE: text });
-      setCurrentText(text);
-      setCurrentLang('HE');
-    }
-  }, [text]);
 
   useEffect(() => {
     const renderMarkdown = () => {
       const marked = (window as any).marked;
       try {
         if (marked) {
-          const parsed = typeof marked.parse === 'function' ? marked.parse(currentText) : (typeof marked === 'function' ? marked(currentText) : currentText);
+          const parsed = typeof marked.parse === 'function' ? marked.parse(text) : (typeof marked === 'function' ? marked(text) : text);
           setHtmlContent(parsed);
         } else {
-          setHtmlContent(currentText.replace(/\n/g, '<br />'));
+          setHtmlContent(text.replace(/\n/g, '<br />'));
         }
       } catch (error) {
-        setHtmlContent(currentText.replace(/\n/g, '<br />'));
+        setHtmlContent(text.replace(/\n/g, '<br />'));
       }
     };
     renderMarkdown();
-  }, [currentText]);
-
-  const handleTranslate = async (lang: 'HE' | 'EN') => {
-    if (lang === currentLang) return;
-    if (lang === 'EN' && !translations.EN) {
-      setIsLoading(true);
-      try {
-        const translated = await translateText(text, 'English');
-        setTranslations(prev => ({ ...prev, EN: translated }));
-        setCurrentText(translated);
-        setCurrentLang('EN');
-      } catch (error) {
-        console.error("Translation fail:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
-      setCurrentText(translations[lang] || text);
-      setCurrentLang(lang);
-    }
-  };
-
-  const isRtl = currentLang === 'HE';
+  }, [text]);
 
   if (!text) return null;
 
   return (
-    <div className="space-y-4">
-      <div
-        className={`prose prose-invert max-w-none prose-p:text-gray-200 prose-p:leading-relaxed prose-ul:text-gray-200 prose-li:text-gray-200 ${isRtl ? 'dir-rtl text-right' : 'dir-ltr text-left'}`}
-        style={{ direction: isRtl ? 'rtl' : 'ltr' }}
-        dangerouslySetInnerHTML={{ __html: htmlContent }}
-      />
-      
-      <div className={`flex items-center gap-1.5 pt-3 border-t border-white/10 no-print ${isRtl ? 'justify-end' : 'justify-start'}`}>
-        <span className="text-[10px] text-gray-400 ml-1">שפה / Lang:</span>
-        <button
-          onClick={() => handleTranslate('HE')}
-          disabled={isLoading}
-          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center justify-center ${
-            currentLang === 'HE' 
-              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
-          }`}
-        >
-          עברית
-        </button>
-        <button
-          onClick={() => handleTranslate('EN')}
-          disabled={isLoading}
-          className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all flex items-center justify-center gap-1 ${
-            currentLang === 'EN' 
-              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm' 
-              : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
-          }`}
-        >
-          {isLoading ? (
-            <>
-              <div className="w-2.5 h-2.5 border border-white/30 border-t-white rounded-full animate-spin"></div>
-              <span>תרגום...</span>
-            </>
-          ) : (
-            <span>English</span>
-          )}
-        </button>
-      </div>
-    </div>
+    <div
+      className={`prose prose-invert max-w-none prose-p:text-gray-200 prose-p:leading-relaxed prose-ul:text-gray-200 prose-li:text-gray-200 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
+      dir={dir}
+      dangerouslySetInnerHTML={{ __html: htmlContent }}
+    />
   );
 };
 
 export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
+  const { t } = useT();
+  const { lang, dir } = useLanguage();
   const [userInput, setUserInput] = useState('');
   const [conversation, setConversation] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const PRESET_QUESTIONS = lang === 'en' ? PRESET_QUESTIONS_EN : PRESET_QUESTIONS_HE;
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -157,14 +103,16 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
             }
             return next;
         });
-      });
+      }, backgroundData, lang);
     } catch (error: any) {
       console.error("AI Coach interaction failed:", error);
       setConversation(prev => {
         const next = [...prev];
         const last = next[next.length - 1];
         if (last && last.sender === 'ai' && !last.text) {
-            last.text = error?.message || "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב.";
+            last.text = error?.message || (lang === 'en'
+              ? "Sorry, there was an error connecting to the AI service. Please check your internet connection and try again."
+              : "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב.");
         }
         return next;
       });
@@ -174,14 +122,14 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" dir={dir}>
       <div className="flex items-center gap-3 mb-6">
         <div className="bg-cyan-500/20 p-2 rounded-xl">
           <SparklesIcon className="w-8 h-8 text-yellow-400" />
         </div>
         <div>
-          <h3 className="text-2xl font-bold text-white">מאמן ה-AI האישי שלך</h3>
-          <p className="text-gray-400 text-sm font-medium">ייעוץ מותאם אישית לפרופיל התקשורת שלך</p>
+          <h3 className="text-2xl font-bold text-white">{t('aiCoach', 'title')}</h3>
+          <p className="text-gray-400 text-sm font-medium">{t('aiCoach', 'subtitle')}</p>
         </div>
       </div>
       
@@ -192,13 +140,13 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
         {conversation.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
             <div className="bg-gray-800/50 p-6 rounded-2xl border border-dashed border-gray-700">
-                <p className="text-gray-400 mb-4 font-medium italic">"היי! אני כאן כדי לעזור לך לרתום את החוזקות שלך. על מה נרצה לדבר היום?"</p>
+                <p className="text-gray-400 mb-4 font-medium italic">{t('aiCoach', 'greeting')}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {PRESET_QUESTIONS.map((q, i) => (
                     <button 
                       key={i} 
                       onClick={() => handleSendMessage(q)} 
-                      className="text-right text-sm bg-gray-800 hover:bg-gray-700 hover:text-cyan-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm"
+                      className={`${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm bg-gray-800 hover:bg-gray-700 hover:text-cyan-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm`}
                     >
                       {q}
                     </button>
@@ -234,7 +182,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
                     <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                     <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                     <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></div>
-                    <span className="text-xs text-gray-500 mr-2 font-bold uppercase tracking-wider">מעבד נתונים...</span>
+                    <span className="text-xs text-gray-500 mr-2 font-bold uppercase tracking-wider">{t('aiCoach', 'processing')}</span>
                 </div>
               </div>
             </div>
@@ -248,16 +196,16 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          placeholder="כתוב את שאלתך כאן..."
-          className="w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 pr-5 pl-20 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-all shadow-lg"
+          placeholder={t('aiCoach', 'inputPlaceholder')}
+          className={`w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 ${dir === 'rtl' ? 'pr-5 pl-20' : 'pl-5 pr-20'} text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-all shadow-lg`}
           disabled={isLoading}
         />
         <button
           onClick={() => handleSendMessage()}
           disabled={isLoading || !userInput.trim()}
-          className="absolute left-2 top-2 bottom-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-6 rounded-xl transition-all disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md"
+          className={`absolute ${dir === 'rtl' ? 'left-2' : 'right-2'} top-2 bottom-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-6 rounded-xl transition-all disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md`}
         >
-          {isLoading ? '...' : 'שלח'}
+          {isLoading ? '...' : t('common', 'send')}
         </button>
       </div>
     </div>

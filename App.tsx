@@ -5,6 +5,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { auth, isFirebaseInitialized } from './firebaseConfig';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { getUserProfile } from './services/firebaseService';
+import { LanguageProvider } from './i18n/LanguageContext';
 
 type AppView = 'simple' | 'admin' | 'loading';
 
@@ -127,7 +128,9 @@ export const App: React.FC = () => {
        {view === 'admin' ? (
          <AdminDashboard onBack={handleSignOut} />
        ) : view === 'simple' ? (
-         <SimpleApp onAdminLoginAttempt={handleAdminLogin} user={user} />
+         <LanguageProvider>
+           <SimpleApp onAdminLoginAttempt={handleAdminLogin} user={user} />
+         </LanguageProvider>
        ) : (
          <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white" dir="rtl">
            <div className="flex flex-col items-center gap-6">

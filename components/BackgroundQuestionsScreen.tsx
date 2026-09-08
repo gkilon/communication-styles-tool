@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { BackgroundData } from '../types';
+import { useT } from '../i18n/useT';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface BackgroundQuestionsScreenProps {
   data: BackgroundData;
@@ -13,22 +15,24 @@ export const BackgroundQuestionsScreen: React.FC<BackgroundQuestionsScreenProps>
   onChange,
   onSubmit
 }) => {
+  const { t } = useT();
+  const { dir } = useLanguage();
   const [gender, setGender] = useState<'male' | 'female' | 'other' | ''>(data.gender);
   const [isManager, setIsManager] = useState<'yes' | 'no' | ''>(data.isManager);
   const [goal, setGoal] = useState<string>(data.goal);
   const [error, setError] = useState<string>('');
 
   const goalsList = [
-    { id: 'self_learn', label: 'ללמוד על עצמי ועל סגנון התקשורת שלי' },
-    { id: 'management', label: 'לקבל כלים מעשיים לניהול, מנהיגות והנעה' },
-    { id: 'teamwork', label: 'לשפר את עבודת הצוות והממשקים הבינאישיים' },
-    { id: 'influence', label: 'להבין כיצד להשפיע טוב יותר על אחרים' }
+    { id: 'self_learn', label: t('background', 'goalSelfLearn') },
+    { id: 'management', label: t('background', 'goalManagement') },
+    { id: 'teamwork', label: t('background', 'goalTeamwork') },
+    { id: 'influence', label: t('background', 'goalInfluence') }
   ];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!gender || !isManager || !goal) {
-      setError('אנא ענה/י על כל שאלות הרקע כדי להמשיך בשאלון.');
+      setError(t('background', 'errorIncomplete'));
       return;
     }
     setError('');
@@ -51,16 +55,16 @@ export const BackgroundQuestionsScreen: React.FC<BackgroundQuestionsScreenProps>
       initial="hidden"
       animate="visible"
       className="bg-glass-dark backdrop-blur-2xl p-8 sm:p-12 rounded-[2.5rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-glass-border max-w-2xl mx-auto text-right relative overflow-hidden"
-      dir="rtl"
+      dir={dir}
     >
       <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
       
       <div className="text-center mb-10">
         <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300 mb-3">
-          התאמה אישית של הניתוח
+          {t('background', 'title')}
         </h2>
         <p className="text-gray-400 text-base font-light">
-          על מנת שנוכל לדייק עבורך את הדו"ח, הטיפים והמלצות המאמן, נשמח אם תסמן/י את המאפיינים הבאים:
+          {t('background', 'subtitle')}
         </p>
       </div>
 
@@ -68,12 +72,12 @@ export const BackgroundQuestionsScreen: React.FC<BackgroundQuestionsScreenProps>
         
         {/* Q1: Gender */}
         <div className="space-y-3">
-          <label className="block text-lg font-bold text-cyan-400">1. מהו המגדר שלך?</label>
+          <label className="block text-lg font-bold text-cyan-400">{t('background', 'q1')}</label>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { id: 'male', label: 'זכר' },
-              { id: 'female', label: 'נקבה' },
-              { id: 'other', label: 'אחר' }
+              { id: 'male', label: t('background', 'male') },
+              { id: 'female', label: t('background', 'female') },
+              { id: 'other', label: t('background', 'other') }
             ].map((opt) => (
               <button
                 key={opt.id}
@@ -93,11 +97,11 @@ export const BackgroundQuestionsScreen: React.FC<BackgroundQuestionsScreenProps>
 
         {/* Q2: Is Manager */}
         <div className="space-y-3">
-          <label className="block text-lg font-bold text-cyan-400">2. האם את/ה בתפקיד ניהולי?</label>
+          <label className="block text-lg font-bold text-cyan-400">{t('background', 'q2')}</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
-              { id: 'yes', label: 'כן, אני בתפקיד ניהולי (ניהול אנשים או פרויקטים)' },
-              { id: 'no', label: 'לא, אני בתפקיד מקצועי / לא ניהולי' }
+              { id: 'yes', label: t('background', 'managerYes') },
+              { id: 'no', label: t('background', 'managerNo') }
             ].map((opt) => (
               <button
                 key={opt.id}
@@ -117,7 +121,7 @@ export const BackgroundQuestionsScreen: React.FC<BackgroundQuestionsScreenProps>
 
         {/* Q3: Main Goal */}
         <div className="space-y-3">
-          <label className="block text-lg font-bold text-cyan-400">3. מה המטרה העיקרית שלך מהשאלון?</label>
+          <label className="block text-lg font-bold text-cyan-400">{t('background', 'q3')}</label>
           <div className="space-y-2.5">
             {goalsList.map((opt) => (
               <button
@@ -158,7 +162,7 @@ export const BackgroundQuestionsScreen: React.FC<BackgroundQuestionsScreenProps>
             type="submit"
             className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4.5 px-8 rounded-2xl text-xl transition-all duration-300 shadow-[0_10px_25px_rgba(6,182,212,0.25)] hover:-translate-y-0.5 active:translate-y-0"
           >
-            המשך לשאלון התקשורת ←
+            {t('background', 'continueButton')}
           </button>
         </div>
 

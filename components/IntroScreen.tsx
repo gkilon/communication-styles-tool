@@ -1,11 +1,15 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useT } from '../i18n/useT';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface IntroScreenProps {
   onStart: () => void;
 }
 
 export const IntroScreen: React.FC<IntroScreenProps> = ({ onStart }) => {
+  const { t } = useT();
+  const { dir } = useLanguage();
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { 
@@ -59,21 +63,20 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onStart }) => {
       </motion.div>
 
       <motion.h2 variants={itemVariants} className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 mb-8 drop-shadow-sm">
-        ברוכים הבאים
+        {t('intro', 'welcome')}
       </motion.h2>
       
       <motion.div variants={itemVariants} className="space-y-6 text-gray-300 text-xl md:text-2xl leading-relaxed font-light mb-12 relative z-10">
         <p>
-          שאלון זה יסייע לך לזהות את <strong className="text-cyan-400 font-bold">סגנון התקשורת הדומיננטי</strong> שלך. 
-          בכל שאלה יוצג בפניך צמד של תכונות.
+          {t('intro', 'body1Pre')}<strong className="text-cyan-400 font-bold">{t('intro', 'body1Strong')}</strong>{t('intro', 'body1Post')}
         </p>
         <p>
-          המטרה היא לסמן על הסקאלה לאיזו תכונה אתה נוטה <strong>יותר</strong> באופן טבעי ברוב המצבים.
+          {t('intro', 'body2')}
         </p>
         
-        <div className="bg-glass-light p-8 rounded-3xl border-r-4 border-cyan-500 text-lg md:text-xl text-right inline-block w-full backdrop-blur-sm shadow-inner mt-4">
+        <div className={`bg-glass-light p-8 rounded-3xl ${dir === 'rtl' ? 'border-r-4 text-right' : 'border-l-4 text-left'} border-cyan-500 text-lg md:text-xl inline-block w-full backdrop-blur-sm shadow-inner mt-4`}>
           <p className="mb-2">
-            בסיום, תקבל/י מפה מקיפה של פרופיל התקשורת שלך, שתחשוף את החוזקות והשילוב הייחודי שיוצר את סגנונך. 
+            {t('intro', 'body3')}
           </p>
         </div>
       </motion.div>
@@ -85,7 +88,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onStart }) => {
           onClick={onStart}
           className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-black py-5 px-16 rounded-2xl text-2xl transition-all duration-300 shadow-[0_10px_25px_rgba(6,182,212,0.2)]"
         >
-          התחל בשאלון
+          {t('intro', 'startButton')}
         </motion.button>
         
         <a 
@@ -94,8 +97,8 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onStart }) => {
           rel="noopener noreferrer"
           className="text-gray-500 hover:text-cyan-400 text-sm font-bold transition-colors flex items-center gap-2 group mt-4"
         >
-          <span>בקרו באתר הבית שלנו</span>
-          <span className="group-hover:-translate-x-1 transition-transform">←</span>
+          <span>{t('intro', 'visitSite')}</span>
+          <span className="group-hover:-translate-x-1 transition-transform">{dir === 'rtl' ? '←' : '→'}</span>
         </a>
       </motion.div>
     </motion.div>

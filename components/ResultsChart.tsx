@@ -1,12 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Scores } from '../types';
+import { useT } from '../i18n/useT';
 
 interface ResultsChartProps {
   scores: Scores;
 }
 
 export const ResultsChart: React.FC<ResultsChartProps> = ({ scores }) => {
+  const { t } = useT();
   const { a, b, c, d } = scores;
 
   const horizontalTotal = (a + b) || 1;
@@ -24,7 +26,7 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ scores }) => {
       transition={{ duration: 0.8, ease: "easeOut" }}
       className="w-full"
     >
-      <h3 className="text-xl sm:text-2xl font-bold text-cyan-300 mb-6 text-center drop-shadow-md">מפת הפרופיל שלך</h3>
+      <h3 className="text-xl sm:text-2xl font-bold text-cyan-300 mb-6 text-center drop-shadow-md">{t('chart', 'title')}</h3>
       <div className="relative w-full aspect-square max-w-[320px] mx-auto rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.3)] border-4 border-slate-700 bg-[#000000]">
         
         {/* Quadrant Areas - Animated growth */}
@@ -54,10 +56,10 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ scores }) => {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }} className="absolute left-0 w-full h-[2px] bg-white/60 z-10" style={{ top: `${cPercent}%` }}></motion.div>
 
         {/* Quadrant Labels */}
-        <div className="absolute top-4 left-4 text-white font-black text-shadow-lg text-lg z-20">כחול</div>
-        <div className="absolute top-4 right-4 text-white font-black text-shadow-lg text-lg z-20">אדום</div>
-        <div className="absolute bottom-4 left-4 text-white font-black text-shadow-lg text-lg z-20">ירוק</div>
-        <div className="absolute bottom-4 right-4 text-white font-black text-shadow-lg text-lg z-20">צהוב</div>
+        <div className="absolute top-4 left-4 text-white font-black text-shadow-lg text-lg z-20">{t('chart', 'blue')}</div>
+        <div className="absolute top-4 right-4 text-white font-black text-shadow-lg text-lg z-20">{t('chart', 'red')}</div>
+        <div className="absolute bottom-4 left-4 text-white font-black text-shadow-lg text-lg z-20">{t('chart', 'green')}</div>
+        <div className="absolute bottom-4 right-4 text-white font-black text-shadow-lg text-lg z-20">{t('chart', 'yellow')}</div>
       </div>
       
        <motion.div 
@@ -65,9 +67,9 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ scores }) => {
         className="mt-8 text-center bg-glass-light backdrop-blur-md p-5 rounded-2xl border border-glass-border shadow-lg"
        >
         <p className="text-gray-100 text-sm md:text-base font-medium">
-          הגרף מציג את החלוקה היחסית של סגנונות התקשורת שלך. 
+          {t('chart', 'caption1')}
           <br/>
-          <span className="text-cyan-400 font-bold">שטח הצבע</span> מייצג את הדומיננטיות של הסגנון.
+          <span className="text-cyan-400 font-bold">{t('chart', 'captionStrong')}</span> {t('chart', 'caption2')}
         </p>
       </motion.div>
     </motion.div>
