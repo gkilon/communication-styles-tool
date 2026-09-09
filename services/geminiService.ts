@@ -51,7 +51,9 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
   const enrichedPayload = {
     ...payload,
     config: enrichedConfig,
-    userId: currentUserId || payload?.userId || null,
+    // Prefer a per-person identifier over shared network IP for quota purposes — otherwise an
+    // entire workshop room on the same WiFi (same public IP) collides into one shared quota bucket.
+    userId: currentUserId || sessionData?.participantId || sessionData?.accessCode || payload?.userId || null,
     accessCode: sessionData?.accessCode || null
   };
 
@@ -229,67 +231,41 @@ function buildBackgroundContext(bg?: BackgroundData | null): string {
 }
 
 /**
- * Generates a short paragraph tying the profile directly to what the person told us about
- * themselves (role, stated goal) — unlike getOrgFitAnalysis, this always runs regardless of
- * org context, so the background questions actually shape the main report every user reads,
- * not just the AI Coach chat that not everyone opens.
+ * Generates ONE flowing addendum paragraph that folds two things into the same voice as the
+ * main report: (1) how the profile connects to what the person told us about themselves —
+ * their role and stated goal — which always applies; and (2) opportunities/pitfalls relative
+ * to the organization's actual context, when the session carries one. This replaced two
+ * separate AI calls (and two separate UI cards) with a single call, meant to be appended
+ * directly onto the end of the deterministic "general analysis" paragraph rather than shown
+ * as its own section.
  */
-export const getPersonalizedTakeaway = async (scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en' = 'he'): Promise<string> => {
+export const getIntegratedInsights = async (scores: Scores, backgroundData: BackgroundData | null | undefined, hasOrgContext: boolean, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
 
-  const systemInstruction = `אתה יועץ תקשורת בכיר מבית Kilon Consulting.
+  const orgInstruction = hasOrgContext
+    ? `בנוסף, שלב בפסקה גם התייחסות להזדמנות ולמלכודת הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך (תרבות הארגון, האתגרים והחומרים הניהוליים שצורפו) — לא ניתוח גנרי שיכול להתאים לכל ארגון.`
+    : '';
+
+  const systemInstruction = `אתה יועץ תקשורת וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
 ${bgContext}
 
 ${COLOR_TRAITS}
 
-המשימה שלך: כתוב פסקה זורמת אחת (2-4 משפטים, ללא כותרות, ללא רשימות) שמתרגמת את הפרופיל הזה ישירות למה שהאדם הזה בעצמו ציין שהוא מחפש — המטרה שלו מהשאלון, ותפקידו (מנהל/ת או לא). אל תחזור על תיאור כללי של הצבע — התמקד ספציפית בזה: אם המטרה היא ניהול, דבר על ניהול; אם המטרה היא עבודת צוות, דבר על דינמיקת צוות; אם המטרה היא מודעות עצמית, דבר על תובנה אישית; וכן הלאה. אם אין מידע רקע כלל — כתוב פסקה כללית קצרה על איך להתחיל ליישם את הפרופיל.
+המשימה שלך: כתוב פסקה זורמת אחת (3-6 משפטים, ללא כותרות, ללא רשימות, ללא פתיח כמו "בהמשך לניתוח") שממשיכה ישירות ניתוח שכבר נכתב על הפרופיל, ומוסיפה לו שכבה ממוקדת: תרגם את הפרופיל ישירות למה שהאדם הזה בעצמו ציין שהוא מחפש — המטרה שלו מהשאלון, ותפקידו (מנהל/ת או לא). אם המטרה היא ניהול, דבר על ניהול; אם עבודת צוות, דבר על דינמיקת צוות; אם מודעות עצמית, דבר על תובנה אישית. אם אין מידע רקע כלל — כתוב המשך כללי קצר על איך להתחיל ליישם את הפרופיל.
+${orgInstruction}
+
+הפסקה צריכה להישמע כהמשך טבעי לטקסט שקדם לה, לא כמו מסמך נפרד.
 
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
   const response = await callGeminiApi('generateContent', {
     model: "gemini-3.6-flash",
     contents: lang === 'he'
-      ? "כתוב את הפסקה המותאמת אישית."
-      : "Write the personalized takeaway paragraph.",
-    config: {
-      systemInstruction,
-      safetySettings: SAFETY_SETTINGS
-    }
-  });
-
-  const data = await response.json();
-  return data.text || "";
-};
-
-/**
- * Generates a short paragraph on how this specific profile plays out — opportunities
- * and pitfalls — against the organization's actual culture/context (injected automatically
- * from the session by callGeminiApi). Only worth calling when the session actually has
- * org context; with none, the model is told to fall back to a general take rather than invent one.
- */
-export const getOrgFitAnalysis = async (scores: Scores, lang: 'he' | 'en' = 'he'): Promise<string> => {
-  const colorProfile = buildColorProfile(scores);
-  const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting.
-
-${colorProfile}
-
-${COLOR_TRAITS}
-
-המשימה שלך: כתוב פסקה זורמת אחת (3-5 משפטים, ללא כותרות, ללא רשימות) שמנתחת את ההזדמנויות והמלכודות הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך (תרבות הארגון, האתגרים והחומרים הניהוליים שצורפו) — לא ניתוח גנרי שיכול להתאים לכל ארגון.
-1. הזדמנות: כיצד הנטייה הדומיננטית של האדם הזה יכולה להיות נכס ממש בהקשר הארגוני הזה, בהתבסס על מה שידוע לך על הארגון.
-2. מלכודת: היכן בדיוק הנטייה הזו עלולה להתנגש עם התרבות או האתגרים הספציפיים של הארגון הזה.
-3. אם לא צורף לך הקשר ארגוני ספציפי — אל תמציא פרטים על ארגון. במקרה כזה כתוב פסקה כללית יותר על ההזדמנויות והמלכודות של הפרופיל הזה בסביבת עבודה טיפוסית.
-
-${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
-
-  const response = await callGeminiApi('generateContent', {
-    model: "gemini-3.6-flash",
-    contents: lang === 'he'
-      ? "נתח את ההזדמנויות והמלכודות של הפרופיל הזה ביחס לארגון."
-      : "Analyze the opportunities and pitfalls of this profile relative to the organization.",
+      ? "כתוב את פסקת ההמשך המותאמת אישית."
+      : "Write the personalized continuation paragraph.",
     config: {
       systemInstruction,
       safetySettings: SAFETY_SETTINGS

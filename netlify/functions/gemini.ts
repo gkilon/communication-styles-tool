@@ -98,9 +98,10 @@ async function checkAndIncrementQuota(
   const oneMinuteAgo = now - 60 * 1000;
   const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
+  const safeIdentifier = identifier.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 200);
   const docRef = isUserId 
-    ? db.collection("usage_limits").doc(identifier)
-    : db.collection("usage_limits").doc(`anon_${identifier.replace(/[^a-zA-Z0-9_-]/g, '_')}`);
+    ? db.collection("usage_limits").doc(safeIdentifier)
+    : db.collection("usage_limits").doc(`anon_${safeIdentifier}`);
 
   try {
     const docSnap = await docRef.get();
