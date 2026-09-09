@@ -219,10 +219,10 @@ function buildBackgroundContext(bg?: BackgroundData | null): string {
   }
   if (bg.goal) {
     const goalLabels: Record<string, string> = {
-      self_awareness: 'ללמוד על עצמי ועל סגנון התקשורת שלי',
-      management_tools: 'לקבל כלים לניהול טוב יותר',
-      team_dynamics: 'לשפר את הדינמיקה בצוות שלי',
-      relationships: 'לשפר מערכות יחסים ספציפיות',
+      self_learn: 'ללמוד על עצמי ועל סגנון התקשורת שלי',
+      management: 'לקבל כלים מעשיים לניהול, מנהיגות והנעה',
+      teamwork: 'לשפר את עבודת הצוות והממשקים הבינאישיים',
+      influence: 'להבין כיצד להשפיע טוב יותר על אחרים',
     };
     const goalText = goalLabels[bg.goal] || bg.goal;
     parts.push(`מטרת המשתמש/ת מהשאלון: "${goalText}" — ודא שהאימון מכוון למטרה זו.`);
@@ -231,21 +231,17 @@ function buildBackgroundContext(bg?: BackgroundData | null): string {
 }
 
 /**
- * Generates ONE flowing addendum paragraph that folds two things into the same voice as the
- * main report: (1) how the profile connects to what the person told us about themselves —
- * their role and stated goal — which always applies; and (2) opportunities/pitfalls relative
- * to the organization's actual context, when the session carries one. This replaced two
- * separate AI calls (and two separate UI cards) with a single call, meant to be appended
- * directly onto the end of the deterministic "general analysis" paragraph rather than shown
- * as its own section.
+ * Generates ONE flowing addendum paragraph on opportunities/pitfalls relative to the org's
+ * actual context (injected from the session by callGeminiApi) — meant to be appended directly
+ * onto the deterministic "general analysis" paragraph, not shown as its own section.
+ * Only call this when the session actually carries org context (companyName/orgContext/
+ * knowledgeBase) — with none, there's nothing organization-specific to say. The role/goal
+ * personalization that used to live in this same call is now handled deterministically in
+ * analysisService.ts (no AI call, so it never depends on quota/availability).
  */
-export const getIntegratedInsights = async (scores: Scores, backgroundData: BackgroundData | null | undefined, hasOrgContext: boolean, lang: 'he' | 'en' = 'he'): Promise<string> => {
+export const getIntegratedInsights = async (scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
-
-  const orgInstruction = hasOrgContext
-    ? `בנוסף, שלב בפסקה גם התייחסות להזדמנות ולמלכודת הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך (תרבות הארגון, האתגרים והחומרים הניהוליים שצורפו) — לא ניתוח גנרי שיכול להתאים לכל ארגון.`
-    : '';
 
   const systemInstruction = `אתה יועץ תקשורת וארגוני בכיר מבית Kilon Consulting.
 
@@ -254,8 +250,7 @@ ${bgContext}
 
 ${COLOR_TRAITS}
 
-המשימה שלך: כתוב פסקה זורמת אחת (3-6 משפטים, ללא כותרות, ללא רשימות, ללא פתיח כמו "בהמשך לניתוח") שממשיכה ישירות ניתוח שכבר נכתב על הפרופיל, ומוסיפה לו שכבה ממוקדת: תרגם את הפרופיל ישירות למה שהאדם הזה בעצמו ציין שהוא מחפש — המטרה שלו מהשאלון, ותפקידו (מנהל/ת או לא). אם המטרה היא ניהול, דבר על ניהול; אם עבודת צוות, דבר על דינמיקת צוות; אם מודעות עצמית, דבר על תובנה אישית. אם אין מידע רקע כלל — כתוב המשך כללי קצר על איך להתחיל ליישם את הפרופיל.
-${orgInstruction}
+המשימה שלך: כתוב פסקה זורמת אחת (3-5 משפטים, ללא כותרות, ללא רשימות, ללא פתיח כמו "בהמשך לניתוח") שממשיכה ישירות ניתוח שכבר נכתב על הפרופיל, ומוסיפה לו התייחסות להזדמנות ולמלכודת הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך (תרבות הארגון, האתגרים והחומרים הניהוליים שצורפו) — לא ניתוח גנרי שיכול להתאים לכל ארגון.
 
 הפסקה צריכה להישמע כהמשך טבעי לטקסט שקדם לה, לא כמו מסמך נפרד.
 
@@ -264,8 +259,8 @@ ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
   const response = await callGeminiApi('generateContent', {
     model: "gemini-3.6-flash",
     contents: lang === 'he'
-      ? "כתוב את פסקת ההמשך המותאמת אישית."
-      : "Write the personalized continuation paragraph.",
+      ? "כתוב את פסקת ההמשך על ההתאמה הארגונית."
+      : "Write the continuation paragraph on organizational fit.",
     config: {
       systemInstruction,
       safetySettings: SAFETY_SETTINGS

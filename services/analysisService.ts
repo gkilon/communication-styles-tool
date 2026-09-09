@@ -1,4 +1,4 @@
-import { Scores } from '../types';
+import { Scores, BackgroundData } from '../types';
 
 interface Analysis {
   general: string;
@@ -156,7 +156,57 @@ function comboKey(a: Color, b: Color): string {
   return [a, b].sort().join('-');
 }
 
-export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he'): Analysis => {
+// Deterministic, hand-written phrasing tailored to the two background answers that matter most
+// (role + stated goal) — picked instantly with no AI call, so the report always reflects these
+// answers even if the AI service is slow, rate-limited, or unavailable.
+type GoalId = 'self_learn' | 'management' | 'teamwork' | 'influence';
+
+function buildGoalFocusedAddendum(
+  dominantAdjective: string,
+  weakestAdjective: string,
+  isManager: boolean | null,
+  goal: GoalId | null,
+  lang: Lang
+): string {
+  if (!goal && isManager === null) return '';
+
+  const managerClause = (he: string, en: string) => (lang === 'he' ? he : en);
+
+  const byGoal: Record<GoalId, { he: string; en: string }> = {
+    self_learn: {
+      he: `מכיוון שציינת שהמטרה שלך היא בעיקר להכיר את עצמך טוב יותר — הדרך הכי ישירה להתקדם היא לשים לב, במשך שבוע-שבועיים, לרגעים שבהם הנטייה שלך להיות ${dominantAdjective} "נדלקת" אוטומטית, ולשאול את עצמך אם זו הייתה הבחירה הכי מודעת עבורך באותו רגע.`,
+      en: `Since you said your main goal is self-understanding, the most direct way to grow is to spend a week or two simply noticing the moments your tendency to be ${dominantAdjective} kicks in automatically, and asking yourself whether that was actually the most deliberate choice in the moment.`
+    },
+    management: {
+      he: `מכיוון שציינת שאתה מחפש כלים מעשיים לניהול, הפרופיל שלך — עם הנטייה ל${dominantAdjective} — הוא בדיוק מה שיעזור לך להוביל, אבל שים לב: ${managerClause('כמנהל/ת, אותה נטייה יכולה ליצור לחץ סביבתי אם אינך מאזן אותה עם', 'as a manager, that same tendency can create pressure on your team if it isn\'t balanced with')} התנהגות ${weakestAdjective} יותר, במיוחד לפני קבלת החלטות שמשפיעות על הצוות.`,
+      en: `Since you said you're looking for practical management tools, your profile — with its tendency to be ${dominantAdjective} — is exactly what will help you lead, but as a manager, that same tendency can pressure your team if it isn't balanced with more ${weakestAdjective} behavior, especially before decisions that affect the team.`
+    },
+    teamwork: {
+      he: `מכיוון שציינת שהמטרה שלך היא לשפר את עבודת הצוות, שווה לזכור: הנטייה שלך להיות ${dominantAdjective} בולטת מאוד מול חברי צוות שהנטייה הדומיננטית שלהם שונה משלך — הצעד הראשון הוא פשוט לזהות מי בצוות שלך נוטה יותר להיות ${weakestAdjective}, ולהתאים את אופן הפנייה אליו בהתאם.`,
+      en: `Since you said your goal is improving teamwork, it's worth remembering: your tendency to be ${dominantAdjective} stands out most against teammates whose dominant tendency differs from yours — the first step is simply noticing who on your team leans more ${weakestAdjective}, and adjusting how you approach them accordingly.`
+    },
+    influence: {
+      he: `מכיוון שציינת שהמטרה שלך היא להשפיע טוב יותר על אחרים, כדאי לדעת: הנטייה שלך להיות ${dominantAdjective} משפיעה הכי חזק על אנשים שדומים לך בסגנון - אבל מול מי שנוטה להיות ${weakestAdjective}, אותה גישה בדיוק עלולה לפעול נגדך. ההשפעה האמיתית מתחילה כשאתה מתאים את הניסוח לסגנון של מי שמולך, לא רק לסגנון שלך.`,
+      en: `Since you said your goal is influencing others more effectively, it helps to know: your tendency to be ${dominantAdjective} lands strongest with people who share your style — but with someone who leans ${weakestAdjective}, that exact same approach can work against you. Real influence starts when you adapt your framing to the other person's style, not just your own.`
+    }
+  };
+
+  let text = (goal && byGoal[goal]) ? byGoal[goal][lang] : '';
+
+  if (!text && isManager !== null) {
+    text = isManager
+      ? (lang === 'he'
+        ? `כמנהל/ת, כדאי לזכור שהנטייה שלך להיות ${dominantAdjective} משפיעה ישירות על האופן שבו הצוות שלך חווה אותך.`
+        : `As a manager, it's worth remembering that your tendency to be ${dominantAdjective} directly shapes how your team experiences you.`)
+      : (lang === 'he'
+        ? `בתפקיד לא-ניהולי, הנטייה שלך להיות ${dominantAdjective} באה לידי ביטוי בעיקר מול עמיתים ומול הממונים עליך.`
+        : `In a non-managerial role, your tendency to be ${dominantAdjective} shows up mainly with peers and with the people you report to.`);
+  }
+
+  return text;
+}
+
+export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backgroundData?: BackgroundData | null): Analysis => {
   const { a, b, c, d } = scores;
   const T = colorData[lang];
 
@@ -203,6 +253,17 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he'): Anal
       ? ` הפרופיל שלך ממוקד ביותר — נטייה אחת בולטת בבירור על פני האחרות. זה הופך את סגנון התקשורת שלך לעקבי ומזוהה, ומאפשר לסביבה שלך לדעת למה לצפות ממך.`
       : ` Your profile is highly focused — one tendency clearly stands out over the others. This makes your communication style consistent and recognizable, letting the people around you know what to expect from you.`;
   }
+
+  // Goal/role-tailored addendum — deterministic (no AI call), so this always reflects the
+  // background-question answers instantly and reliably, regardless of AI service load/quota.
+  const goalAddendum = buildGoalFocusedAddendum(
+    dominantData.adjective,
+    weakestData.adjective,
+    backgroundData?.isManager === 'yes' ? true : backgroundData?.isManager === 'no' ? false : null,
+    (backgroundData?.goal as GoalId) || null,
+    lang
+  );
+  if (goalAddendum) general += ' ' + goalAddendum;
 
   // 2. Strengths Analysis — deeper, map-oriented, no color naming
   let strengths = lang === 'he'

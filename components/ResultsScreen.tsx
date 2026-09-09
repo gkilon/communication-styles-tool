@@ -30,7 +30,7 @@ type TabId = 'profile' | 'coach' | 'simulator';
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, backgroundData, onReset, onEdit, onLogout }) => {
   const { t } = useT();
   const { lang, dir } = useLanguage();
-  const profileAnalysis = useMemo(() => generateProfileAnalysis(scores, lang), [scores, lang]);
+  const profileAnalysis = useMemo(() => generateProfileAnalysis(scores, lang, backgroundData), [scores, lang, backgroundData]);
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
@@ -46,18 +46,20 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
     }
   }, []);
 
-  // Single AI call that folds both the role/goal personalization and (when present) the
-  // org-fit angle into one addendum, appended onto the deterministic "general analysis"
-  // paragraph inside CombinedAnalysis — not shown as its own separate section.
+  // AI call for the org-fit addendum only — goal/role personalization is now handled
+  // deterministically inside generateProfileAnalysis (no AI, always instant/reliable).
+  // Only runs when the session actually carries org context; with none, there's nothing
+  // organization-specific to add, and no AI call (or quota usage) happens at all.
   const [insightsText, setInsightsText] = useState('');
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState(false);
 
   useEffect(() => {
+    if (!hasOrgContext) return;
     let cancelled = false;
     setInsightsLoading(true);
     setInsightsError(false);
-    getIntegratedInsights(scores, backgroundData, hasOrgContext, lang)
+    getIntegratedInsights(scores, backgroundData, lang)
       .then(text => { if (!cancelled) setInsightsText(text); })
       .catch(() => { if (!cancelled) setInsightsError(true); })
       .finally(() => { if (!cancelled) setInsightsLoading(false); });

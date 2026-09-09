@@ -127,15 +127,15 @@ export const BackgroundQuestionsScreen: React.FC<BackgroundQuestionsScreenProps>
               <button
                 key={opt.id}
                 type="button"
-                onClick={() => { setGoal(opt.label); setError(''); }}
+                onClick={() => { setGoal(opt.id); setError(''); }}
                 className={`w-full py-4 px-5 rounded-2xl border font-bold text-base transition-all duration-300 text-right flex items-center justify-between ${
-                  goal === opt.label
+                  goal === opt.id
                     ? 'border-cyan-500 bg-cyan-950/40 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
                     : 'border-slate-700 bg-slate-800/40 text-gray-300 hover:border-slate-600 hover:bg-slate-800/70'
                 }`}
               >
                 <span>{opt.label}</span>
-                {goal === opt.label && (
+                {goal === opt.id && (
                   <span className="w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center text-slate-900 text-xs">
                     ✓
                   </span>
