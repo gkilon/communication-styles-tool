@@ -133,6 +133,12 @@ export const translations = {
     resetButton: { he: 'איפוס', en: 'Reset' },
     pdfError: { he: 'חלה שגיאה ביצירת ה-PDF.', en: 'An error occurred while generating the PDF.' },
     logOutEndSession: { he: 'Log Out / End Session', en: 'Log Out / End Session' },
+    orgFitTitle: { he: 'הזדמנויות ומלכודות ביחס לארגון שלך', en: 'Opportunities & Pitfalls in Your Organization' },
+    orgFitLoading: { he: 'מנתח את הפרופיל שלך מול ההקשר הארגוני...', en: 'Analyzing your profile against your organizational context...' },
+    orgFitError: { he: 'לא הצלחנו להפיק את הניתוח הארגוני כרגע.', en: "We couldn't generate the organizational analysis right now." },
+    takeawayTitle: { he: 'מה זה אומר בשבילך', en: 'What This Means For You' },
+    takeawayLoading: { he: 'מתאים את הניתוח למטרה שציינת...', en: 'Tailoring the analysis to your stated goal...' },
+    takeawayError: { he: 'לא הצלחנו להפיק את הניתוח המותאם כרגע.', en: "We couldn't generate the personalized analysis right now." },
   },
   combinedAnalysisChrome: {
     general: { he: 'ניתוח כללי', en: 'General Analysis' },

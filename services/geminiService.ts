@@ -228,6 +228,78 @@ function buildBackgroundContext(bg?: BackgroundData | null): string {
   return parts.length > 0 ? `\n\nמידע רקע על המשתמש/ת (השתמש בו לכל אורך השיחה):\n${parts.join('\n')}` : '';
 }
 
+/**
+ * Generates a short paragraph tying the profile directly to what the person told us about
+ * themselves (role, stated goal) — unlike getOrgFitAnalysis, this always runs regardless of
+ * org context, so the background questions actually shape the main report every user reads,
+ * not just the AI Coach chat that not everyone opens.
+ */
+export const getPersonalizedTakeaway = async (scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en' = 'he'): Promise<string> => {
+  const colorProfile = buildColorProfile(scores);
+  const bgContext = buildBackgroundContext(backgroundData);
+
+  const systemInstruction = `אתה יועץ תקשורת בכיר מבית Kilon Consulting.
+
+${colorProfile}
+${bgContext}
+
+${COLOR_TRAITS}
+
+המשימה שלך: כתוב פסקה זורמת אחת (2-4 משפטים, ללא כותרות, ללא רשימות) שמתרגמת את הפרופיל הזה ישירות למה שהאדם הזה בעצמו ציין שהוא מחפש — המטרה שלו מהשאלון, ותפקידו (מנהל/ת או לא). אל תחזור על תיאור כללי של הצבע — התמקד ספציפית בזה: אם המטרה היא ניהול, דבר על ניהול; אם המטרה היא עבודת צוות, דבר על דינמיקת צוות; אם המטרה היא מודעות עצמית, דבר על תובנה אישית; וכן הלאה. אם אין מידע רקע כלל — כתוב פסקה כללית קצרה על איך להתחיל ליישם את הפרופיל.
+
+${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
+
+  const response = await callGeminiApi('generateContent', {
+    model: "gemini-3.6-flash",
+    contents: lang === 'he'
+      ? "כתוב את הפסקה המותאמת אישית."
+      : "Write the personalized takeaway paragraph.",
+    config: {
+      systemInstruction,
+      safetySettings: SAFETY_SETTINGS
+    }
+  });
+
+  const data = await response.json();
+  return data.text || "";
+};
+
+/**
+ * Generates a short paragraph on how this specific profile plays out — opportunities
+ * and pitfalls — against the organization's actual culture/context (injected automatically
+ * from the session by callGeminiApi). Only worth calling when the session actually has
+ * org context; with none, the model is told to fall back to a general take rather than invent one.
+ */
+export const getOrgFitAnalysis = async (scores: Scores, lang: 'he' | 'en' = 'he'): Promise<string> => {
+  const colorProfile = buildColorProfile(scores);
+  const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting.
+
+${colorProfile}
+
+${COLOR_TRAITS}
+
+המשימה שלך: כתוב פסקה זורמת אחת (3-5 משפטים, ללא כותרות, ללא רשימות) שמנתחת את ההזדמנויות והמלכודות הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך (תרבות הארגון, האתגרים והחומרים הניהוליים שצורפו) — לא ניתוח גנרי שיכול להתאים לכל ארגון.
+1. הזדמנות: כיצד הנטייה הדומיננטית של האדם הזה יכולה להיות נכס ממש בהקשר הארגוני הזה, בהתבסס על מה שידוע לך על הארגון.
+2. מלכודת: היכן בדיוק הנטייה הזו עלולה להתנגש עם התרבות או האתגרים הספציפיים של הארגון הזה.
+3. אם לא צורף לך הקשר ארגוני ספציפי — אל תמציא פרטים על ארגון. במקרה כזה כתוב פסקה כללית יותר על ההזדמנויות והמלכודות של הפרופיל הזה בסביבת עבודה טיפוסית.
+
+${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
+
+  const response = await callGeminiApi('generateContent', {
+    model: "gemini-3.6-flash",
+    contents: lang === 'he'
+      ? "נתח את ההזדמנויות והמלכודות של הפרופיל הזה ביחס לארגון."
+      : "Analyze the opportunities and pitfalls of this profile relative to the organization.",
+    config: {
+      systemInstruction,
+      safetySettings: SAFETY_SETTINGS
+    }
+  });
+
+  const data = await response.json();
+  return data.text || "";
+};
+
 export const getAiCoachAdvice = async (scores: Scores, userInput: string, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);

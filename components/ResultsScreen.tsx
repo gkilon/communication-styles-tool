@@ -1,9 +1,10 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Scores, BackgroundData } from '../types';
 import { ResultsChart } from './ResultsChart';
 import { CombinedAnalysis } from './CombinedAnalysis';
 import { generateProfileAnalysis } from '../services/analysisService';
+import { getOrgFitAnalysis, getPersonalizedTakeaway } from '../services/geminiService';
 import { AiCoach } from './AiCoach';
 import { CaseStudiesSimulator } from './CaseStudiesSimulator';
 import { useT } from '../i18n/useT';
@@ -33,6 +34,52 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
+
+  // Org-fit analysis: only meaningful (and only fetched) when the session actually carries
+  // organizational context — otherwise this section simply doesn't render.
+  const hasOrgContext = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('comm_style_session');
+      if (!raw) return false;
+      const session = JSON.parse(raw);
+      return !!(session?.companyName || session?.orgContext || session?.knowledgeBase);
+    } catch {
+      return false;
+    }
+  }, []);
+  const [orgFitText, setOrgFitText] = useState('');
+  const [orgFitLoading, setOrgFitLoading] = useState(false);
+  const [orgFitError, setOrgFitError] = useState(false);
+
+  // Always-on: ties the report directly to the person's stated role/goal from the
+  // background questions, so those answers actually shape what everyone reads —
+  // not just people who happen to open the AI Coach chat.
+  const [takeawayText, setTakeawayText] = useState('');
+  const [takeawayLoading, setTakeawayLoading] = useState(false);
+  const [takeawayError, setTakeawayError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTakeawayLoading(true);
+    setTakeawayError(false);
+    getPersonalizedTakeaway(scores, backgroundData, lang)
+      .then(text => { if (!cancelled) setTakeawayText(text); })
+      .catch(() => { if (!cancelled) setTakeawayError(true); })
+      .finally(() => { if (!cancelled) setTakeawayLoading(false); });
+    return () => { cancelled = true; };
+  }, [scores, backgroundData, lang]);
+
+  useEffect(() => {
+    if (!hasOrgContext) return;
+    let cancelled = false;
+    setOrgFitLoading(true);
+    setOrgFitError(false);
+    getOrgFitAnalysis(scores, lang)
+      .then(text => { if (!cancelled) setOrgFitText(text); })
+      .catch(() => { if (!cancelled) setOrgFitError(true); })
+      .finally(() => { if (!cancelled) setOrgFitLoading(false); });
+    return () => { cancelled = true; };
+  }, [hasOrgContext, scores, lang]);
 
   const TABS: { id: TabId; label: string; emoji: string }[] = [
     { id: 'profile', label: t('resultsChrome', 'tabProfile'), emoji: '🗺️' },
@@ -181,6 +228,46 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                   <CombinedAnalysis analysis={profileAnalysis} />
                 </div>
               </div>
+
+              <div className="bg-gradient-to-br from-cyan-900/20 to-slate-800/30 p-6 sm:p-8 rounded-[2rem] border border-cyan-500/20 relative z-10 shadow-lg backdrop-blur-sm mb-8">
+                <h3 className="text-lg font-black text-white mb-3 flex items-center gap-2">
+                  <span className="text-xl">🎯</span>
+                  {t('resultsChrome', 'takeawayTitle')}
+                </h3>
+                {takeawayLoading && (
+                  <div className="flex items-center gap-3 text-gray-400 text-sm py-2">
+                    <span className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></span>
+                    {t('resultsChrome', 'takeawayLoading')}
+                  </div>
+                )}
+                {!takeawayLoading && takeawayError && (
+                  <p className="text-gray-500 text-sm italic">{t('resultsChrome', 'takeawayError')}</p>
+                )}
+                {!takeawayLoading && !takeawayError && takeawayText && (
+                  <p className="text-gray-200 leading-relaxed font-light whitespace-pre-line">{takeawayText}</p>
+                )}
+              </div>
+
+              {hasOrgContext && (
+                <div className="bg-gradient-to-br from-indigo-900/20 to-slate-800/30 p-6 sm:p-8 rounded-[2rem] border border-indigo-500/20 relative z-10 shadow-lg backdrop-blur-sm mb-8">
+                  <h3 className="text-lg font-black text-white mb-3 flex items-center gap-2">
+                    <span className="text-xl">🏢</span>
+                    {t('resultsChrome', 'orgFitTitle')}
+                  </h3>
+                  {orgFitLoading && (
+                    <div className="flex items-center gap-3 text-gray-400 text-sm py-2">
+                      <span className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></span>
+                      {t('resultsChrome', 'orgFitLoading')}
+                    </div>
+                  )}
+                  {!orgFitLoading && orgFitError && (
+                    <p className="text-gray-500 text-sm italic">{t('resultsChrome', 'orgFitError')}</p>
+                  )}
+                  {!orgFitLoading && !orgFitError && orgFitText && (
+                    <p className="text-gray-200 leading-relaxed font-light whitespace-pre-line">{orgFitText}</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}
