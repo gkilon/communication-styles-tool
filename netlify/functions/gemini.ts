@@ -215,13 +215,23 @@ export default async (req: Request) => {
     // Keep Gemini 3.6 Flash as model
     const modelName = payload.model || "gemini-3.6-flash";
 
+    // Gemini 3-series Flash models run an internal "thinking" pass by default (medium/high
+    // level) before producing any visible output — this is invisible latency the user just
+    // experiences as "slow". None of our use cases (coaching advice, report paragraphs,
+    // roleplay dialogue) need deep multi-step reasoning, so default to the fastest level
+    // unless a specific call explicitly asks for more.
+    const requestConfig = {
+      thinkingConfig: { thinkingLevel: "low" },
+      ...payload.config
+    };
+
     // Streaming actions
     if (action && action.endsWith('Stream')) {
       try {
         const result = await ai.models.generateContentStream({
           model: modelName,
           contents: payload.contents,
-          config: payload.config
+          config: requestConfig
         });
 
         const stream = new ReadableStream({
@@ -265,7 +275,7 @@ export default async (req: Request) => {
     const response = await ai.models.generateContent({
       model: modelName,
       contents: payload.contents,
-      config: payload.config
+      config: requestConfig
     });
 
     return new Response(JSON.stringify({ text: response.text }), {
