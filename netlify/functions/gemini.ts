@@ -221,7 +221,7 @@ export default async (req: Request) => {
     // roleplay dialogue) need deep multi-step reasoning, so default to the fastest level
     // unless a specific call explicitly asks for more.
     const requestConfig = {
-      thinkingConfig: { thinkingLevel: "low" },
+      thinkingConfig: { thinkingLevel: "LOW" },
       ...payload.config
     };
 
