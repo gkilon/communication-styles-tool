@@ -212,8 +212,8 @@ export default async (req: Request) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-    // Keep Gemini 3.6 Flash as model
-    const modelName = payload.model || "gemini-3.6-flash";
+    // Keep Gemini 3.8 Flash as model
+    const modelName = payload.model || "gemini-3.8-flash";
 
     // Gemini 3-series Flash models run an internal "thinking" pass by default (medium/high
     // level) before producing any visible output — this is invisible latency the user just
