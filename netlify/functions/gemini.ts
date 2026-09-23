@@ -247,7 +247,7 @@ export default async (req: Request) => {
     const modelName = payload.model || "gemini-3.6-flash";
 
     const requestConfig = {
-      thinkingConfig: { thinkingLevel: "LOW" },
+      thinkingConfig: { thinkingLevel: "MEDIUM" },
       ...payload.config
     };
 
