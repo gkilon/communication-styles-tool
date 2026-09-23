@@ -168,6 +168,36 @@ function getClientIp(req: Request): string {
 }
 
 // ----------------------------------------------------
+// Helper: Delay and Retry wrapper for Gemini calls
+// ----------------------------------------------------
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function executeWithRetry<T>(fn: () => Promise<T>, retries = 3, initialDelay = 1500): Promise<T> {
+  let currentDelay = initialDelay;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const isQuotaOrBusy = 
+        err?.status === 429 || 
+        err?.status === 503 ||
+        err?.message?.includes('429') || 
+        err?.message?.includes('503') ||
+        err?.message?.includes('RESOURCE_EXHAUSTED');
+
+      if (isQuotaOrBusy && i < retries - 1) {
+        console.warn(`Gemini rate limited (${err?.status || '429/503'}). Retrying attempt ${i + 1}/${retries} in ${currentDelay}ms...`);
+        await delay(currentDelay);
+        currentDelay *= 1.5;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Max retries reached");
+}
+
+// ----------------------------------------------------
 // 4. Main Function Handler
 // ----------------------------------------------------
 export default async (req: Request) => {
@@ -216,24 +246,21 @@ export default async (req: Request) => {
     // עודכן למודל יציב ומהיר
     const modelName = payload.model || "gemini-3.6-flash";
 
-    // Gemini 3-series Flash models run an internal "thinking" pass by default (medium/high
-    // level) before producing any visible output — this is invisible latency the user just
-    // experiences as "slow". None of our use cases (coaching advice, report paragraphs,
-    // roleplay dialogue) need deep multi-step reasoning, so default to the fastest level
-    // unless a specific call explicitly asks for more.
     const requestConfig = {
       thinkingConfig: { thinkingLevel: "LOW" },
       ...payload.config
     };
 
-    // Streaming actions
+    // Streaming actions with Retry wrapper
     if (action && action.endsWith('Stream')) {
       try {
-        const result = await ai.models.generateContentStream({
-          model: modelName,
-          contents: payload.contents,
-          config: requestConfig
-        });
+        const result = await executeWithRetry(() =>
+          ai.models.generateContentStream({
+            model: modelName,
+            contents: payload.contents,
+            config: requestConfig
+          })
+        );
 
         const stream = new ReadableStream({
           async start(controller) {
@@ -260,9 +287,8 @@ export default async (req: Request) => {
           }
         });
       } catch (streamError: any) {
-        console.error("Streaming initialization error:", streamError);
+        console.error("Streaming initialization error after retries:", streamError);
         
-        // זיהוי שגיאות עומס (429) או עומס שרת (503)
         const isQuota = streamError.message?.includes('429') || streamError.message?.includes('RESOURCE_EXHAUSTED') || streamError.message?.includes('quota');
         const isServerBusy = streamError.status === 503 || streamError.message?.includes('503');
 
@@ -284,21 +310,22 @@ export default async (req: Request) => {
       }
     }
 
-    // Non-streaming actions
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: payload.contents,
-      config: requestConfig
-    });
+    // Non-streaming actions with Retry wrapper
+    const response = await executeWithRetry(() =>
+      ai.models.generateContent({
+        model: modelName,
+        contents: payload.contents,
+        config: requestConfig
+      })
+    );
 
     return new Response(JSON.stringify({ text: response.text }), {
       headers: { "Content-Type": "application/json" }
     });
 
   } catch (error: any) {
-    console.error("Netlify Function Error:", error);
+    console.error("Netlify Function Error after retries:", error);
     
-    // זיהוי שגיאות גם בבקשות רגילות שאינן Streaming
     const isQuota = error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('quota');
     const isServerBusy = error.status === 503 || error.message?.includes('503');
 
