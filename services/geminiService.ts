@@ -58,7 +58,7 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
   };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s — Gemini 3.8 Flash's own model card notes occasional slowness
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s — Gemini occasionally slow
 
   let response: Response;
   try {
@@ -92,9 +92,8 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
 
 /**
  * Shared helper for streaming responses from our Netlify Function.
- * Retries once on transient failure (Gemini 3.8 Flash's own model card notes
- * occasional slowness/timeout issues) — but not on rate-limit (429) errors,
- * which already carry their own retry-after messaging.
+ * Retries once on transient failure (occasional slowness/timeout issues) 
+ * — but not on rate-limit (429) errors, which already carry their own retry-after messaging.
  */
 async function callGeminiApiStream(action: string, payload: any, onChunk: (chunk: string) => void): Promise<string> {
   const attempt = async (): Promise<string> => {
@@ -260,7 +259,7 @@ ${COLOR_TRAITS}
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
   const response = await callGeminiApi('generateContent', {
-    model: "gemini-3.8-flash",
+    model: "gemini-2.0-flash",
     contents: lang === 'he'
       ? "כתוב את פסקת ההמשך על ההתאמה הארגונית."
       : "Write the continuation paragraph on organizational fit.",
@@ -296,7 +295,7 @@ ${COLOR_TRAITS}
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-3.8-flash",
+      model: "gemini-2.0-flash",
       contents: userInput,
       config: {
         systemInstruction,
@@ -334,7 +333,7 @@ ${COLOR_TRAITS}
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
   return callGeminiApiStream('generateContent', {
-    model: "gemini-3.8-flash",
+    model: "gemini-2.0-flash",
     contents: userInput,
     config: {
       systemInstruction,
@@ -401,7 +400,7 @@ ${RESPONSE_STYLE_GUIDELINES}
 (הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)${getLangInstruction(lang)}`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-3.8-flash",
+      model: "gemini-2.0-flash",
       contents: challenge,
       config: {
         systemInstruction,
@@ -471,7 +470,7 @@ ${RESPONSE_STYLE_GUIDELINES}
 (הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)${getLangInstruction(lang)}`;
 
   return callGeminiApiStream('generateContent', {
-    model: "gemini-3.8-flash",
+    model: "gemini-2.0-flash",
     contents: challenge,
     config: {
       systemInstruction,
@@ -653,7 +652,7 @@ ${positionContext[relationship] || ''}
     const prompt = `היסטוריית השיחה העדכנית:\n${conversationLog}\n\nהמשתמש אומר עכשיו:\n${userInput}\n\nהגב מתוך הדמות בצורה אנושית ומציאותית (משפט-שניים):`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-3.8-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -726,7 +725,7 @@ ${targetRules}
 2. תכלס: שכתוב מחדש של אחד המשפטים הפחות טובים מהשיחה למשפט מנצח באותו הקשר שמנטרל את ההתנגדות בצורה נכונה].${getLangInstruction(lang)}`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-3.8-flash",
+      model: "gemini-2.0-flash",
       contents: `אנא בצע ניתוח מעמיק ומקצועי של היסטוריית השיחה הבאה:\n\n${conversationLog}`,
       config: {
         systemInstruction,
@@ -770,7 +769,7 @@ ${colorProfile}
 4. שכתוב מומלץ: הצע פרומפט מיטבי עבור המשימה המותאם לאופן החשיבה של הצבע ${mainColor}.`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-3.8-flash",
+      model: "gemini-2.0-flash",
       contents: "אנא נתח את הפרומפט המצויין.",
       config: {
         systemInstruction,
@@ -790,7 +789,7 @@ ${colorProfile}
 export const transcribeAudio = async (audioBase64: string, mimeType: string): Promise<string> => {
   try {
     const response = await callGeminiApi('generateContent', {
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.0-flash',
       contents: [
         {
           role: 'user',
@@ -831,7 +830,7 @@ CRITICAL TRANSLATION RULES:
 4. Return ONLY the translated English content without introductory or concluding conversational text.`;
 
     const response = await callGeminiApi('generateContent', {
-      model: "gemini-3.8-flash",
+      model: "gemini-2.0-flash",
       contents: text,
       config: {
         systemInstruction,
@@ -871,7 +870,7 @@ ${colorProfile}
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
   return callGeminiApiStream('generateContent', {
-    model: "gemini-3.8-flash",
+    model: "gemini-2.0-flash",
     contents: [{ role: 'user', parts: [{ text: situation }] }],
     config: {
       systemInstruction,
