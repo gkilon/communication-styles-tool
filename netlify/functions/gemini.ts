@@ -244,7 +244,7 @@ export default async (req: Request) => {
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
     
     // עודכן למודל יציב ומהיר
-    const modelName = payload.model || "gemini-3.6-flash";
+    const modelName = payload.model || "gemini-3.8-flash";
 
     const requestConfig = {
       thinkingConfig: { thinkingLevel: "MEDIUM" },
