@@ -7,50 +7,52 @@ export interface SimulationMessage {
 }
 
 /**
- * Shared helper to call our Netlify Function backend.
+ * Helper function to extract and format the organizational context 
+ * from the local storage session explicitly for the AI.
  */
-async function callGeminiApi(action: string, payload: any): Promise<any> {
-  const currentUserId = auth?.currentUser?.uid;
-  
-  // Read enterprise context and knowledge from session if available
+function buildOrgContext(): string {
   let sessionData: any = null;
   try {
     const rawSession = localStorage.getItem('comm_style_session');
     if (rawSession) sessionData = JSON.parse(rawSession);
   } catch (e) {}
 
-  // Build enterprise context prompt addition
-  let enterpriseContextPrompt = "";
-  if (sessionData) {
-    if (sessionData.companyName) {
-      enterpriseContextPrompt += `\n\n[הקשר ארגוני]: סדנה עבור חברת/ארגון "${sessionData.companyName}".`;
-    }
-    if (sessionData.orgContext) {
-      enterpriseContextPrompt += `\n[רקע ותרבות ארגונית של החברה]:\n${sessionData.orgContext}`;
-    }
-    if (sessionData.knowledgeBase) {
-      enterpriseContextPrompt += `\n[חומרי אבחון, סקרי אקלים, דוחות ודגשים ניהוליים של הארגון]:\n${sessionData.knowledgeBase}`;
-      enterpriseContextPrompt += `\nהנחיה חשובה למאמן ה-AI: עליך להתבסס על חומרי האבחון והידע הארגוני שלמעלה כדי להעניק ניתוח מותאם אישית, דוגמאות מציאותיות וטיפים שמתאימים במדויק לשפת הארגון, לאתגרים שלו ולתרבות הפנימית.`;
-    }
-  }
+  if (!sessionData) return '';
+  if (!sessionData.companyName && !sessionData.orgContext && !sessionData.knowledgeBase) return '';
 
-  // Inject into systemInstruction or append to prompt
-  let enrichedConfig = { ...(payload.config || {}) };
-  if (enterpriseContextPrompt) {
-    if (enrichedConfig.systemInstruction) {
-      if (typeof enrichedConfig.systemInstruction === 'string') {
-        enrichedConfig.systemInstruction = enrichedConfig.systemInstruction + enterpriseContextPrompt;
-      } else if (enrichedConfig.systemInstruction.parts) {
-        enrichedConfig.systemInstruction.parts.push({ text: enterpriseContextPrompt });
-      }
-    } else {
-      enrichedConfig.systemInstruction = enterpriseContextPrompt;
-    }
+  let prompt = `\n[ORGANIZATIONAL CONTEXT]\n`;
+  if (sessionData.companyName) {
+    prompt += `Company: ${sessionData.companyName}\n`;
   }
+  if (sessionData.orgContext) {
+    prompt += `Organizational culture/context:\n${sessionData.orgContext}\n`;
+  }
+  if (sessionData.knowledgeBase) {
+    prompt += `Organizational knowledge:\n${sessionData.knowledgeBase}\n`;
+  }
+  
+  prompt += `\nUse the organizational context as real context for this user's situation. Tailor your response to the interaction between the user's communication profile and the organizational environment. Do not ignore, generalize, or replace the organizational context with generic advice.\n`;
+  
+  return prompt;
+}
+
+/**
+ * Shared helper to call our Netlify Function backend.
+ */
+async function callGeminiApi(action: string, payload: any): Promise<any> {
+  const currentUserId = auth?.currentUser?.uid;
+  
+  // Read enterprise context strictly for user quota identification.
+  // The prompt injection itself was moved to explicit prompt builders (buildOrgContext)
+  // to ensure the AI understands the structure and prioritizes the context.
+  let sessionData: any = null;
+  try {
+    const rawSession = localStorage.getItem('comm_style_session');
+    if (rawSession) sessionData = JSON.parse(rawSession);
+  } catch (e) {}
 
   const enrichedPayload = {
     ...payload,
-    config: enrichedConfig,
     // Prefer a per-person identifier over shared network IP for quota purposes — otherwise an
     // entire workshop room on the same WiFi (same public IP) collides into one shared quota bucket.
     userId: currentUserId || sessionData?.participantId || sessionData?.accessCode || payload?.userId || null,
@@ -171,7 +173,8 @@ function buildColorProfile(scores: Scores): string {
     ? `דומיננטיות ברורה של ${dominant.n}`
     : `פרופיל מאוזן יחסית בין ${dominant.n} ל-${secondary.n}`;
 
-  return `פרופיל צבעים מלא של המשתמש:
+  return `[USER COMMUNICATION PROFILE]
+פרופיל צבעים מלא של המשתמש:
 - אדום (הנחוש): ${r} נקודות (${Math.round(r/total*100)}%)
 - צהוב (המשפיע): ${y} נקודות (${Math.round(y/total*100)}%)
 - ירוק (התומך): ${g} נקודות (${Math.round(g/total*100)}%)
@@ -229,30 +232,28 @@ function buildBackgroundContext(bg?: BackgroundData | null): string {
     const goalText = goalLabels[bg.goal] || bg.goal;
     parts.push(`מטרת המשתמש/ת מהשאלון: "${goalText}" — ודא שהאימון מכוון למטרה זו.`);
   }
-  return parts.length > 0 ? `\n\nמידע רקע על המשתמש/ת (השתמש בו לכל אורך השיחה):\n${parts.join('\n')}` : '';
+  return parts.length > 0 ? `\n[USER BACKGROUND]\nמידע רקע על המשתמש/ת (השתמש בו לכל אורך השיחה):\n${parts.join('\n')}` : '';
 }
 
 /**
  * Generates ONE flowing addendum paragraph on opportunities/pitfalls relative to the org's
  * actual context (injected from the session by callGeminiApi) — meant to be appended directly
  * onto the deterministic "general analysis" paragraph, not shown as its own section.
- * Only call this when the session actually carries org context (companyName/orgContext/
- * knowledgeBase) — with none, there's nothing organization-specific to say. The role/goal
- * personalization that used to live in this same call is now handled deterministically in
- * analysisService.ts (no AI call, so it never depends on quota/availability).
  */
 export const getIntegratedInsights = async (scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
+  const orgContext = buildOrgContext();
 
   const systemInstruction = `אתה יועץ תקשורת וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
 ${bgContext}
+${orgContext}
 
 ${COLOR_TRAITS}
 
-המשימה שלך: כתוב פסקה זורמת אחת (3-5 משפטים, ללא כותרות, ללא רשימות, ללא פתיח כמו "בהמשך לניתוח") שממשיכה ישירות ניתוח שכבר נכתב על הפרופיל, ומוסיפה לו התייחסות להזדמנות ולמלכודת הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך (תרבות הארגון, האתגרים והחומרים הניהוליים שצורפו) — לא ניתוח גנרי שיכול להתאים לכל ארגון.
+המשימה שלך: כתוב פסקה זורמת אחת (3-5 משפטים, ללא כותרות, ללא רשימות, ללא פתיח כמו "בהמשך לניתוח") שממשיכה ישירות ניתוח שכבר נכתב על הפרופיל, ומוסיפה לו התייחסות להזדמנות ולמלכודת הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך ב-[ORGANIZATIONAL CONTEXT] (תרבות הארגון, האתגרים והחומרים הניהוליים שצורפו) — לא ניתוח גנרי שיכול להתאים לכל ארגון. נתח את הפרופיל האישי *ביחד* עם הארגון בו הוא פועל.
 
 הפסקה צריכה להישמע כהמשך טבעי לטקסט שקדם לה, לא כמו מסמך נפרד.
 
@@ -277,20 +278,23 @@ export const getAiCoachAdvice = async (scores: Scores, userInput: string, backgr
   try {
     const colorProfile = buildColorProfile(scores);
     const bgContext = buildBackgroundContext(backgroundData);
+    const orgContext = buildOrgContext();
+    
     const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
 ${bgContext}
+${orgContext}
 
 ${COLOR_TRAITS}
 
 הנחיות לאימון מותאם אישית:
-1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה. אם הדומיננטיות חזקה מאוד, ציין את עוצמתה.
+1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה.
 2. פנה תמיד במין הנכון לפי מידע הרקע. זהו כלל מחייב.
-3. כשהמשתמש/ת פונה אליך בפעם הראשונה ולא שאל/ה שאלה ספציפית — שאל/י שאלת פתיחה אחת קצרה המותאמת למטרה שציין/ה: אם המטרה היא כלי לניהול — שאל על אתגר ניהולי ספציפי. אחרת — שאל מה מביא אותו/ה כאן. המתן לתשובה.
-4. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שתואר, לא לדוגמאות גנריות.
-5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון.
-6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.
+3. כשהמשתמש/ת פונה אליך בפעם הראשונה ולא שאל/ה שאלה ספציפית — שאל/י שאלת פתיחה אחת קצרה המותאמת למטרה שציין/ה. המתן לתשובה.
+4. השפעת הארגון: אם מופיע [ORGANIZATIONAL CONTEXT], התייחס אליו כאל סביבת העבודה האמיתית והיומיומית של המשתמש. קשר את הייעוץ שלך לאינטראקציה שבין הנטייה הטבעית של המשתמש (הצבע שלו) לבין האופי והדרישות של הארגון בו הוא עובד.
+5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון בתוך המציאות הארגונית שלו.
+6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown.
 
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
@@ -315,20 +319,23 @@ ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
+  const orgContext = buildOrgContext();
+
   const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
 ${bgContext}
+${orgContext}
 
 ${COLOR_TRAITS}
 
 הנחיות לאימון מותאם אישית:
-1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה. אם הדומיננטיות חזקה מאוד, ציין את עוצמתה.
+1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה.
 2. פנה תמיד במין הנכון לפי מידע הרקע. זהו כלל מחייב.
 3. כשהמשתמש/ת פונה אליך בפעם הראשונה ולא שאל/ה שאלה ספציפית — שאל שאלת פתיחה אחת קצרה המותאמת למטרה שציין/ה. המתן לתשובה.
-4. כשיש קונטקסט — השתמש בו. התייחס ספציפית למה שתואר, לא לדוגמאות גנריות.
-5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון.
-6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown, שמור על תשובות קצרות והימנע מהקדמות מריחות.
+4. השפעת הארגון: אם מופיע [ORGANIZATIONAL CONTEXT], התייחס אליו כאל סביבת העבודה האמיתית והיומיומית של המשתמש. קשר את הייעוץ שלך לאינטראקציה שבין הנטייה הטבעית של המשתמש (הצבע שלו) לבין האופי והדרישות של הארגון בו הוא עובד.
+5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון בתוך המציאות הארגונית שלו.
+6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown.
 
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
@@ -375,7 +382,11 @@ export const getTeamAiAdvice = async (users: UserProfile[], challenge: string, l
     const missingColors = colorCounts.filter(c => c.v === 0).map(c => c.n);
     const missingStr = missingColors.length > 0 ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}` : 'כל הצבעים מיוצגים בצוות';
 
-    const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
+    const orgContext = buildOrgContext();
+
+    const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים וההקשר הארגוני הקיים.
+
+${orgContext}
 
 ${COLOR_TRAITS}
 
@@ -389,12 +400,12 @@ ${missingStr}
 
 האתגר שהוצג: "${challenge}"
 
-חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק — לא ניתוח גנרי. 
+חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק ולאופי הארגון במידה והוזן — לא ניתוח גנרי.
 
 מבנה התשובה הנדרש (בעברית, פורמט Markdown):
-1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה? כיצד הצבע הדומיננטי בצוות והצבע החסר משפיעים על המצב?
+1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה במסגרת הארגון הספציפי? כיצד הצבע הדומיננטי והצבע החסר משפיעים על המצב?
 2. נקודות עיוורון: מה הצוות מפספס בגלל הרכב הצבעים שלו?
-3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות.
+3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות ולארגון.
 
 ${RESPONSE_STYLE_GUIDELINES}
 (הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)${getLangInstruction(lang)}`;
@@ -445,7 +456,11 @@ export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: str
   const missingColors = colorCounts.filter(c => c.v === 0).map(c => c.n);
   const missingStr = missingColors.length > 0 ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}` : 'כל הצבעים מיוצגים בצוות';
 
-  const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים.
+  const orgContext = buildOrgContext();
+
+  const systemInstruction = `אתה יועץ ארגוני בכיר מבית Kilon Consulting. נתח את אתגר הצוות הבא על בסיס מודל ארבעת הצבעים וההקשר הארגוני הקיים.
+
+${orgContext}
 
 ${COLOR_TRAITS}
 
@@ -459,12 +474,12 @@ ${missingStr}
 
 האתגר שהוצג: "${challenge}"
 
-חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק — לא ניתוח גנרי.
+חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק ולאופי הארגון במידה והוזן — לא ניתוח גנרי.
 
 מבנה התשובה הנדרש (בעברית, פורמט Markdown):
-1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה? כיצד הצבע הדומיננטי בצוות והצבע החסר משפיעים על המצב?
+1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה במסגרת הארגון הספציפי? כיצד הצבע הדומיננטי והצבע החסר משפיעים על המצב?
 2. נקודות עיוורון: מה הצוות מפספס בגלל הרכב הצבעים שלו?
-3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות.
+3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות ולארגון.
 
 ${RESPONSE_STYLE_GUIDELINES}
 (הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)${getLangInstruction(lang)}`;
@@ -584,11 +599,13 @@ function getFewShotExamples(color: string, relationship: string): string {
 }
 
 /**
- * מנהל את יצירת הדיאלוג בזמן אמת - משודרג למניעת רובוטיות ופשטנות יתר.
+ * מנהל את יצירת הדיאלוג בזמן אמת - משודרג למניעת רובוטיות ופשטנות יתר,
+ * ומשלב באופן חי את תרבות הארגון.
  */
 export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], userInput: string, lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
+    const orgContext = buildOrgContext();
 
     const relationshipMatch = scenario.match(/\[יחס: הצד השני הוא ה(.+?) של המשתמש\]/);
     const relationship = relationshipMatch ? relationshipMatch[1] : 'קולגה';
@@ -636,6 +653,7 @@ export const getSimulationResponse = async (scores: Scores, targetColor: string,
 
 פרופיל הצבעים של המשתמש מולך (לשימוש כללי ברקע):
 ${colorProfile}
+${orgContext}
 
 הנחיית אופי קריטית - איך להתנהג:
 ${targetBehavior}
@@ -645,8 +663,9 @@ ${positionContext[relationship] || ''}
 1. חל איסור מוחלט לחזור על מילים קבועות בלופ (כמו "תוצאות" או "נתונים"). בטא את האופי שלך דרך *קו המחשבה והטון*, לא דרך מנטרות מכניות.
 2. תגובות קצרות וטבעיות של אדם עסוק: משפט אחד, מקסימום שניים בכל פעם. בדיוק כמו בשיחה משרדית אמיתית או בצ'אט ארגוני (Slack/Teams).
 3. הקשבה אקטיבית ודינמית: אם המשתמש מציב לך גבול, נפגע, מתעצבן, מציע פתרון טוב או מקלל (למשל "חתיכת אפס") - הגב לזה בצורה אנושית והגיונית! אל תתעלם ואל תמשיך "לנגן את הטקסט הקבוע שלך". אם הוא מקלל או מתפטר, הגב בהפתעה, באכזבה או בשוק מקצועי מציאותי.
-4. אל תהיה קריקטורה קיצונית של הצבע. אתה קודם כל בן אדם מקצועי שעובד בארגון, ורק אז יש לך את הנטייה הסגנונית של הצבע שלך.
-5. לעולם אל תצא מהדמות. אל תכתוב הקדמות, הסברים או סוגריים. החזר אך ורק את התגובה הישירה של הדמות.${getLangInstruction(lang)}`;
+4. התאמה לארגון: אתה חלק מהארגון המתואר ב-[ORGANIZATIONAL CONTEXT] (במידה וקיים). ההתנהגות והתגובות שלך חייבות לשקף גם את התרבות הארגונית (למשל היררכיה, קצב, פוליטיקה) בנוסף לצבע שלך.
+5. אל תהיה קריקטורה קיצונית של הצבע. אתה קודם כל בן אדם מקצועי שעובד בארגון, ורק אז יש לך את הנטייה הסגנונית של הצבע שלך.
+6. לעולם אל תצא מהדמות. אל תכתוב הקדמות, הסברים או סוגריים. החזר אך ורק את התגובה הישירה של הדמות.${getLangInstruction(lang)}`;
 
     const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'אתה'}: ${m.text}`).join('\n\n');
     const prompt = `היסטוריית השיחה העדכנית:\n${conversationLog}\n\nהמשתמש אומר עכשיו:\n${userInput}\n\nהגב מתוך הדמות בצורה אנושית ומציאותית (משפט-שניים):`;
@@ -670,11 +689,12 @@ ${positionContext[relationship] || ''}
 };
 
 /**
- * מנגנון המשוב המעמיק - מנתח דינמיקה, סבטקסט והתמודדות עם התנגדויות גלויות וסמויות.
+ * מנגנון המשוב המעמיק - מנתח דינמיקה, סבטקסט והתמודדות עם התנגדויות, תוך התייחסות להקשר הארגוני.
  */
 export const getSimulationFeedback = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
+    const orgContext = buildOrgContext();
     const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'הקולגה (צבע ' + targetColor + ')'}: ${m.text}`).join('\n\n');
 
     const colorFeedbackRules: Record<string, string> = {
@@ -691,16 +711,16 @@ export const getSimulationFeedback = async (scores: Scores, targetColor: string,
 התרחיש שהתנהל: "${scenario}"
 הצד השני בסימולציה פעל כטיפוס בצבע: "${targetColor}".
 
-פרופיל הצבעים המלא של המשתמש שביצע את הסימולציה:
 ${colorProfile}
+${orgContext}
 
 הנחיות לניתוח סגנון ה${targetColor}:
 ${targetRules}
 
-משימת הניתוח שלך - עליך לנתח את הדינמיקה הכוללת בדגש על ניהול התנגדויות:
+משימת הניתוח שלך - עליך לנתח את הדינמיקה הכוללת בדגש על ניהול התנגדויות והתאמה ארגונית:
 1. אל תיתפס למילים בודדות. נתח את ה"סבטקסט", את הטון ואת קו המחשבה של המשתמש.
-2. בחן לעומק כיצד המשתמש זיהה והתמודד עם התנגדויות. האם היו בשיחה התנגדויות סמויות (שבו הטיפוס אומר משהו אחד אך רמז למשהו אחר בטון או בתוכן)? האם המשתמש זיהה אותן או פספס אותן והמשיך הלאה?
-3. חבר את התנהגות המשתמש לפרופיל הצבעים שלו (למשל: "כמשתמש עם אדום נמוך, נטייתך לוותר/להסס באה לידי ביטוי ב...").
+2. בחן לעומק כיצד המשתמש זיהה והתמודד עם התנגדויות. האם היו בשיחה התנגדויות סמויות?
+3. חבר את התנהגות המשתמש לפרופיל הצבעים שלו ול[ORGANIZATIONAL CONTEXT] במידה וקיים (למשל: "כמשתמש ירוק בארגון היררכי ותחרותי כמו שלכם, הנטייה שלך לוותר בלטה במיוחד כש...").
 
 מבנה המשוב הנדרש (עברית מקצועית, פורמט Markdown):
 
@@ -708,20 +728,17 @@ ${targetRules}
 [כאן תספק הסבר קצר אך מעמיק על המניע הפנימי של הטיפוס בסיטואציה הזו. מה מנהל אותו? ממה הוא מפחד? מה הוא באמת חיפש לקבל מהמשתמש בשיחה הזו?]
 
 ### 🎯 ניתוח התמודדות עם התנגדויות (גלויות וסמויות)
-[כאן תנתח ספציפית את ניהול ההתנגדויות:
-- האם הטיפוס הציג התנגדות גלויה או סמויה? הבא ציטוט מהשיחה שממחיש זאת.
-- כיצד המשתמש פעל מול ההתנגדות? האם הוא התגונן, תקף חזרה, התעלם, או שיקף וניטרל אותה? 
-- קבע במפורש האם המשתמש הצליח לזהות את הניואנס הסמוי בטון של הטיפוס או "רץ קדימה" ופספס את החיכוך התת-קרקעי].
+[כאן תנתח ספציפית את ניהול ההתנגדויות: האם הטיפוס הציג התנגדות גלויה או סמויה? הבא ציטוט מהשיחה שממחיש זאת. כיצד המשתמש פעל מול ההתנגדות? והאם הוא קרא את הניואנס נכון?]
 
 ### ✅ מה עבד טוב בשיחה?
 [אנליזה של מה שעבד טוב מבחינה אסטרטגית. הסבר איזו פעולה או משפט של המשתמש פגעו בצרכים של הטיפוס ה${targetColor} וגרמו להתקדמות בשיחה. הבא ציטוט מדויק והסבר את ההשפעה שלו].
 
 ### ❌ נקודות עיוורון ופספוסים
-[כאן הלב של המשוב. איפה המשתמש נכשל בקריאת המפה? היכן הפרופיל האישי שלו גרם לו לפעול בצורה שגויה מול ה${targetColor}? הבא ציטוט ספציפי שבו חל מפנה שלילי או חוסר הבנה].
+[כאן הלב של המשוב. איפה המשתמש נכשל בקריאת המפה ביחס לצבע שלו ולתרבות הארגונית שבה הוא פועל? הבא ציטוט ספציפי שבו חל מפנה שלילי או חוסר הבנה].
 
 ### 🚀 אסטרטגיה מנצחת וטיפ זהב לפעם הבאה
 [המלצה קונקרטית, עמוקה ומעשית שמורכבת משני חלקים: 
-1. שינוי תפיסתי: איך המשתמש צריך לגשת מנטלית לסיטואציה כזו בפעם הבאה בהתאם לצבעים שלו.
+1. שינוי תפיסתי: איך המשתמש צריך לגשת מנטלית לסיטואציה כזו בפעם הבאה בהתאם לצבעים שלו ולאופי הארגון.
 2. תכלס: שכתוב מחדש של אחד המשפטים הפחות טובים מהשיחה למשפט מנצח באותו הקשר שמנטרל את ההתנגדות בצורה נכונה].${getLangInstruction(lang)}`;
 
     const response = await callGeminiApi('generateContent', {
@@ -849,10 +866,12 @@ CRITICAL TRANSLATION RULES:
 
 export const getStuckManagerAdviceStream = async (scores: Scores, situation: string, onChunk: (chunk: string) => void, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
+  const orgContext = buildOrgContext();
 
   const systemInstruction = `אתה יועץ מנהיגות ופסיכולוג ארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
+${orgContext}
 
 מאפייני התנהגות תחת לחץ לפי צבע:
 - אדום (הנחוש): תחת לחץ נוטה להיות חסר סבלנות, תוקפני, דורש שליטה מיידית.
@@ -862,8 +881,8 @@ ${colorProfile}
 
 המצב שבו הוא תקוע: "${situation}"
 
-תפקידך הוא לשמש ככפתור חילוץ מהיר ומותאם אישית לפרופיל הספציפי שלו.
-1. שיקוף קצר ונרמול (Validation) — דבר אל הלב של הפרופיל.
+תפקידך הוא לשמש ככפתור חילוץ מהיר ומותאם אישית לפרופיל הספציפי שלו ולארגון בו הוא עובד.
+1. שיקוף קצר ונרמול (Validation) — דבר אל הלב של הפרופיל בתוך המסגרת הארגונית.
 2. פעולה מיידית לוויסות רגשי/פיזיולוגי המתאימה לפרופיל שלו.
 3. 3 המלצות "תכלס" לפעולה מיידית כדי לחלץ אותו מהמצב.
 
