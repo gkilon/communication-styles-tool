@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
@@ -8,7 +7,8 @@ import { BackgroundQuestionsScreen } from './components/BackgroundQuestionsScree
 import { LanguageToggle } from './components/LanguageToggle';
 import { Scores, BackgroundData, UserSession } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
-import { isFirebaseInitialized } from './firebaseConfig';
+import { isFirebaseInitialized, db } from './firebaseConfig';
+import { getDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
 import { saveUserResults, saveWorkshopGuestResults } from './services/firebaseService';
 import { useLanguage } from './i18n/LanguageContext';
 import { useT } from './i18n/useT';
@@ -125,11 +125,50 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
     }
   }, [step, scores, user, session]);
 
-  const handleAuthenticate = (newSession: UserSession) => {
+  const handleAuthenticate = async (newSession: UserSession) => {
+    // 1. הגדרת הסשן הראשונית כדי לאפשר למשתמש להיכנס למערכת מיד
     setSession(newSession);
     setIsAuthenticated(true);
-  };
 
+    // 2. משיכת ההקשר הארגוני מ-Firebase והזרקתו ל-Session
+    if (newSession.type === 'team' && newSession.teamName) {
+      try {
+        const q = query(collection(db, "teams"), where("name", "==", newSession.teamName));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const teamDoc = querySnapshot.docs[0];
+          const teamData = teamDoc.data();
+          
+          let updatedSession = { ...newSession };
+
+          // משיכת ידע ארגוני ישיר של הצוות
+          if (teamData.companyName) updatedSession.companyName = teamData.companyName;
+          if (teamData.orgContext) updatedSession.orgContext = teamData.orgContext;
+          if (teamData.knowledgeBase) updatedSession.knowledgeBase = teamData.knowledgeBase;
+          if (teamData.logoUrl) updatedSession.logoUrl = teamData.logoUrl;
+
+          // אם הצוות משויך לארגון-אב, נמשוך גם את המידע שלו (במידה ולא נדרס מקומית)
+          if (teamData.organizationId) {
+            const orgDocRef = doc(db, "organizations", teamData.organizationId);
+            const orgSnap = await getDoc(orgDocRef);
+            if (orgSnap.exists()) {
+              const orgData = orgSnap.data();
+              if (!updatedSession.companyName && orgData.companyName) updatedSession.companyName = orgData.companyName;
+              if (!updatedSession.orgContext && orgData.orgContext) updatedSession.orgContext = orgData.orgContext;
+              if (!updatedSession.knowledgeBase && orgData.knowledgeBase) updatedSession.knowledgeBase = orgData.knowledgeBase;
+              if (!updatedSession.logoUrl && orgData.logoUrl) updatedSession.logoUrl = orgData.logoUrl;
+            }
+          }
+
+          // עדכון ה-State - מה שיגרום ל-useEffect לשמור הכל ב-localStorage
+          setSession(updatedSession);
+        }
+      } catch (e) {
+        console.error("Failed to load organizational context for team:", e);
+      }
+    }
+  };
 
   // After intro, always show background questions first (if not returning to existing progress)
   const handleStart = () => {
