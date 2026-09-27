@@ -167,6 +167,26 @@ function getClientIp(req: Request): string {
   return req.headers.get("x-nf-client-connection-ip") || req.headers.get("client-ip") || "unknown_client";
 }
 
+// Verifies the Firebase ID token sent in the Authorization header and returns
+// the REAL, server-confirmed uid — or null if there is no valid token.
+// This replaces trusting payload.userId, which the caller could set to
+// anything (including a fresh random value on every request) to dodge quota.
+async function getVerifiedUid(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  const idToken = authHeader.slice("Bearer ".length).trim();
+  if (!idToken) return null;
+
+  try {
+    if (admin.apps.length === 0) return null; // Admin SDK not initialized — can't verify
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    return decoded.uid;
+  } catch (e) {
+    console.warn("ID token verification failed:", e);
+    return null;
+  }
+}
+
 // ----------------------------------------------------
 // Helper: Delay and Retry wrapper for Gemini calls
 // ----------------------------------------------------
@@ -204,17 +224,23 @@ export default async (req: Request) => {
   try {
     const { action, payload } = await req.json();
     const clientIp = getClientIp(req);
-    const userId = payload?.userId;
 
     // Quota Enforcement: Firebase Admin or In-Memory Fallback
     const adminDb = initFirebaseAdmin();
+
+    // Only a server-verified uid counts as "a real person" for quota purposes.
+    // We no longer trust payload.userId — a caller hitting this endpoint
+    // directly could set that to a fresh random string on every request.
+    const verifiedUid = adminDb ? await getVerifiedUid(req) : null;
+
     let limitCheck: { allowed: boolean; retryAfter?: number; errorMsg?: string };
 
     if (adminDb) {
-      const identifier = userId || clientIp;
-      limitCheck = await checkAndIncrementQuota(adminDb, identifier, !!userId);
+      const identifier = verifiedUid || clientIp;
+      limitCheck = await checkAndIncrementQuota(adminDb, identifier, !!verifiedUid);
+
     } else {
-      limitCheck = checkFallbackLimit(userId || clientIp);
+      limitCheck = checkFallbackLimit(verifiedUid || clientIp);
     }
 
     if (!limitCheck.allowed) {

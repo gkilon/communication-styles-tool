@@ -41,10 +41,7 @@ function buildOrgContext(): string {
  */
 async function callGeminiApi(action: string, payload: any): Promise<any> {
   const currentUserId = auth?.currentUser?.uid;
-  
-  // Read enterprise context strictly for user quota identification.
-  // The prompt injection itself was moved to explicit prompt builders (buildOrgContext)
-  // to ensure the AI understands the structure and prioritizes the context.
+
   let sessionData: any = null;
   try {
     const rawSession = localStorage.getItem('comm_style_session');
@@ -53,11 +50,21 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
 
   const enrichedPayload = {
     ...payload,
-    // Prefer a per-person identifier over shared network IP for quota purposes — otherwise an
-    // entire workshop room on the same WiFi (same public IP) collides into one shared quota bucket.
-    userId: currentUserId || sessionData?.participantId || sessionData?.accessCode || payload?.userId || null,
     accessCode: sessionData?.accessCode || null
   };
+
+  // Attach a real, server-verifiable Firebase ID token — the backend uses
+  // this (not anything we claim in the payload) to identify who's calling,
+  // so quota can't be dodged by just sending a different self-reported id.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (auth?.currentUser) {
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      headers['Authorization'] = `Bearer ${idToken}`;
+    } catch (e) {
+      console.warn('Could not get ID token for Gemini request:', e);
+    }
+  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s — Gemini occasionally slow
@@ -66,7 +73,7 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
   try {
     response = await fetch('/api/gemini', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ action, payload: enrichedPayload }),
       signal: controller.signal
     });

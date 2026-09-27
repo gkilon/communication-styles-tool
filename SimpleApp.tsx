@@ -8,8 +8,7 @@ import { BackgroundQuestionsScreen } from './components/BackgroundQuestionsScree
 import { LanguageToggle } from './components/LanguageToggle';
 import { Scores, BackgroundData, UserSession } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
-import { isFirebaseInitialized, db } from './firebaseConfig';
-import { getDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
+import { isFirebaseInitialized } from './firebaseConfig';
 import { saveUserResults } from './services/firebaseService';
 import { useLanguage } from './i18n/LanguageContext';
 import { useT } from './i18n/useT';
@@ -107,47 +106,11 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
     }
   }, [step, scores, user]);
 
-  const handleAuthenticate = async (newSession: UserSession) => {
-    // 1. Store the session (code/team info) right away so AuthGate has it
+  const handleAuthenticate = (newSession: UserSession) => {
+    // The server (netlify/functions/validateCode.ts) already merged in the
+    // team's/organization's branding, context and knowledge base before
+    // returning — no need to fetch it again from the client.
     setSession(newSession);
-
-    // 2. Pull organizational context from Firebase and inject it into the session
-    if (newSession.type === 'team' && newSession.teamName) {
-      try {
-        const q = query(collection(db, "teams"), where("name", "==", newSession.teamName));
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-          const teamDoc = querySnapshot.docs[0];
-          const teamData = teamDoc.data();
-
-          let updatedSession = { ...newSession };
-
-          if (teamData.companyName) updatedSession.companyName = teamData.companyName;
-          if (teamData.orgContext) updatedSession.orgContext = teamData.orgContext;
-          if (teamData.knowledgeBase) updatedSession.knowledgeBase = teamData.knowledgeBase;
-          if (teamData.logoUrl) updatedSession.logoUrl = teamData.logoUrl;
-
-          // If the team belongs to a parent organization, pull its info too
-          // (only for fields the team hasn't overridden itself)
-          if (teamData.organizationId) {
-            const orgDocRef = doc(db, "organizations", teamData.organizationId);
-            const orgSnap = await getDoc(orgDocRef);
-            if (orgSnap.exists()) {
-              const orgData = orgSnap.data();
-              if (!updatedSession.companyName && orgData.companyName) updatedSession.companyName = orgData.companyName;
-              if (!updatedSession.orgContext && orgData.orgContext) updatedSession.orgContext = orgData.orgContext;
-              if (!updatedSession.knowledgeBase && orgData.knowledgeBase) updatedSession.knowledgeBase = orgData.knowledgeBase;
-              if (!updatedSession.logoUrl && orgData.logoUrl) updatedSession.logoUrl = orgData.logoUrl;
-            }
-          }
-
-          setSession(updatedSession);
-        }
-      } catch (e) {
-        console.error("Failed to load organizational context for team:", e);
-      }
-    }
   };
 
   // After intro, always show background questions first (if not returning to existing progress)

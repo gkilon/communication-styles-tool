@@ -329,68 +329,21 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
   const code = rawCode.trim();
   if (!code) return { valid: false, type: 'invalid', message: 'נא להזין קוד גישה' };
 
-  const enrichWithTeamData = async (res: AccessValidationResult): Promise<AccessValidationResult> => {
-    if (res.teamName && res.teamName !== 'General') {
-      const teamObj = await getTeamByName(res.teamName);
-      if (teamObj) {
-        res.companyName = teamObj.companyName;
-        res.logoUrl = teamObj.logoUrl;
-        res.orgContext = teamObj.orgContext;
-        res.knowledgeBase = teamObj.knowledgeBase;
-      }
-    }
-    return res;
-  };
-
-  // 1. Check legacy global password in settings/access
+  // Validated server-side now (netlify/functions/validateCode.ts) via the Admin
+  // SDK — the browser no longer reads access_codes/teams/organizations/settings
+  // directly, so those collections can be locked down to admin-only in
+  // firestore.rules instead of staying world-readable.
   try {
-    const accessSnap = await getDoc(doc(db, "settings", "access"));
-    if (accessSnap.exists()) {
-      const qPass = (accessSnap.data() as any).questionnairePassword;
-      if (qPass && code.toLowerCase() === qPass.toLowerCase()) {
-        return { valid: true, type: 'global', teamName: 'General', dailyLimit: 30 };
-      }
-    }
+    const response = await fetch('/api/validate-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    return await response.json() as AccessValidationResult;
   } catch (e) {
-    console.warn("Could not check settings/access, falling back:", e);
+    console.error("Error calling validate-code function:", e);
+    return { valid: false, type: 'invalid', message: 'שגיאת תקשורת עם השרת. נסה שוב.' };
   }
-
-  // 2. Check access_codes collection
-  try {
-    let snap = await getDoc(doc(db, "access_codes", code.toUpperCase()));
-    if (!snap.exists()) {
-      snap = await getDoc(doc(db, "access_codes", code));
-    }
-
-    if (snap.exists()) {
-      const data = snap.data() as any;
-      const isActive = data.active !== false;
-      if (!isActive) {
-        return { valid: false, type: 'invalid', message: 'קוד הגישה פג תוקף או אינו פעיל' };
-      }
-      const rawLimit = data.dailyLimit ?? 50;
-      const parsedLimit = Number(rawLimit);
-      const teamName = data.teamName || 'General';
-      const codeType = data.type || (teamName !== 'General' ? 'team' : 'personal');
-
-      const initialResult: AccessValidationResult = {
-        valid: true,
-        type: codeType,
-        teamName: teamName,
-        companyName: data.companyName,
-        logoUrl: data.logoUrl,
-        orgContext: data.orgContext,
-        knowledgeBase: data.knowledgeBase,
-        dailyLimit: isNaN(parsedLimit) ? 50 : parsedLimit
-      };
-
-      return await enrichWithTeamData(initialResult);
-    }
-  } catch (e) {
-    console.warn("Error checking access_codes in Firestore:", e);
-  }
-
-  return { valid: false, type: 'invalid', message: 'קוד גישה שגוי. אנא ודא שהזנת את הקוד במדויק.' };
 };
 
 
