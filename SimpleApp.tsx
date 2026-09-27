@@ -185,8 +185,20 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
 
   const handleLogout = () => {
     if (!window.confirm(t('shell', 'logoutConfirm'))) return;
+    // Clear EVERYTHING local — session, answers, step, background — not just
+    // the session. Otherwise the next person to sign in on this same browser
+    // (e.g. a different guest in the same incognito window) inherits the
+    // previous person's in-progress or completed questionnaire.
     setSession(null);
+    setAnswers({});
+    setCurrentQuestionIndex(0);
+    setBackgroundData(DEFAULT_BACKGROUND);
+    setStep('intro');
     localStorage.removeItem(STORAGE_KEY_SESSION);
+    localStorage.removeItem(STORAGE_KEY_ANSWERS);
+    localStorage.removeItem(STORAGE_KEY_STEP);
+    localStorage.removeItem(STORAGE_KEY_INDEX);
+    localStorage.removeItem(STORAGE_KEY_BG);
     import('firebase/auth').then(({ signOut, getAuth }) => {
       const auth = getAuth();
       if (auth.currentUser) signOut(auth);
