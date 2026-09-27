@@ -17,6 +17,8 @@ import { useT } from './i18n/useT';
 interface SimpleAppProps {
   onAdminLoginAttempt: (email: string, pass: string) => Promise<void>;
   user?: any;
+  isPreviewingAsAdmin?: boolean;
+  onReturnToAdmin?: () => void;
 }
 
 const STORAGE_KEY_ANSWERS = 'comm_style_answers';
@@ -27,7 +29,7 @@ const STORAGE_KEY_SESSION = 'comm_style_session';
 
 const DEFAULT_BACKGROUND: BackgroundData = { gender: '', isManager: '', goal: '' };
 
-const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
+const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPreviewingAsAdmin, onReturnToAdmin }) => {
   const { dir } = useLanguage();
   const { t } = useT();
 
@@ -226,7 +228,16 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user }) => {
           <p className="text-gray-300 mt-1 text-lg font-light">{t('shell', 'subtitle')}</p>
 
           {!!user && (
-            <div className="absolute top-0 left-0 flex gap-2">
+            <div className="absolute top-0 left-0 flex items-center gap-2">
+              <span className="text-[11px] text-gray-500 hidden sm:inline" dir="ltr">{user.email}</span>
+              {isPreviewingAsAdmin && onReturnToAdmin && (
+                <button
+                  onClick={onReturnToAdmin}
+                  className="text-xs text-cyan-300 hover:text-white border border-cyan-600/50 rounded px-3 py-1 bg-cyan-900/40 transition-colors font-bold"
+                >
+                  חזרה לניהול
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-3 py-1 bg-gray-800/50 transition-colors"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { db } from '../firebaseConfig';
+import { db, auth } from '../firebaseConfig';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   getAllUsers,
@@ -23,11 +23,12 @@ import { KeyRound, Copy, Check, Plus, Building2, BookOpen, Upload, Sparkles, Sav
 
 interface AdminDashboardProps {
   onBack: () => void;
+  onPreviewAsUser?: () => void;
 }
 
 type AdminTab = 'participants' | 'organizations' | 'settings';
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPreviewAsUser }) => {
   const [tab, setTab] = useState<AdminTab>('participants');
 
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -439,11 +440,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           <div>
             <h2 className="text-3xl font-bold text-cyan-300">לוח בקרה מנהלים</h2>
             <p className="text-gray-400 text-sm mt-1 italic">ניהול משתתפים, ארגונים והגדרות מערכת</p>
+            <p className="text-xs text-gray-500 mt-1">מחובר כ: <span className="text-cyan-400 font-bold" dir="ltr">{auth.currentUser?.email || '—'}</span></p>
           </div>
-          <button onClick={onBack} className="flex items-center gap-2 text-gray-300 hover:text-white border border-gray-600 px-4 py-2 rounded-lg text-sm bg-gray-800">
-            <ArrowLeftIcon className="w-4 h-4 rotate-180" />
-            <span>יציאה למסך ראשי</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {onPreviewAsUser && (
+              <button onClick={onPreviewAsUser} className="flex items-center gap-2 text-cyan-300 hover:text-white border border-cyan-600/50 hover:bg-cyan-600 px-4 py-2 rounded-lg text-sm bg-cyan-900/30 transition-all font-bold">
+                <span>בדוק כמשתמש</span>
+              </button>
+            )}
+            <button onClick={onBack} className="flex items-center gap-2 text-gray-300 hover:text-white border border-gray-600 px-4 py-2 rounded-lg text-sm bg-gray-800">
+              <ArrowLeftIcon className="w-4 h-4 rotate-180" />
+              <span>התנתקות</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3 mb-6">

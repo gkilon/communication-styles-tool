@@ -60,6 +60,9 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 export const App: React.FC = () => {
   const [view, setView] = useState<AppView>('loading');
   const [user, setUser] = useState<any>(null);
+  // Whether an admin account clicked "בדוק כמשתמש" — shows the participant
+  // screen without signing out, so testing doesn't require switching accounts.
+  const [previewAsUser, setPreviewAsUser] = useState(false);
 
   useEffect(() => {
      const timer = setTimeout(() => {
@@ -79,14 +82,10 @@ export const App: React.FC = () => {
                  const profile = await getUserProfile(currentUser.uid);
                  console.log("Logged in user:", currentUser.email, "Role from DB:", profile?.role);
 
-                 // Testing escape hatch: visiting the site with ?asUser=1 in the URL
-                 // always shows the participant flow, even for an admin account.
-                 const forceUserView = new URLSearchParams(window.location.search).get('asUser') === '1';
-
-                 if (!forceUserView && (profile?.role === 'admin' ||
+                 if (profile?.role === 'admin' ||
                      currentUser.email === 'admin@manager.com' ||
                      currentUser.email === 'gilad@kilon.org' ||
-                     currentUser.email === 'gkilon@gmail.com')) {
+                     currentUser.email === 'gkilon@gmail.com') {
                      console.log("Admin access granted");
                      setView('admin');
                  } else {
@@ -120,16 +119,30 @@ export const App: React.FC = () => {
   const handleSignOut = async () => {
     if (auth) await signOut(auth);
     setUser(null);
+    setPreviewAsUser(false);
     setView('simple');
   };
 
+  // Admin clicked "בדוק כמשתמש" — same account, just switch what's rendered.
+  const handlePreviewAsUser = () => setPreviewAsUser(true);
+  // Participant-preview clicked "חזרה לניהול" — go back to the admin screen.
+  const handleReturnToAdmin = () => setPreviewAsUser(false);
+
+  const showAdmin = view === 'admin' && !previewAsUser;
+  const showSimple = view === 'simple' || (view === 'admin' && previewAsUser);
+
   return (
     <ErrorBoundary>
-       {view === 'admin' ? (
-         <AdminDashboard onBack={handleSignOut} />
-       ) : view === 'simple' ? (
+       {showAdmin ? (
+         <AdminDashboard onBack={handleSignOut} onPreviewAsUser={handlePreviewAsUser} />
+       ) : showSimple ? (
          <LanguageProvider>
-           <SimpleApp onAdminLoginAttempt={handleAdminLogin} user={user} />
+           <SimpleApp
+             onAdminLoginAttempt={handleAdminLogin}
+             user={user}
+             isPreviewingAsAdmin={view === 'admin' && previewAsUser}
+             onReturnToAdmin={handleReturnToAdmin}
+           />
          </LanguageProvider>
        ) : (
          <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white" dir="rtl">
