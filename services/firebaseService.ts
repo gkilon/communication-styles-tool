@@ -1,4 +1,4 @@
-import { db, auth } from '../firebaseConfig';
+import { db, auth, isFirebaseInitialized } from '../firebaseConfig';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Scores, UserProfile, Team, Organization, BackgroundData } from '../types';
 import { User } from 'firebase/auth';
@@ -12,7 +12,7 @@ export const saveUserResults = async (scores: Scores, backgroundData?: Backgroun
   if (!user) return;
 
   const userRef = doc(db, "users", user.uid);
-  
+
   try {
     const payload: any = {
       scores: scores,
@@ -29,37 +29,26 @@ export const saveUserResults = async (scores: Scores, backgroundData?: Backgroun
   }
 };
 
-// שמירת תוצאות של משתתף בסדנה צוותית (ללא צורך בהרשמה / אימייל)
-export const saveWorkshopGuestResults = async (
-  participantId: string, 
-  displayName: string, 
-  teamName: string, 
-  scores: Scores, 
-  backgroundData?: BackgroundData
-) => {
-  if (!isFirebaseInitialized || !participantId) return;
-
-  const userRef = doc(db, "users", participantId);
-  try {
-    const payload: any = {
-      uid: participantId,
-      displayName: displayName.trim(),
-      team: teamName.trim() || 'General',
-      scores: scores,
-      role: 'user',
-      isGuest: true,
-      completedAt: new Date().toISOString()
-    };
-    if (backgroundData) {
-      payload.backgroundData = backgroundData;
-    }
-    await setDoc(userRef, payload, { merge: true });
-    console.log("Workshop guest results saved successfully for:", displayName);
-  } catch (error) {
-    console.error("Error saving workshop guest results:", error);
-  }
+// נקרא פעם אחת מיד אחרי הרשמה/כניסה מוצלחת ב-AuthGate (Google או אימייל+סיסמה),
+// כדי שהמשתמש יופיע מיד בלוח הבקרה גם אם עוד לא סיים את השאלון.
+export const ensureUserProfile = async (params: {
+  uid: string;
+  email: string | null;
+  displayName: string;
+  teamName?: string;
+  teamId?: string;
+}): Promise<void> => {
+  const userRef = doc(db, "users", params.uid);
+  const payload: any = {
+    uid: params.uid,
+    email: params.email || '',
+    displayName: params.displayName,
+    team: params.teamName || 'General',
+    role: 'user'
+  };
+  if (params.teamId) payload.teamId = params.teamId;
+  await setDoc(userRef, payload, { merge: true });
 };
-
 
 // עדכון צוות של משתמש קיים
 export const updateUserTeam = async (uid: string, newTeamName: string) => {
@@ -93,21 +82,20 @@ export const createUserProfile = async (uid: string, data: { email: string; disp
 export const ensureGoogleUserProfile = async (firebaseUser: User, teamName: string = 'General') => {
     const userRef = doc(db, "users", firebaseUser.uid);
     const snap = await getDoc(userRef);
-    
+
     if (!snap.exists()) {
-        // Create new profile automatically
         await setDoc(userRef, {
             uid: firebaseUser.uid,
             email: firebaseUser.email || '',
             displayName: firebaseUser.displayName || 'Google User',
-            team: teamName, // Default team or selected one if logic permits
+            team: teamName,
             role: 'user',
             createdAt: new Date().toISOString(),
             photoURL: firebaseUser.photoURL
         });
-        return true; // Created new
+        return true;
     }
-    return false; // Existed
+    return false;
 };
 
 // קבלת פרופיל המשתמש הנוכחי
@@ -124,7 +112,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 export const getTeamMembers = async (teamName: string) => {
   const usersRef = collection(db, "users");
   const q = query(usersRef, where("team", "==", teamName));
-  
+
   const querySnapshot = await getDocs(q);
   const users: UserProfile[] = [];
   querySnapshot.forEach((doc) => {
@@ -145,10 +133,26 @@ export const getAllUsers = async () => {
 };
 
 // --- ORGANIZATIONS MANAGEMENT ---
-// An Organization holds shared branding/context (logo, culture, knowledge base).
-// A Team belongs to (at most) one Organization via organizationId, and can override
-// any of the inherited fields individually — an unset field on the Team falls back
-// to the Organization's value (see getTeamByName below).
+// An Organization holds all shared branding/context (logo, culture, knowledge base).
+// A Team belongs to exactly one Organization via organizationId and holds no
+// branding of its own — it exists only so the team map can be filtered per sub-group.
+
+const UNASSIGNED_ORG_NAME = "ללא שיוך ארגוני";
+
+// Every team must belong to an organization. If the caller doesn't pick one,
+// fall back to a single shared "no org" bucket instead of leaving organizationId empty.
+export const getOrCreateUnassignedOrg = async (): Promise<string> => {
+  const orgsRef = collection(db, "organizations");
+  const q = query(orgsRef, where("name", "==", UNASSIGNED_ORG_NAME));
+  const existing = await getDocs(q);
+  if (!existing.empty) return existing.docs[0].id;
+
+  const docRef = await addDoc(orgsRef, {
+    name: UNASSIGNED_ORG_NAME,
+    createdAt: new Date().toISOString()
+  });
+  return docRef.id;
+};
 
 export const createOrganization = async (orgName: string) => {
     const orgsRef = collection(db, "organizations");
@@ -208,19 +212,19 @@ export const createTeam = async (teamName: string, organizationId?: string) => {
     const teamsRef = collection(db, "teams");
     const q = query(teamsRef, where("name", "==", teamName));
     const querySnapshot = await getDocs(q);
-    
+
     if (!querySnapshot.empty) {
         throw new Error("שם הצוות כבר קיים במערכת");
     }
 
-    const payload: any = {
+    const resolvedOrgId = organizationId || await getOrCreateUnassignedOrg();
+
+    await addDoc(teamsRef, {
         name: teamName,
         createdAt: new Date().toISOString(),
-        memberCount: 0
-    };
-    if (organizationId) payload.organizationId = organizationId;
-
-    await addDoc(teamsRef, payload);
+        memberCount: 0,
+        organizationId: resolvedOrgId
+    });
 };
 
 export const getTeams = async (): Promise<Team[]> => {
@@ -228,7 +232,6 @@ export const getTeams = async (): Promise<Team[]> => {
     const querySnapshot = await getDocs(teamsRef);
     const teams: Team[] = [];
     querySnapshot.forEach((doc) => {
-        // Fix: Use type assertion to allow spreading unknown DocumentData
         teams.push({ id: doc.id, ...(doc.data() as any) } as Team);
     });
     return teams;
@@ -254,7 +257,6 @@ export const deleteAccessCode = async (codeId: string): Promise<void> => {
 };
 
 export const getTeamByName = async (teamName: string): Promise<Team | null> => {
-
   try {
     const teamsRef = collection(db, "teams");
     const q = query(teamsRef, where("name", "==", teamName.trim()));
@@ -263,8 +265,8 @@ export const getTeamByName = async (teamName: string): Promise<Team | null> => {
       const docData = snap.docs[0];
       const team = { id: docData.id, ...(docData.data() as any) } as Team;
 
-      // Merge in the parent organization's branding/context for any field
-      // the team hasn't overridden itself.
+      // Merge in the parent organization's branding/context — the team itself
+      // no longer holds its own copy of these fields.
       if (team.organizationId) {
         const org = await getOrganizationById(team.organizationId);
         if (org) {
@@ -301,7 +303,6 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
   const code = rawCode.trim();
   if (!code) return { valid: false, type: 'invalid', message: 'נא להזין קוד גישה' };
 
-  // Helper to attach team enterprise data if found
   const enrichWithTeamData = async (res: AccessValidationResult): Promise<AccessValidationResult> => {
     if (res.teamName && res.teamName !== 'General') {
       const teamObj = await getTeamByName(res.teamName);
@@ -315,7 +316,7 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
     return res;
   };
 
-  // 1. Check if matches legacy global password in settings/access
+  // 1. Check legacy global password in settings/access
   try {
     const accessSnap = await getDoc(doc(db, "settings", "access"));
     if (accessSnap.exists()) {
@@ -328,38 +329,32 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
     console.warn("Could not check settings/access, falling back:", e);
   }
 
-  // 2. Check in access_codes or access codes collection (for personalized/team licenses)
+  // 2. Check access_codes collection
   try {
     let snap = await getDoc(doc(db, "access_codes", code.toUpperCase()));
     if (!snap.exists()) {
-      snap = await getDoc(doc(db, "access codes", code.toUpperCase()));
-    }
-    if (!snap.exists()) {
       snap = await getDoc(doc(db, "access_codes", code));
-    }
-    if (!snap.exists()) {
-      snap = await getDoc(doc(db, "access codes", code));
     }
 
     if (snap.exists()) {
       const data = snap.data() as any;
-      const isActive = data.active !== false && data.Active !== false;
+      const isActive = data.active !== false;
       if (!isActive) {
         return { valid: false, type: 'invalid', message: 'קוד הגישה פג תוקף או אינו פעיל' };
       }
-      const rawLimit = data.dailyLimit ?? data.DailyLimit ?? 50;
+      const rawLimit = data.dailyLimit ?? 50;
       const parsedLimit = Number(rawLimit);
-      const teamName = data.teamName || data.TeamName || 'General';
-      const codeType = data.type || data.Type || (teamName !== 'General' ? 'team' : 'personal');
+      const teamName = data.teamName || 'General';
+      const codeType = data.type || (teamName !== 'General' ? 'team' : 'personal');
 
       const initialResult: AccessValidationResult = {
         valid: true,
         type: codeType,
         teamName: teamName,
-        companyName: data.companyName || data.CompanyName,
-        logoUrl: data.logoUrl || data.LogoUrl,
-        orgContext: data.orgContext || data.OrgContext,
-        knowledgeBase: data.knowledgeBase || data.KnowledgeBase,
+        companyName: data.companyName,
+        logoUrl: data.logoUrl,
+        orgContext: data.orgContext,
+        knowledgeBase: data.knowledgeBase,
         dailyLimit: isNaN(parsedLimit) ? 50 : parsedLimit
       };
 
@@ -376,7 +371,9 @@ export const validateAccessCode = async (rawCode: string): Promise<AccessValidat
 export interface AccessCodeRecord {
   id: string;
   code: string;
-  teamName: string;
+  organizationId: string;
+  teamId?: string;       // optional — omitted means "whole organization, no specific team"
+  teamName?: string;     // kept only for display in the admin list / session branding
   type: 'team' | 'personal';
   dailyLimit: number;
   active: boolean;
@@ -385,18 +382,23 @@ export interface AccessCodeRecord {
 
 export const createAccessCode = async (data: {
   code: string;
-  teamName: string;
+  organizationId: string;
+  teamId?: string;
+  teamName?: string;
   type?: 'team' | 'personal';
   dailyLimit?: number;
 }): Promise<void> => {
   const cleanCode = data.code.trim().toUpperCase();
   if (!cleanCode) throw new Error("קוד גישה לא יכול להיות ריק");
+  if (!data.organizationId) throw new Error("יש לבחור ארגון עבור קוד הגישה");
 
   const docRef = doc(db, "access_codes", cleanCode);
   await setDoc(docRef, {
     code: cleanCode,
-    teamName: data.teamName.trim() || 'General',
-    type: data.type || 'team',
+    organizationId: data.organizationId,
+    teamId: data.teamId || null,
+    teamName: data.teamName || null,
+    type: data.type || (data.teamId ? 'team' : 'personal'),
     dailyLimit: data.dailyLimit || 50,
     active: true,
     createdAt: new Date().toISOString()

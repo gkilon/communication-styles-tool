@@ -1,7 +1,7 @@
 
 // @ts-ignore
 import { initializeApp } from "firebase/app";
-import { getAuth, Auth } from "firebase/auth";
+import { getAuth, Auth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
 
 // פונקציה בטוחה לשליפת משתנים
@@ -55,5 +55,7 @@ if (isConfigValid(firebaseConfig)) {
     console.warn("Firebase config missing. Please set VITE_FIREBASE_... environment variables in Netlify/Vercel.");
     isFirebaseInitialized = false;
 }
+
+export const googleProvider = new GoogleAuthProvider();
 
 export { auth, db, isFirebaseInitialized };
