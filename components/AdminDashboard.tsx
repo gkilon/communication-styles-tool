@@ -50,6 +50,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
   // the org/team quick-filter above.
   const [combinedTeamNames, setCombinedTeamNames] = useState<string[]>([]);
   const [showCombinedMap, setShowCombinedMap] = useState(false);
+  // Fully custom map: hand-pick individual users, regardless of team/org —
+  // including people with no team at all.
+  const [customUserIds, setCustomUserIds] = useState<string[]>([]);
+  const [customMapTitle, setCustomMapTitle] = useState('');
+  const [customUserSearch, setCustomUserSearch] = useState('');
+  const [showCustomMap, setShowCustomMap] = useState(false);
 
   // Access code creation (lives on the Participants tab — it's what's used daily)
   const [newCodeName, setNewCodeName] = useState('');
@@ -380,6 +386,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
 
   const combinedUsers = users.filter(u => combinedTeamNames.includes(u.team));
 
+  const toggleCustomUser = (uid: string) => {
+    setCustomUserIds(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+  };
+
+  const customUsers = users.filter(u => customUserIds.includes(u.uid));
+
+  const customUserSearchResults = users.filter(u => {
+    if (!customUserSearch.trim()) return true;
+    const q = customUserSearch.trim().toLowerCase();
+    return (u.displayName || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+  });
+
   if (error === 'PERMISSION_DENIED') {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-6 dir-rtl">
@@ -617,6 +635,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
               {showCombinedMap && combinedTeamNames.length > 0 && (
                 <div className="mt-6">
                   <TeamMap mapUsers={combinedUsers} title={combinedTeamNames.join(' + ')} />
+                </div>
+              )}
+            </div>
+
+            {/* Fully custom map — hand-pick individual people, unassigned included */}
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-cyan-500/30">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold text-white">מפה מותאמת אישית (בחירת משתתפים בודדים)</h3>
+                {customUserIds.length > 0 && (
+                  <button onClick={() => { setCustomUserIds([]); setShowCustomMap(false); }} className="text-xs text-gray-400 hover:text-white underline">נקה בחירה</button>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mb-4">שליטה מלאה ברמת המשתמש — סמן כל אחד בנפרד, כולל משתתפים שלא משויכים לשום צוות.</p>
+
+              <input
+                type="text"
+                value={customUserSearch}
+                onChange={(e) => setCustomUserSearch(e.target.value)}
+                placeholder="חיפוש לפי שם או אימייל..."
+                className="w-full bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+
+              <div className="max-h-64 overflow-y-auto border border-gray-700 rounded-xl divide-y divide-gray-700/60 mb-4">
+                {customUserSearchResults.length === 0 ? (
+                  <p className="text-gray-500 text-xs italic p-4">לא נמצאו משתתפים.</p>
+                ) : (
+                  customUserSearchResults.map(u => {
+                    const checked = customUserIds.includes(u.uid);
+                    return (
+                      <label key={u.uid} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${checked ? 'bg-cyan-900/20' : 'hover:bg-gray-700/30'}`}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleCustomUser(u.uid)} className="w-4 h-4 accent-cyan-500" />
+                        <div className="overflow-hidden">
+                          <div className="text-sm text-white font-medium truncate">{u.displayName || 'משתמש ללא שם'}</div>
+                          <div className="text-[11px] text-gray-500 truncate">{u.team || 'ללא צוות'}{u.scores ? '' : ' · טרם מילא שאלון'}</div>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <input
+                  type="text"
+                  value={customMapTitle}
+                  onChange={(e) => setCustomMapTitle(e.target.value)}
+                  placeholder="שם לקבוצה (אופציונלי, לתצוגה בלבד)"
+                  className="flex-1 bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <button
+                  onClick={() => setShowCustomMap(true)}
+                  disabled={customUserIds.length === 0}
+                  className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all whitespace-nowrap"
+                >
+                  הצג מפה ({customUserIds.length} נבחרו)
+                </button>
+              </div>
+
+              {showCustomMap && customUserIds.length > 0 && (
+                <div className="mt-6">
+                  <TeamMap mapUsers={customUsers} title={customMapTitle.trim() || 'קבוצה מותאמת אישית'} />
                 </div>
               )}
             </div>
