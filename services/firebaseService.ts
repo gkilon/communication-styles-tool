@@ -272,6 +272,16 @@ export const deleteAccessCode = async (codeId: string): Promise<void> => {
   await deleteDoc(codeRef);
 };
 
+// Removes the participant's profile/results doc from the "users" collection
+// (admin dashboard, exports, team map). Note: this does NOT delete their
+// actual Firebase Auth sign-in — that requires the Admin SDK server-side, not
+// the client SDK. In practice that's fine: if they ever sign in again, a
+// fresh (empty) profile doc is recreated for them via ensureUserProfile.
+export const deleteUserProfile = async (uid: string): Promise<void> => {
+  const userRef = doc(db, "users", uid);
+  await deleteDoc(userRef);
+};
+
 export const getTeamByName = async (teamName: string): Promise<Team | null> => {
   try {
     const teamsRef = collection(db, "teams");

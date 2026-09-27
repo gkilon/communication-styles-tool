@@ -6,6 +6,7 @@ import {
   createTeam,
   getTeams,
   updateUserTeam,
+  deleteUserProfile,
   getAccessCodes,
   createAccessCode,
   updateOrganizationDetails,
@@ -44,6 +45,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
   const [filterOrgId, setFilterOrgId] = useState('');
   const [filterTeam, setFilterTeam] = useState('');
   const [showMap, setShowMap] = useState(false);
+  // Combined map: pick any set of teams, across any organizations, and see
+  // everyone from all of them together on one map — fully independent of
+  // the org/team quick-filter above.
+  const [combinedTeamNames, setCombinedTeamNames] = useState<string[]>([]);
+  const [showCombinedMap, setShowCombinedMap] = useState(false);
 
   // Access code creation (lives on the Participants tab — it's what's used daily)
   const [newCodeName, setNewCodeName] = useState('');
@@ -318,6 +324,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     }
   };
 
+  const handleDeleteUser = async (userId: string, displayName: string) => {
+    if (!window.confirm(`האם למחוק לצמיתות את "${displayName || 'המשתמש'}"? הפעולה לא ניתנת לביטול (התוצאות והשיוך לצוות יימחקו).`)) return;
+    setUpdatingUserId(userId);
+    try {
+      await deleteUserProfile(userId);
+      setUsers(prev => prev.filter(u => u.uid !== userId));
+    } catch (e: any) {
+      alert("שגיאה במחיקת המשתמש: " + (e.message || 'נסה שוב'));
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
   const getDominantColorInfo = (scores?: Scores) => {
     if (!scores) return null;
     const { a, b, c, d } = scores;
@@ -355,6 +374,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     return true;
   });
 
+  const toggleCombinedTeam = (teamName: string) => {
+    setCombinedTeamNames(prev => prev.includes(teamName) ? prev.filter(n => n !== teamName) : [...prev, teamName]);
+  };
+
+  const combinedUsers = users.filter(u => combinedTeamNames.includes(u.team));
+
   if (error === 'PERMISSION_DENIED') {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-6 dir-rtl">
@@ -371,12 +396,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     );
   }
 
-  const TeamMap = () => {
-    if (!filterTeam || filteredUsers.length === 0) return null;
+  const TeamMap: React.FC<{ mapUsers: UserProfile[]; title: string }> = ({ mapUsers, title }) => {
+    if (mapUsers.length === 0) return null;
     return (
       <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8 animate-fade-in-up">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-cyan-300">מפה דינמית: {filterTeam}</h3>
+          <h3 className="text-xl font-bold text-cyan-300">מפה דינמית: {title}</h3>
           <div className="text-xs sm:text-sm text-gray-400 flex flex-wrap gap-3">
             <div className="flex items-center gap-1"><span className="w-3 h-3 bg-indigo-500 rounded-full"></span> כחול</div>
             <div className="flex items-center gap-1"><span className="w-3 h-3 bg-rose-500 rounded-full"></span> אדום</div>
@@ -391,7 +416,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
           <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-yellow-900/10"></div>
           <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-gray-500/60 transform -translate-x-1/2"></div>
           <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-gray-500/60 transform -translate-y-1/2"></div>
-          {filteredUsers.map((u) => {
+          {mapUsers.map((u) => {
             if (!u.scores) return null;
             const { a, b, c, d } = u.scores;
             const totalX = (a + b) || 1;
@@ -416,7 +441,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
             );
           })}
         </div>
-        <TeamAiCoach users={filteredUsers} teamName={filterTeam} />
+        <TeamAiCoach users={mapUsers} teamName={title} />
       </div>
     );
   };
@@ -557,6 +582,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
               </div>
             </div>
 
+            {/* Combined map — pick any teams, across any organizations, no restriction */}
+            <div className="bg-gray-800 p-6 rounded-2xl shadow-lg mb-8 border border-purple-500/30">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold text-white">מפה משולבת (בחירה חופשית של צוותים)</h3>
+                {combinedTeamNames.length > 0 && (
+                  <button onClick={() => { setCombinedTeamNames([]); setShowCombinedMap(false); }} className="text-xs text-gray-400 hover:text-white underline">נקה בחירה</button>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mb-4">אתה בשליטה מלאה — אפשר לבחור כמה צוותים ביחד, גם משני ארגונים שונים, ולראות את כולם על אותה מפה.</p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {teams.map(t => {
+                  const parentOrg = organizations.find(o => o.id === t.organizationId);
+                  const active = combinedTeamNames.includes(t.name);
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => toggleCombinedTeam(t.name)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${active ? 'bg-purple-600 border-purple-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-purple-500/50'}`}
+                    >
+                      {t.name}{parentOrg ? <span className="opacity-60 font-normal"> · {parentOrg.name}</span> : ''}
+                    </button>
+                  );
+                })}
+                {teams.length === 0 && <p className="text-gray-500 text-xs italic">אין עדיין צוותים במערכת.</p>}
+              </div>
+              <button
+                onClick={() => setShowCombinedMap(true)}
+                disabled={combinedTeamNames.length === 0}
+                className="bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-bold py-2.5 px-6 rounded-xl text-sm transition-all"
+              >
+                הצג מפה משולבת ({combinedUsers.length} משתתפים)
+              </button>
+              {showCombinedMap && combinedTeamNames.length > 0 && (
+                <div className="mt-6">
+                  <TeamMap mapUsers={combinedUsers} title={combinedTeamNames.join(' + ')} />
+                </div>
+              )}
+            </div>
+
             {/* Data Table & Map */}
             <div className="bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border border-gray-700">
               <div className="p-6 border-b border-gray-700 flex flex-col sm:flex-row gap-4 items-center justify-between bg-gray-750">
@@ -594,7 +658,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                 {loading ? (
                   <div className="text-center py-20 text-gray-500 animate-pulse font-bold text-xl">טוען נתונים...</div>
                 ) : showMap && filterTeam ? (
-                  <div className="p-6"><TeamMap /></div>
+                  <div className="p-6"><TeamMap mapUsers={filteredUsers} title={filterTeam} /></div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-right border-collapse">
@@ -604,11 +668,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                           <th className="py-4 px-6">צוות נוכחי</th>
                           <th className="py-4 px-6">סטטוס שאלון</th>
                           <th className="py-4 px-6">תוצאה דומיננטית</th>
+                          <th className="py-4 px-6"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700/50">
                         {filteredUsers.length === 0 ? (
-                          <tr><td colSpan={4} className="text-center py-12 text-gray-500 font-medium">לא נמצאו משתמשים התואמים לסינון</td></tr>
+                          <tr><td colSpan={5} className="text-center py-12 text-gray-500 font-medium">לא נמצאו משתמשים התואמים לסינון</td></tr>
                         ) : (
                           filteredUsers.map((user) => (
                             <tr key={user.uid} className="hover:bg-gray-700/30 transition-colors group">
@@ -624,7 +689,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                                     disabled={updatingUserId === user.uid}
                                     className={`bg-gray-900 border border-gray-600 rounded-lg px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-cyan-500 transition-all text-cyan-200 ${updatingUserId === user.uid ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:border-gray-400'}`}
                                   >
-                                    {teams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                    {teams.map(t => {
+                                      const parentOrg = organizations.find(o => o.id === t.organizationId);
+                                      return <option key={t.id} value={t.name}>{t.name}{parentOrg ? ` (${parentOrg.name})` : ''}</option>;
+                                    })}
                                     {teams.every(t => t.name !== user.team) && <option value={user.team}>{user.team}</option>}
                                   </select>
                                   {updatingUserId === user.uid && <span className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></span>}
@@ -636,6 +704,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                                   : <span className="text-gray-500 text-[10px] bg-gray-900/50 px-2 py-1 rounded-full border border-gray-700 font-medium uppercase tracking-tight">טרם מולא</span>}
                               </td>
                               <td className="py-4 px-6">{renderDominantColorBadge(user.scores)}</td>
+                              <td className="py-4 px-6">
+                                <button
+                                  onClick={() => handleDeleteUser(user.uid, user.displayName)}
+                                  disabled={updatingUserId === user.uid}
+                                  className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-30"
+                                  title="מחק משתמש"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
                             </tr>
                           ))
                         )}
