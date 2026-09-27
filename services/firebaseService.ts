@@ -39,15 +39,31 @@ export const ensureUserProfile = async (params: {
   teamId?: string;
 }): Promise<void> => {
   const userRef = doc(db, "users", params.uid);
-  const payload: any = {
-    uid: params.uid,
-    email: params.email || '',
-    displayName: params.displayName,
-    team: params.teamName || 'General',
-    role: 'user'
-  };
-  if (params.teamId) payload.teamId = params.teamId;
-  await setDoc(userRef, payload, { merge: true });
+  const existing = await getDoc(userRef);
+
+  if (!existing.exists()) {
+    // First time we ever see this account — safe to set role: 'user' here.
+    const payload: any = {
+      uid: params.uid,
+      email: params.email || '',
+      displayName: params.displayName,
+      team: params.teamName || 'General',
+      role: 'user'
+    };
+    if (params.teamId) payload.teamId = params.teamId;
+    await setDoc(userRef, payload);
+  } else {
+    // Returning user — update basic info only, NEVER touch role again
+    // (this is what protects a manually-granted admin flag from being
+    // silently reset back to 'user' on the next login).
+    const payload: any = {
+      email: params.email || '',
+      displayName: params.displayName
+    };
+    if (params.teamName) payload.team = params.teamName;
+    if (params.teamId) payload.teamId = params.teamId;
+    await setDoc(userRef, payload, { merge: true });
+  }
 };
 
 // עדכון צוות של משתמש קיים

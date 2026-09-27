@@ -18,9 +18,7 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-// Fixed ErrorBoundary component issues with state/props recognition by using Component from react
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly defining state helps TypeScript recognize it when base class inheritance is ambiguous in some environments
   public state: ErrorBoundaryState = { hasError: false };
 
   constructor(props: ErrorBoundaryProps) {
@@ -36,7 +34,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Correctly accessing state from the Component base class
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-6 text-center" dir="rtl">
@@ -56,7 +53,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         </div>
       );
     }
-    // Accessing children from props
     return this.props.children;
   }
 }
@@ -82,11 +78,15 @@ export const App: React.FC = () => {
              try {
                  const profile = await getUserProfile(currentUser.uid);
                  console.log("Logged in user:", currentUser.email, "Role from DB:", profile?.role);
-                 
-                 if (profile?.role === 'admin' || 
-                     currentUser.email === 'admin@manager.com' || 
+
+                 // Testing escape hatch: visiting the site with ?asUser=1 in the URL
+                 // always shows the participant flow, even for an admin account.
+                 const forceUserView = new URLSearchParams(window.location.search).get('asUser') === '1';
+
+                 if (!forceUserView && (profile?.role === 'admin' ||
+                     currentUser.email === 'admin@manager.com' ||
                      currentUser.email === 'gilad@kilon.org' ||
-                     currentUser.email === 'gkilon@gmail.com') {
+                     currentUser.email === 'gkilon@gmail.com')) {
                      console.log("Admin access granted");
                      setView('admin');
                  } else {
