@@ -233,6 +233,42 @@ export default async (req: Request) => {
     // directly could set that to a fresh random string on every request.
     const verifiedUid = adminDb ? await getVerifiedUid(req) : null;
 
+    // Fail closed: no valid login token = no AI. Every legitimate use of the
+    // AI in the app happens after the user has signed in, so anonymous
+    // callers hitting this endpoint directly are simply refused.
+    if (!verifiedUid) {
+      return new Response(JSON.stringify({ error: "נדרשת התחברות כדי להשתמש בשירות ה-AI." }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    // Basic guardrails on what a caller may ask the upstream model to do.
+    // (The app builds its prompts client-side, so we can't lock the prompt
+    // itself — but we can stop model swapping and oversized/expensive requests.)
+    const ALLOWED_MODELS = ["gemini-3.8-flash"];
+    const MAX_INPUT_CHARS = 120000;
+    const MAX_OUTPUT_TOKENS = 8192;
+
+    if (payload?.model && !ALLOWED_MODELS.includes(payload.model)) {
+      return new Response(JSON.stringify({ error: "מודל לא נתמך." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    const inputSize = JSON.stringify(payload?.contents ?? "").length +
+      JSON.stringify(payload?.config?.systemInstruction ?? "").length;
+    if (inputSize > MAX_INPUT_CHARS) {
+      return new Response(JSON.stringify({ error: "הבקשה גדולה מדי." }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    if (payload?.config && typeof payload.config.maxOutputTokens === "number" &&
+        payload.config.maxOutputTokens > MAX_OUTPUT_TOKENS) {
+      payload.config.maxOutputTokens = MAX_OUTPUT_TOKENS;
+    }
+
     let limitCheck: { allowed: boolean; retryAfter?: number; errorMsg?: string };
 
     if (adminDb) {
