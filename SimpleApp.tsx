@@ -279,6 +279,12 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
             </div>
           )}
         </main>
+
+        <footer className="mt-12 text-center text-xs text-gray-500">
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 underline">
+            מדיניות פרטיות · Privacy Policy
+          </a>
+        </footer>
       </div>
     </div>
   );

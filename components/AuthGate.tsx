@@ -188,6 +188,11 @@ export const AuthGate: React.FC<AuthGateProps> = ({ session, onDone }) => {
           </button>
         )}
       </form>
+
+      <p className="text-[11px] text-gray-500 mt-5">
+        בהמשך את/ה מאשר/ת את{' '}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline">מדיניות הפרטיות</a>
+      </p>
     </div>
   );
 };

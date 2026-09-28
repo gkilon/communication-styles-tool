@@ -6,6 +6,7 @@ import { auth, isFirebaseInitialized } from './firebaseConfig';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { getUserProfile } from './services/firebaseService';
 import { LanguageProvider } from './i18n/LanguageContext';
+import { PrivacyPolicy } from './components/PrivacyPolicy';
 
 type AppView = 'simple' | 'admin' | 'loading';
 
@@ -127,6 +128,11 @@ export const App: React.FC = () => {
   const handlePreviewAsUser = () => setPreviewAsUser(true);
   // Participant-preview clicked "חזרה לניהול" — go back to the admin screen.
   const handleReturnToAdmin = () => setPreviewAsUser(false);
+
+  // Standalone public page — no login needed to read the privacy policy.
+  if (window.location.pathname.replace(/\/+$/, '') === '/privacy') {
+    return <PrivacyPolicy />;
+  }
 
   const showAdmin = view === 'admin' && !previewAsUser;
   const showSimple = view === 'simple' || (view === 'admin' && previewAsUser);
