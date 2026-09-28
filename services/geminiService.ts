@@ -39,7 +39,42 @@ function buildOrgContext(): string {
 /**
  * Shared helper to call our Netlify Function backend.
  */
+// Makes sure the signed-in account carries the server-side "code redeemed" flag
+// (set by /api/redeem-code). Accounts get it automatically the first time the AI is
+// used, from the access code stored in the session. Admins have no code and skip this.
+let redeemCheckedForUid: string | null = null;
+async function ensureAccessRedeemed(): Promise<void> {
+  const user = auth?.currentUser;
+  if (!user || redeemCheckedForUid === user.uid) return;
+  try {
+    const tokenResult = await user.getIdTokenResult();
+    if ((tokenResult.claims as any).codeOk === true) {
+      redeemCheckedForUid = user.uid;
+      return;
+    }
+    let code: string | undefined;
+    try {
+      const rawSession = localStorage.getItem('comm_style_session');
+      if (rawSession) code = JSON.parse(rawSession)?.accessCode;
+    } catch (e) {}
+    if (!code) return; // e.g. an admin — the server allows admins without a code
+
+    const res = await fetch('/api/redeem-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenResult.token}` },
+      body: JSON.stringify({ code })
+    });
+    if (res.ok) {
+      await user.getIdToken(true); // refresh so the new flag is inside the token
+      redeemCheckedForUid = user.uid;
+    }
+  } catch (e) {
+    console.warn('Access redeem check failed:', e);
+  }
+}
+
 async function callGeminiApi(action: string, payload: any): Promise<any> {
+  await ensureAccessRedeemed();
   const currentUserId = auth?.currentUser?.uid;
 
   let sessionData: any = null;

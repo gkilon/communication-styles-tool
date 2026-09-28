@@ -159,19 +159,16 @@ async function checkAndIncrementQuota(
   }
 }
 
-function getClientIp(req: Request): string {
-  const xForwardedFor = req.headers.get("x-forwarded-for");
-  if (xForwardedFor) {
-    return xForwardedFor.split(",")[0].trim();
-  }
-  return req.headers.get("x-nf-client-connection-ip") || req.headers.get("client-ip") || "unknown_client";
+function getClientIp(req: Request, context?: any): string {
+  // Netlify's own view of the caller — never the spoofable X-Forwarded-For header.
+  return context?.ip || req.headers.get("x-nf-client-connection-ip") || "unknown_client";
 }
 
 // Verifies the Firebase ID token sent in the Authorization header and returns
 // the REAL, server-confirmed uid — or null if there is no valid token.
 // This replaces trusting payload.userId, which the caller could set to
 // anything (including a fresh random value on every request) to dodge quota.
-async function getVerifiedUid(req: Request): Promise<string | null> {
+async function getVerifiedToken(req: Request): Promise<admin.auth.DecodedIdToken | null> {
   const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const idToken = authHeader.slice("Bearer ".length).trim();
@@ -179,11 +176,24 @@ async function getVerifiedUid(req: Request): Promise<string | null> {
 
   try {
     if (admin.apps.length === 0) return null; // Admin SDK not initialized — can't verify
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    return decoded.uid;
+    return await admin.auth().verifyIdToken(idToken);
   } catch (e) {
     console.warn("ID token verification failed:", e);
     return null;
+  }
+}
+
+// An account may use the AI only if (a) it redeemed a valid access code
+// (server-stamped "codeOk" flag, set by /api/redeem-code), or (b) it is an
+// admin. Merely holding a Firebase account is NOT enough.
+async function isAuthorizedForAi(db: admin.firestore.Firestore, decoded: admin.auth.DecodedIdToken): Promise<boolean> {
+  if ((decoded as any).codeOk === true) return true;
+  try {
+    const snap = await db.collection("users").doc(decoded.uid).get();
+    return snap.exists && (snap.data() as any)?.role === "admin";
+  } catch (e) {
+    console.warn("Admin check failed:", e);
+    return false;
   }
 }
 
@@ -220,25 +230,28 @@ async function executeWithRetry<T>(fn: () => Promise<T>, retries = 3, initialDel
 // ----------------------------------------------------
 // 4. Main Function Handler
 // ----------------------------------------------------
-export default async (req: Request) => {
+export default async (req: Request, context?: any) => {
   try {
     const { action, payload } = await req.json();
-    const clientIp = getClientIp(req);
+    const clientIp = getClientIp(req, context);
 
-    // Quota Enforcement: Firebase Admin or In-Memory Fallback
     const adminDb = initFirebaseAdmin();
 
-    // Only a server-verified uid counts as "a real person" for quota purposes.
-    // We no longer trust payload.userId — a caller hitting this endpoint
-    // directly could set that to a fresh random string on every request.
-    const verifiedUid = adminDb ? await getVerifiedUid(req) : null;
-
-    // Fail closed: no valid login token = no AI. Every legitimate use of the
-    // AI in the app happens after the user has signed in, so anonymous
-    // callers hitting this endpoint directly are simply refused.
-    if (!verifiedUid) {
+    // 1) Who is calling? Only a server-verified login token counts —
+    //    never anything the caller merely claims in the request body.
+    const decoded = adminDb ? await getVerifiedToken(req) : null;
+    if (!decoded || !adminDb) {
       return new Response(JSON.stringify({ error: "נדרשת התחברות כדי להשתמש בשירות ה-AI." }), {
         status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    const verifiedUid = decoded.uid;
+
+    // 2) Are they allowed to use the AI? Needs a redeemed access code (or admin).
+    if (!(await isAuthorizedForAi(adminDb, decoded))) {
+      return new Response(JSON.stringify({ error: "נדרש קוד גישה בתוקף כדי להשתמש בשירות ה-AI.", needsCode: true }), {
+        status: 403,
         headers: { "Content-Type": "application/json" }
       });
     }

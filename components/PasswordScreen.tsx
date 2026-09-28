@@ -130,21 +130,26 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
 
     setWorkshopLoading(true);
     try {
-      // Validate the code — required unless we arrived via a locked (?team=) link the admin shared directly.
+      // Always try the entered/linked value as a real access code first. The server
+      // answers with the team's/organization's branding and context, and we keep the
+      // REAL code in the session (the AI needs it to unlock access for this account).
+      // A ?team= link with no valid code is still allowed to continue without one.
       let resolvedTeam = teamToUse;
-      if (!lockedTeamName) {
-        const val = await validateAccessCode(teamToUse);
-        if (!val.valid) {
-          setWorkshopLoading(false);
-          setWorkshopError(val.message || t('password', 'invalidWorkshopCode'));
-          return;
-        }
+      let validated: AccessValidationResult | null = null;
+      const codeCandidate = teamCodeOrName.trim() || teamToUse;
+
+      const val = await validateAccessCode(codeCandidate);
+      if (val.valid) {
+        validated = val;
         resolvedTeam = val.teamName || teamToUse;
+      } else if (!lockedTeamName) {
+        setWorkshopLoading(false);
+        setWorkshopError(val.message || t('password', 'invalidWorkshopCode'));
+        return;
       }
 
-      // Fetch the team's co-branding/org context/knowledge base (needed even when
-      // lockedTeamName came straight from a ?team= link, since that path skips validateAccessCode)
-      const teamData = await getTeamByName(resolvedTeam);
+      // Team-link fallback (no code): try to read the team directly (admin-only now, so usually empty)
+      const teamData = validated ?? (await getTeamByName(resolvedTeam));
 
       setWorkshopLoading(false);
       const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -153,7 +158,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
         displayName: participantName.trim(),
         teamName: resolvedTeam,
         participantId: guestId,
-        accessCode: teamToUse.toUpperCase(),
+        accessCode: (validated ? codeCandidate : teamToUse).toUpperCase(),
         companyName: teamData?.companyName,
         logoUrl: teamData?.logoUrl,
         orgContext: teamData?.orgContext,

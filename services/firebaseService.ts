@@ -369,6 +369,7 @@ export const createAccessCode = async (data: {
 }): Promise<void> => {
   const cleanCode = data.code.trim().toUpperCase();
   if (!cleanCode) throw new Error("קוד גישה לא יכול להיות ריק");
+  if (cleanCode.length < 8) throw new Error("קוד גישה חייב להכיל לפחות 8 תווים — קודים קצרים קל לנחש. אפשר ללחוץ על \"אקראי\" ליצירת קוד חזק.");
   if (!data.organizationId) throw new Error("יש לבחור ארגון עבור קוד הגישה");
 
   const docRef = doc(db, "access_codes", cleanCode);

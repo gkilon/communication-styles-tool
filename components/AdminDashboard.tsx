@@ -29,6 +29,15 @@ interface AdminDashboardProps {
 
 type AdminTab = 'participants' | 'organizations' | 'settings';
 
+// Random, hard-to-guess access code (no look-alike characters like 0/O or 1/I).
+const generateStrongCode = (): string => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint32Array(10);
+  crypto.getRandomValues(bytes);
+  const chars = Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
+  return `${chars.slice(0, 5)}-${chars.slice(5)}`;
+};
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPreviewAsUser }) => {
   const [tab, setTab] = useState<AdminTab>('participants');
 
@@ -531,13 +540,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                 <span className="text-xs text-gray-400">כל קוד חייב להיות משויך לארגון; שיוך לצוות ספציפי בתוכו אופציונלי</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4">
-                <input
-                  type="text"
-                  value={newCodeName}
-                  onChange={(e) => setNewCodeName(e.target.value.toUpperCase())}
-                  placeholder="קוד (למשל: HAPOALIM-2026)"
-                  className="bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-sm uppercase"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCodeName}
+                    onChange={(e) => setNewCodeName(e.target.value.toUpperCase())}
+                    placeholder="קוד (לפחות 8 תווים)"
+                    className="flex-1 min-w-0 bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-sm uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewCodeName(generateStrongCode())}
+                    className="px-3 rounded-xl border border-cyan-600/50 text-cyan-300 hover:bg-cyan-600 hover:text-white text-xs font-bold transition-all whitespace-nowrap"
+                    title="יצירת קוד אקראי וחזק"
+                  >
+                    אקראי
+                  </button>
+                </div>
                 <select
                   value={newCodeOrgId}
                   onChange={(e) => { setNewCodeOrgId(e.target.value); setNewCodeTeamId(''); }}
