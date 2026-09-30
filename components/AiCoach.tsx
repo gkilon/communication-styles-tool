@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores, BackgroundData } from '../types';
-import { getAiCoachAdviceStream } from '../services/geminiService';
+import { getAiCoachAdviceStream, getAdvisoryCoachStream } from '../services/geminiService';
 import { SparklesIcon } from './icons/Icons';
 import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -11,9 +11,13 @@ interface AiCoachProps {
   backgroundData?: BackgroundData | null;
 }
 
+type CoachMode = 'direct' | 'advisory';
+
 interface Message {
   sender: 'user' | 'ai';
   text: string;
+  advisor?: CoachMode; // which advisor wrote an AI reply
+  isError?: boolean;
 }
 
 const PRESET_QUESTIONS_HE = [
@@ -32,6 +36,54 @@ const PRESET_QUESTIONS_EN = [
   "How do I handle feedback conversations and complex conflicts given my profile?"
 ];
 
+const MODE_TEXT = {
+  he: {
+    direct: {
+      tab: 'פתרון תכלס',
+      desc: 'שואלים ומקבלים תשובה מעשית.'
+    },
+    advisory: {
+      tab: 'שיחת ייעוץ',
+      desc: 'חושבים על הדילמה ביחד עם יועץ.',
+      intro: 'מה מעסיק אותך? נחשוב על זה ביחד.',
+      placeholder: 'ספר על הדילמה שלך...',
+      starters: [
+        "יש לי דילמה מול מנהל או קולגה",
+        "אני רוצה לשנות משהו בדרך שבה אני עובד",
+        "אני לא בטוח מה הצעד הבא שלי"
+      ]
+    },
+    sees: 'כשעוברים בין המסלולים, כל אחד רואה את כל השיחה עד כאן.'
+  },
+  en: {
+    direct: {
+      tab: 'Straight Answer',
+      desc: 'Ask and get a practical answer.'
+    },
+    advisory: {
+      tab: 'Advisory Conversation',
+      desc: 'Think the dilemma through together with an advisor.',
+      intro: "What's on your mind? Let's think it through together.",
+      placeholder: 'Tell me about your dilemma...',
+      starters: [
+        "I have a dilemma with a manager or colleague",
+        "I want to change something in the way I work",
+        "I'm not sure what my next step should be"
+      ]
+    },
+    sees: 'When you switch between the two, each one sees the whole conversation so far.'
+  }
+};
+
+// Plain text -> safe HTML (used only if the markdown renderer is unavailable).
+const plainToHtml = (s: string) =>
+  s.replace(/&/g, '&amp;')
+   .replace(/</g, '&lt;')
+   .replace(/>/g, '&gt;')
+   .replace(/"/g, '&quot;')
+   .replace(/'/g, '&#39;')
+   .replace(/\n/g, '<br />');
+
 const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   const { dir } = useLanguage();
   const [htmlContent, setHtmlContent] = useState('');
@@ -44,10 +96,10 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
           const parsed = typeof marked.parse === 'function' ? marked.parse(text) : (typeof marked === 'function' ? marked(text) : text);
           setHtmlContent(parsed);
         } else {
-          setHtmlContent(text.replace(/\n/g, '<br />'));
+          setHtmlContent(plainToHtml(text));
         }
       } catch (error) {
-        setHtmlContent(text.replace(/\n/g, '<br />'));
+        setHtmlContent(plainToHtml(text));
       }
     };
     renderMarkdown();
@@ -67,12 +119,17 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
 export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
   const { t } = useT();
   const { lang, dir } = useLanguage();
+  // The advisor who answers the NEXT message. Switching it never clears the conversation:
+  // both advisors work on one shared conversation and each one sees everything said so far.
+  const [mode, setMode] = useState<CoachMode>('direct');
   const [userInput, setUserInput] = useState('');
   const [conversation, setConversation] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const mt = MODE_TEXT[lang === 'en' ? 'en' : 'he'];
   const PRESET_QUESTIONS = lang === 'en' ? PRESET_QUESTIONS_EN : PRESET_QUESTIONS_HE;
+  const starters = mode === 'direct' ? PRESET_QUESTIONS : mt.advisory.starters;
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -81,40 +138,41 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
     }
   }, [conversation, isLoading]);
 
+  const updateLastAi = (fn: (msg: Message) => Message) => {
+    setConversation(prev => {
+      const list = [...prev];
+      const i = list.length - 1;
+      if (i >= 0 && list[i].sender === 'ai') list[i] = fn(list[i]);
+      return list;
+    });
+  };
+
   const handleSendMessage = async (messageText?: string) => {
     const text = messageText || userInput;
     if (!text.trim() || isLoading) return;
 
-    const newUserMessage: Message = { sender: 'user', text };
-    setConversation(prev => [...prev, newUserMessage]);
+    const activeMode = mode;
+    // Everything said so far (without failed replies) goes to the model as context.
+    const history = conversation.filter(m => !m.isError);
+
+    setConversation(prev => [...prev, { sender: 'user', text }, { sender: 'ai', text: '', advisor: activeMode }]);
     setUserInput('');
     setIsLoading(true);
 
-    // Add a placeholder for AI response
-    setConversation(prev => [...prev, { sender: 'ai', text: '' }]);
+    const streamFn = activeMode === 'advisory' ? getAdvisoryCoachStream : getAiCoachAdviceStream;
 
     try {
-      await getAiCoachAdviceStream(scores, text, (chunk) => {
-        setConversation(prev => {
-            const next = [...prev];
-            const lastIdx = next.length - 1;
-            if (next[lastIdx] && next[lastIdx].sender === 'ai') {
-                next[lastIdx] = { ...next[lastIdx], text: chunk };
-            }
-            return next;
-        });
-      }, backgroundData, lang);
+      await streamFn(scores, text, (chunk) => {
+        updateLastAi(m => ({ ...m, text: chunk }));
+      }, backgroundData, lang, history);
     } catch (error: any) {
       console.error("AI Coach interaction failed:", error);
-      setConversation(prev => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (last && last.sender === 'ai' && !last.text) {
-            last.text = error?.message || (lang === 'en'
-              ? "Sorry, there was an error connecting to the AI service. Please check your internet connection and try again."
-              : "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב.");
-        }
-        return next;
+      updateLastAi(m => m.text ? m : {
+        ...m,
+        isError: true,
+        text: error?.message || (lang === 'en'
+          ? "Sorry, there was an error connecting to the AI service. Please check your internet connection and try again."
+          : "מצטער, חלה שגיאה בחיבור לשרת ה-AI. וודא שחיבור האינטרנט תקין ונסה שוב.")
       });
     } finally {
       setIsLoading(false);
@@ -132,20 +190,45 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
           <p className="text-gray-400 text-sm font-medium">{t('aiCoach', 'subtitle')}</p>
         </div>
       </div>
-      
-      <div 
+
+      <div className="flex gap-2 mb-2">
+        {(['direct', 'advisory'] as CoachMode[]).map(m => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            disabled={isLoading}
+            className={`flex-1 py-3 px-2 rounded-xl text-sm font-bold transition-all border disabled:opacity-60 disabled:cursor-not-allowed ${
+              mode === m
+                ? 'bg-cyan-600 border-cyan-500 text-white shadow-md'
+                : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            <span className="block">{mt[m].tab}</span>
+            <span className={`block text-[11px] font-normal mt-0.5 ${mode === m ? 'text-cyan-100' : 'text-gray-500'}`}>{mt[m].desc}</span>
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-gray-500 mb-4 min-h-[1rem]">
+        {conversation.length > 0 ? mt.sees : ''}
+      </p>
+
+      <div
         ref={scrollRef}
         className="bg-gray-900/80 rounded-2xl h-[65dvh] min-h-[440px] max-h-[720px] overflow-y-auto mb-6 border border-gray-700/50 p-6 shadow-inner scroll-smooth"
       >
         {conversation.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
             <div className="bg-gray-800/50 p-6 rounded-2xl border border-dashed border-gray-700">
-                <p className="text-gray-400 mb-4 font-medium italic">{t('aiCoach', 'greeting')}</p>
+                {mode === 'direct' ? (
+                  <p className="text-gray-400 mb-4 font-medium italic">{t('aiCoach', 'greeting')}</p>
+                ) : (
+                  <p className="text-cyan-300 font-bold mb-4">{mt.advisory.intro}</p>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {PRESET_QUESTIONS.map((q, i) => (
-                    <button 
-                      key={i} 
-                      onClick={() => handleSendMessage(q)} 
+                  {starters.map((q, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleSendMessage(q)}
                       className={`${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm bg-gray-800 hover:bg-gray-700 hover:text-cyan-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm`}
                     >
                       {q}
@@ -155,17 +238,20 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
             </div>
           </div>
         )}
-        
+
         <div className="space-y-6">
           {conversation.map((msg, index) => (
             <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
               <div
                 className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${
-                  msg.sender === 'user' 
-                  ? 'bg-gradient-to-br from-cyan-700 to-blue-800 text-white rounded-tl-none' 
+                  msg.sender === 'user'
+                  ? 'bg-gradient-to-br from-cyan-700 to-blue-800 text-white rounded-tl-none'
                   : 'bg-gray-800 text-gray-200 border border-gray-700 rounded-tr-none'
                 }`}
               >
+                {msg.sender === 'ai' && msg.advisor && (
+                  <p className="text-[11px] font-bold text-cyan-400 mb-1">{mt[msg.advisor].tab}</p>
+                )}
                 {msg.sender === 'ai' ? (
                    <AiMessageContent text={msg.text} />
                 ) : (
@@ -174,7 +260,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
               </div>
             </div>
           ))}
-          
+
            {isLoading && (
             <div className="flex justify-start animate-fade-in">
               <div className="bg-gray-800 border border-gray-700 p-4 rounded-2xl rounded-tr-none">
@@ -196,7 +282,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          placeholder={t('aiCoach', 'inputPlaceholder')}
+          placeholder={mode === 'advisory' ? mt.advisory.placeholder : t('aiCoach', 'inputPlaceholder')}
           className={`w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 ${dir === 'rtl' ? 'pr-5 pl-20' : 'pl-5 pr-20'} text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-all shadow-lg`}
           disabled={isLoading}
         />

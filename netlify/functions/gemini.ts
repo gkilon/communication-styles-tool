@@ -86,7 +86,7 @@ function checkFallbackLimit(key: string): { allowed: boolean; retryAfter?: numbe
 // ----------------------------------------------------
 // 3. Firestore Quota Check (Minute + Daily limits)
 // ----------------------------------------------------
-const DEFAULT_DAILY_LIMIT = 30; // מכסת ברירת מחדל יומית למשתמש רגיל
+const DEFAULT_DAILY_LIMIT = 50; // מכסת ברירת מחדל יומית למשתמש רגיל
 const MAX_REQUESTS_PER_MINUTE = 10; // מתחת ל-15 של גוגל
 
 async function checkAndIncrementQuota(
@@ -112,7 +112,9 @@ async function checkAndIncrementQuota(
       return { allowed: true };
     }
 
-    const dailyLimit = typeof data.dailyLimit === 'number' ? data.dailyLimit : DEFAULT_DAILY_LIMIT;
+    // Users who already used the AI have the old default (30) stored in their doc,
+    // so the default acts as a floor: nobody gets less than DEFAULT_DAILY_LIMIT.
+    const dailyLimit = typeof data.dailyLimit === 'number' ? Math.max(data.dailyLimit, DEFAULT_DAILY_LIMIT) : DEFAULT_DAILY_LIMIT;
     let dailyCount = data.lastDate === todayStr ? (data.dailyCount || 0) : 0;
     let minuteTimestamps: number[] = Array.isArray(data.minuteTimestamps) ? data.minuteTimestamps : [];
 
