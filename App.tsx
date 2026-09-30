@@ -1,4 +1,3 @@
-
 import React, { Component, useState, useEffect, ReactNode, ErrorInfo } from 'react';
 import SimpleApp from './SimpleApp';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -81,16 +80,11 @@ export const App: React.FC = () => {
          if (currentUser) {
              try {
                  const profile = await getUserProfile(currentUser.uid);
-                 console.log("Logged in user:", currentUser.email, "Role from DB:", profile?.role);
 
-                 if (profile?.role === 'admin' ||
-                     currentUser.email === 'admin@manager.com' ||
-                     currentUser.email === 'gilad@kilon.org' ||
-                     currentUser.email === 'gkilon@gmail.com') {
-                     console.log("Admin access granted");
+                 // Admin status comes only from the server-managed role field in Firestore.
+                 if (profile?.role === 'admin') {
                      setView('admin');
                  } else {
-                     console.log("Standard user access");
                      setView('simple');
                  }
              } catch (e) {
