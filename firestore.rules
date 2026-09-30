@@ -26,28 +26,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ORGANIZATIONS
+    // ORGANIZATIONS — only the admin dashboard reads these directly now;
+    // the participant flow goes through /api/validate-code (Admin SDK, server-side).
     match /organizations/{orgId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
-    // TEAMS
+    // TEAMS — same reasoning as ORGANIZATIONS above.
     match /teams/{teamId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
-    // ACCESS CODES
+    // ACCESS CODES — same reasoning; codes are no longer publicly listable.
     match /access_codes/{codeId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
-    // SETTINGS
+    // SETTINGS — same reasoning; the legacy global password is no longer public.
     match /settings/{docId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // QUOTA (backend only)
