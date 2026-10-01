@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores, BackgroundData } from '../types';
-import { getAiCoachAdviceStream } from '../services/geminiService';
+import { getAiCoachAdviceStream, transcribeAudio } from '../services/geminiService';
 import { SparklesIcon } from './icons/Icons';
 import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -39,12 +39,14 @@ const HEADER_TEXT = {
   he: {
     title: 'דבר עם Kilon, היועץ האישי שלך',
     subtitle: 'יועץ AI שמכיר אותך, ומייעץ בשיטה של Kilon.',
-    placeholder: 'כתוב את שאלתך או ספר על הדילמה שלך...'
+    placeholder: 'כתוב או דבר: שאל מה שבא לך, או ספר על הדילמה שלך...',
+    freeAsk: '✍️ שאל מה שבא לך, או ספר על דילמה שלך'
   },
   en: {
     title: 'Talk to Kilon, your personal advisor',
     subtitle: 'An AI advisor who knows you and advises the Kilon way.',
-    placeholder: 'Ask a question or tell me about your dilemma...'
+    placeholder: 'Type or speak: ask anything, or tell me about your dilemma...',
+    freeAsk: '✍️ Ask anything, or share a dilemma of your own'
   }
 };
 
@@ -96,6 +98,17 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
   const [conversation, setConversation] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Voice input (same approach as the dialogue simulator): browser speech recognition when
+  // available, otherwise record audio and transcribe it through the AI service.
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [speechError, setSpeechError] = useState('');
+  const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const ht = HEADER_TEXT[lang === 'en' ? 'en' : 'he'];
   const starters = lang === 'en' ? STARTERS_EN : STARTERS_HE;
@@ -106,6 +119,97 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [conversation, isLoading]);
+
+  const addToInput = (text: string) => setUserInput(prev => (prev ? prev + ' ' + text : text));
+
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.lang = lang === 'en' ? 'en-US' : 'he-IL';
+      recognition.interimResults = false;
+      recognition.onresult = (event: any) => {
+        addToInput(event.results[0][0].transcript);
+        setSpeechError('');
+      };
+      recognition.onend = () => setIsListening(false);
+      recognition.onerror = (event: any) => {
+        setIsListening(false);
+        if (event.error === 'not-allowed') setSpeechError(t('simulator', 'micDenied'));
+        else if (event.error === 'network') setSpeechError(t('simulator', 'networkError'));
+        else if (event.error === 'no-speech') setSpeechError(t('simulator', 'noSpeech'));
+        else setSpeechError(t('simulator', 'genericError') + ' ' + event.error);
+      };
+      recognitionRef.current = recognition;
+      setIsSpeechSupported(true);
+    } catch {
+      // fall back to recording + transcription
+    }
+  }, [lang]);
+
+  const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
+  const startMediaRecorder = async () => {
+    setSpeechError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4')
+        ? 'audio/mp4'
+        : 'audio/ogg';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(tr => tr.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        setIsTranscribing(true);
+        setIsListening(false);
+        try {
+          const base64 = await blobToBase64(blob);
+          const text = await transcribeAudio(base64, mimeType.split(';')[0]);
+          if (text) addToInput(text);
+          else setSpeechError(t('simulator', 'noSpeechRetry'));
+        } catch (err: any) {
+          setSpeechError(err.message || t('simulator', 'transcriptionError'));
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsListening(true);
+    } catch {
+      setSpeechError(t('simulator', 'micAccessError'));
+    }
+  };
+
+  const toggleListen = () => {
+    setSpeechError('');
+    if (isListening) {
+      if (isSpeechSupported) recognitionRef.current?.stop();
+      else mediaRecorderRef.current?.stop();
+      return;
+    }
+    if (isSpeechSupported) {
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch {
+        setSpeechError(t('simulator', 'micStartError'));
+      }
+    } else {
+      startMediaRecorder();
+    }
+  };
 
   const updateLastAi = (fn: (msg: Message) => Message) => {
     setConversation(prev => {
@@ -175,6 +279,12 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
                       {q}
                     </button>
                   ))}
+                  <button
+                    onClick={() => inputRef.current?.focus()}
+                    className={`sm:col-span-2 ${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 p-3 rounded-xl transition-all border border-cyan-700/60 shadow-sm`}
+                  >
+                    {ht.freeAsk}
+                  </button>
                 </div>
             </div>
           </div>
@@ -216,22 +326,40 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
 
       <div className="relative group">
         <input
+          ref={inputRef}
           type="text"
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
           placeholder={ht.placeholder}
-          className={`w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 ${dir === 'rtl' ? 'pr-5 pl-20' : 'pl-5 pr-20'} text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-all shadow-lg`}
-          disabled={isLoading}
+          className={`w-full bg-gray-800 border-2 border-gray-700 rounded-2xl py-4 ${dir === 'rtl' ? 'pr-14 pl-24' : 'pl-14 pr-24'} text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-all shadow-lg`}
+          disabled={isLoading || isTranscribing}
         />
         <button
+          onClick={toggleListen}
+          disabled={isTranscribing || isLoading}
+          className={`absolute ${dir === 'rtl' ? 'right-2' : 'left-2'} top-2 bottom-2 px-3 rounded-xl transition-all text-xl disabled:opacity-40 ${isListening ? 'bg-red-500/30 text-red-400 animate-pulse' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+          title={isListening ? t('simulator', 'stopRecording') : t('simulator', 'speakToMic')}
+        >
+          {isTranscribing ? '⏳' : isListening ? '🔴' : '🎙️'}
+        </button>
+        <button
           onClick={() => handleSendMessage()}
-          disabled={isLoading || !userInput.trim()}
+          disabled={isLoading || isTranscribing || !userInput.trim()}
           className={`absolute ${dir === 'rtl' ? 'left-2' : 'right-2'} top-2 bottom-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-6 rounded-xl transition-all disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed shadow-md`}
         >
           {isLoading ? '...' : t('common', 'send')}
         </button>
       </div>
+      {isListening && !isSpeechSupported && (
+        <p className={`text-xs text-red-400 mt-2 ${dir === 'rtl' ? 'text-right' : 'text-left'} animate-pulse`}>🔴 {t('simulator', 'recording')}</p>
+      )}
+      {isTranscribing && (
+        <p className={`text-xs text-cyan-400 mt-2 ${dir === 'rtl' ? 'text-right' : 'text-left'} animate-pulse`}>⏳ {t('simulator', 'convertingRecording')}</p>
+      )}
+      {speechError && (
+        <p className={`text-xs text-red-400 mt-2 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>⚠️ {speechError}</p>
+      )}
     </div>
   );
 };
