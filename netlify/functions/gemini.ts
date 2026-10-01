@@ -309,7 +309,7 @@ export default async (req: Request, context?: any) => {
     }
 
     // API Key Validation
-    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const geminiApiKey = process.env.GEMINI_API_KEY;
     if (!geminiApiKey) {
       console.error("Gemini API Key missing");
       return new Response(JSON.stringify({ error: "מפתח ה-API של גוגל אינו מוגדר בסביבה" }), { 
