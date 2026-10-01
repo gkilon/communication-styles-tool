@@ -82,7 +82,7 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
 
   return (
     <div
-      className={`prose prose-invert max-w-none prose-p:text-gray-200 prose-p:leading-relaxed prose-ul:text-gray-200 prose-li:text-gray-200 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
+      className={`max-w-none text-gray-200 leading-relaxed [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:mb-3 [&_li]:mb-1.5 [&_strong]:text-white [&_strong]:font-bold ${dir === 'rtl' ? 'text-right' : 'text-left'}`}
       dir={dir}
       dangerouslySetInnerHTML={{ __html: htmlContent }}
     />

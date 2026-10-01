@@ -1,7 +1,7 @@
 export const translations = {
   languageSelect: {
     title: { he: 'באיזו שפה תרצה למלא את השאלון?', en: 'Which language would you like to use?' },
-    subtitle: { he: 'כל השאלון, הדוח והמאמן האישי יוצגו בשפה שתבחר', en: 'The questionnaire, report and personal coach will all be shown in the language you choose' },
+    subtitle: { he: 'כל השאלון, הדוח והיועץ האישי יוצגו בשפה שתבחר', en: 'The questionnaire, report and personal advisor will all be shown in the language you choose' },
     hebrew: { he: 'עברית', en: 'Hebrew' },
     english: { he: 'אנגלית', en: 'English' },
     continue: { he: 'המשך', en: 'Continue' },
@@ -32,7 +32,7 @@ export const translations = {
     invitedTo: { he: 'הוזמנת לסדנה:', en: 'You were invited to:' },
     invitedHint: { he: 'רשום את שמך למטה והתחל מיד בשאלון', en: 'Enter your name below and start the questionnaire right away' },
     personalTitle: { he: 'כניסה עם קוד גישה', en: 'Enter with an Access Code' },
-    personalSubtitle: { he: 'מילוי שאלון פרטני עם דוח מלא ומאמן AI אישי.', en: 'Fill out an individual questionnaire with a full report and a personal AI coach.' },
+    personalSubtitle: { he: 'מילוי שאלון פרטני עם דוח מלא ויועץ AI אישי.', en: 'Fill out an individual questionnaire with a full report and a personal AI advisor.' },
     personalPlaceholder: { he: 'הקלד קוד גישה או סיסמה', en: 'Enter access code or password' },
     personalMissing: { he: 'אנא הזן קוד גישה או סיסמה', en: 'Please enter an access code or password' },
     checkingCode: { he: 'בודק קוד...', en: 'Checking code...' },
@@ -67,7 +67,7 @@ export const translations = {
   },
   background: {
     title: { he: 'התאמה אישית של הניתוח', en: 'Personalizing Your Analysis' },
-    subtitle: { he: 'על מנת שנוכל לדייק עבורך את הדו"ח, הטיפים והמלצות המאמן, נשמח אם תסמן/י את המאפיינים הבאים:', en: "So we can fine-tune your report and the coach's tips and recommendations, please select the following:" },
+    subtitle: { he: 'על מנת שנוכל לדייק עבורך את הדו"ח, הטיפים והמלצות היועץ, נשמח אם תסמן/י את המאפיינים הבאים:', en: "So we can fine-tune your report and the advisor's tips and recommendations, please select the following:" },
     q1: { he: '1. מהו המגדר שלך?', en: '1. What is your gender?' },
     male: { he: 'זכר', en: 'Male' },
     female: { he: 'נקבה', en: 'Female' },
@@ -111,7 +111,7 @@ export const translations = {
   },
   resultsChrome: {
     tabProfile: { he: 'הפרופיל שלי', en: 'My Profile' },
-    tabCoach: { he: 'מאמן AI', en: 'AI Coach' },
+    tabCoach: { he: 'דבר עם Kilon', en: 'Talk to Kilon' },
     tabSimulator: { he: 'סימולטור שיחות', en: 'Dialogue Simulator' },
     reportTitle: { he: 'דו"ח Communication Map', en: 'Communication Map Report' },
     reportSubtitle: { he: 'ניתוח מקצועי מבוסס מודל הצבעים', en: 'Professional analysis based on the color model' },
@@ -160,13 +160,13 @@ export const translations = {
     myMap: { he: 'המפה שלי', en: 'My Map' },
     personalAnalysis: { he: 'ניתוח אישי', en: 'Personal Analysis' },
     summaryRecommendations: { he: 'סיכום והמלצות', en: 'Summary & Recommendations' },
-    personalCoach: { he: 'מאמן אישי', en: 'Personal Coach' },
+    personalCoach: { he: 'דבר עם Kilon', en: 'Talk to Kilon' },
     dialogueSimulator: { he: 'סימולטור דיאלוג', en: 'Dialogue Simulator' },
     promptSimulator: { he: 'סימולטור פרומפטים', en: 'Prompt Simulator' },
     stuckHelp: { he: 'נתקעתי (עזרה)', en: "I'm Stuck (Help)" },
   },
   aiCoach: {
-    title: { he: 'מאמן ה-AI האישי שלך', en: 'Your Personal AI Coach' },
+    title: { he: 'דבר עם Kilon, היועץ האישי שלך', en: 'Talk to Kilon, your personal advisor' },
     subtitle: { he: 'ייעוץ מותאם אישית לפרופיל התקשורת שלך', en: 'Personalized advice based on your communication profile' },
     greeting: { he: '"היי! אני כאן כדי לעזור לך לרתום את החוזקות שלך. על מה נרצה לדבר היום?"', en: '"Hi! I\u2019m here to help you leverage your strengths. What would you like to talk about today?"' },
     processing: { he: 'מעבד נתונים...', en: 'Processing...' },
