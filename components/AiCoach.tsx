@@ -9,9 +9,16 @@ import { useLanguage } from '../i18n/LanguageContext';
 interface AiCoachProps {
   scores: Scores;
   backgroundData?: BackgroundData | null;
+  // The conversation state lives in the parent (ResultsScreen) so it survives switching tabs.
+  conversation: Message[];
+  setConversation: React.Dispatch<React.SetStateAction<Message[]>>;
+  userInput: string;
+  setUserInput: React.Dispatch<React.SetStateAction<string>>;
+  isLoading: boolean;
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-interface Message {
+export interface Message {
   sender: 'user' | 'ai';
   text: string;
   isError?: boolean;
@@ -95,12 +102,9 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData }) => {
+export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conversation, setConversation, userInput, setUserInput, isLoading, setIsLoading }) => {
   const { t } = useT();
   const { lang, dir } = useLanguage();
-  const [userInput, setUserInput] = useState('');
-  const [conversation, setConversation] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 

@@ -5,7 +5,7 @@ import { ResultsChart } from './ResultsChart';
 import { CombinedAnalysis } from './CombinedAnalysis';
 import { generateProfileAnalysis } from '../services/analysisService';
 import { getIntegratedInsights } from '../services/geminiService';
-import { AiCoach } from './AiCoach';
+import { AiCoach, Message as CoachMessage } from './AiCoach';
 import { CaseStudiesSimulator } from './CaseStudiesSimulator';
 import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -34,6 +34,12 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
+
+  // The advisor conversation is kept here (not inside the coach tab) so switching tabs
+  // and coming back doesn't erase it.
+  const [coachConversation, setCoachConversation] = useState<CoachMessage[]>([]);
+  const [coachInput, setCoachInput] = useState('');
+  const [coachLoading, setCoachLoading] = useState(false);
 
   const hasOrgContext = useMemo(() => {
     try {
@@ -274,7 +280,16 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
         {activeTab === 'coach' && (
           <motion.div key="coach" variants={tabVariants} initial="hidden" animate="visible" exit="exit" className="mt-4">
             <div className="bg-glass-dark p-6 sm:p-8 rounded-[2rem] shadow-xl border border-glass-border backdrop-blur-xl">
-              <AiCoach scores={scores} backgroundData={backgroundData} />
+              <AiCoach
+                scores={scores}
+                backgroundData={backgroundData}
+                conversation={coachConversation}
+                setConversation={setCoachConversation}
+                userInput={coachInput}
+                setUserInput={setCoachInput}
+                isLoading={coachLoading}
+                setIsLoading={setCoachLoading}
+              />
             </div>
           </motion.div>
         )}
