@@ -5,6 +5,7 @@ import { getAiCoachAdviceStream, transcribeAudio } from '../services/geminiServi
 import { SparklesIcon } from './icons/Icons';
 import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
+import type { Message, CoachArchive } from './useCoachArchive';
 
 interface AiCoachProps {
   scores: Scores;
@@ -16,13 +17,11 @@ interface AiCoachProps {
   setUserInput: React.Dispatch<React.SetStateAction<string>>;
   isLoading: boolean;
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  // Saved conversations (archive) — see useCoachArchive.
+  archive: CoachArchive;
 }
 
-export interface Message {
-  sender: 'user' | 'ai';
-  text: string;
-  isError?: boolean;
-}
+export type { Message };
 
 const STARTERS_HE = [
   "מהן נקודות העיוורון שלי ואיך להימנע מהן במצבי לחץ?",
@@ -51,13 +50,23 @@ const HEADER_TEXT = {
     title: 'דבר עם Kilon, היועץ האישי שלך',
     subtitle: 'יועץ AI שמכיר אותך, ומייעץ בשיטה של Kilon.',
     placeholder: 'כתוב או דבר: שאל מה שבא לך, או ספר על הדילמה שלך...',
-    freeAsk: '✍️ שאל מה שבא לך, או ספר על דילמה שלך'
+    freeAsk: '✍️ שאל מה שבא לך, או ספר על דילמה שלך',
+    archive: 'שיחות קודמות',
+    newChat: 'שיחה חדשה',
+    noChats: 'עדיין אין שיחות שמורות. כל שיחה נשמרת אוטומטית.',
+    deleteConfirm: 'למחוק את השיחה הזו לצמיתות?',
+    saveFailed: 'השמירה האוטומטית של השיחה נכשלה. השיחה תישאר רק כל עוד הדף פתוח.'
   },
   en: {
     title: 'Talk to Kilon, your personal advisor',
     subtitle: 'An AI advisor who knows you and advises the Kilon way.',
     placeholder: 'Type or speak: ask anything, or tell me about your dilemma...',
-    freeAsk: '✍️ Ask anything, or share a dilemma of your own'
+    freeAsk: '✍️ Ask anything, or share a dilemma of your own',
+    archive: 'Past conversations',
+    newChat: 'New conversation',
+    noChats: 'No saved conversations yet. Every conversation is saved automatically.',
+    deleteConfirm: 'Delete this conversation permanently?',
+    saveFailed: "Auto-saving this conversation failed. It will only stay while this page is open."
   }
 };
 
@@ -102,11 +111,12 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conversation, setConversation, userInput, setUserInput, isLoading, setIsLoading }) => {
+export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conversation, setConversation, userInput, setUserInput, isLoading, setIsLoading, archive }) => {
   const { t } = useT();
   const { lang, dir } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [showArchive, setShowArchive] = useState(false);
 
   // Voice input (same approach as the dialogue simulator): browser speech recognition when
   // available, otherwise record audio and transcribe it through the AI service.
@@ -268,6 +278,61 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
           <p className="text-gray-400 text-sm font-medium">{ht.subtitle}</p>
         </div>
       </div>
+
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <button
+          onClick={() => setShowArchive(v => !v)}
+          className="text-sm font-bold bg-gray-800/80 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-xl border border-gray-700 transition-all"
+        >
+          🗂️ {ht.archive}{archive.chats.length > 0 ? ` (${archive.chats.length})` : ''}
+        </button>
+        {conversation.length > 0 && (
+          <button
+            onClick={() => { archive.newChat(); setShowArchive(false); }}
+            disabled={isLoading}
+            className="text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 px-3 py-2 rounded-xl border border-cyan-700/60 transition-all disabled:opacity-40"
+          >
+            ➕ {ht.newChat}
+          </button>
+        )}
+      </div>
+
+      {showArchive && (
+        <div className="mb-4 bg-gray-900/70 border border-gray-700 rounded-2xl p-2 max-h-64 overflow-y-auto">
+          {archive.chats.length === 0 ? (
+            <p className="text-gray-400 text-sm p-3">{ht.noChats}</p>
+          ) : (
+            archive.chats.map(c => (
+              <div
+                key={c.id}
+                className={`flex items-center gap-2 rounded-xl px-2 py-1 ${c.id === archive.activeId ? 'bg-cyan-900/30 border border-cyan-700/60' : 'hover:bg-gray-800/70'}`}
+              >
+                <button
+                  onClick={() => { archive.openChat(c.id); setShowArchive(false); }}
+                  disabled={isLoading}
+                  className={`flex-1 min-w-0 ${dir === 'rtl' ? 'text-right' : 'text-left'} py-2 disabled:opacity-50`}
+                >
+                  <span className="block text-sm text-gray-100 truncate">{c.title}</span>
+                  <span className="block text-xs text-gray-500">
+                    {c.updatedAt ? new Date(c.updatedAt).toLocaleDateString(lang === 'en' ? 'en-GB' : 'he-IL', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                  </span>
+                </button>
+                <button
+                  onClick={() => { if (window.confirm(ht.deleteConfirm)) archive.removeChat(c.id); }}
+                  className="text-gray-500 hover:text-red-400 px-2 py-2 transition-colors"
+                  title="🗑️"
+                >
+                  🗑️
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {archive.saveFailed && (
+        <p className={`text-xs text-red-400 mb-3 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>⚠️ {ht.saveFailed}</p>
+      )}
 
       <div
         ref={scrollRef}

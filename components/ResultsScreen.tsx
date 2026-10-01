@@ -5,7 +5,9 @@ import { ResultsChart } from './ResultsChart';
 import { CombinedAnalysis } from './CombinedAnalysis';
 import { generateProfileAnalysis } from '../services/analysisService';
 import { getIntegratedInsights } from '../services/geminiService';
-import { AiCoach, Message as CoachMessage } from './AiCoach';
+import { AiCoach } from './AiCoach';
+import { useCoachArchive } from './useCoachArchive';
+import type { Message as CoachMessage } from './useCoachArchive';
 import { CaseStudiesSimulator } from './CaseStudiesSimulator';
 import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -40,6 +42,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const [coachConversation, setCoachConversation] = useState<CoachMessage[]>([]);
   const [coachInput, setCoachInput] = useState('');
   const [coachLoading, setCoachLoading] = useState(false);
+  const coachArchive = useCoachArchive(coachConversation, setCoachConversation, coachLoading, setCoachInput);
 
   const hasOrgContext = useMemo(() => {
     try {
@@ -289,6 +292,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 setUserInput={setCoachInput}
                 isLoading={coachLoading}
                 setIsLoading={setCoachLoading}
+                archive={coachArchive}
               />
             </div>
           </motion.div>

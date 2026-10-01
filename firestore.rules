@@ -26,6 +26,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ADVISOR CONVERSATIONS — private to their owner. Rules do not cascade from the
+    // user document above, so admins can NOT read these from the dashboard.
+    match /users/{userId}/coach_chats/{chatId} {
+      allow read, delete: if isAuth() && request.auth.uid == userId;
+      allow create, update: if isAuth() && request.auth.uid == userId
+                             && request.resource.data.messages.size() <= 200
+                             && request.resource.data.title is string
+                             && request.resource.data.title.size() <= 120;
+    }
+
     // ORGANIZATIONS — only the admin dashboard reads these directly now;
     // the participant flow goes through /api/validate-code (Admin SDK, server-side).
     match /organizations/{orgId} {
