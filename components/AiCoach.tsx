@@ -20,19 +20,23 @@ interface Message {
 const STARTERS_HE = [
   "מהן נקודות העיוורון שלי ואיך להימנע מהן במצבי לחץ?",
   "איך אוכל למנף את הפרופיל שלי כדי להתקדם ולהשפיע בארגון?",
-  "איך רצוי שאתקשר עם מנהל או קולגה בעל סגנון הפוך משלי?",
-  "יש לי דילמה מול מנהל או קולגה",
-  "אני רוצה לשנות משהו בדרך שבה אני עובד",
-  "אני לא בטוח מה הצעד הבא שלי"
+  "יש לי קושי מול עובד או מול הצוות שלי",
+  "יש לי קושי מול קולגה",
+  "יש לי קושי מול המנהל שלי",
+  "יש לי קונפליקט ואני צריך עזרה",
+  "יש לי קושי עם עומס המשימות שלי",
+  "איך להציג רעיון או יוזמה ולרתום אחרים?"
 ];
 
 const STARTERS_EN = [
   "What are my blind spots, and how do I avoid them under pressure?",
   "How can I leverage my profile to advance and influence within the organization?",
-  "How should I communicate with a manager or colleague whose style is the opposite of mine?",
-  "I have a dilemma with a manager or colleague",
-  "I want to change something in the way I work",
-  "I'm not sure what my next step should be"
+  "I'm struggling with an employee or with my team",
+  "I'm struggling with a colleague",
+  "I'm struggling with my manager",
+  "I have a conflict and I need help",
+  "I'm struggling with my workload",
+  "How do I present an idea or initiative and win others over?"
 ];
 
 const HEADER_TEXT = {
