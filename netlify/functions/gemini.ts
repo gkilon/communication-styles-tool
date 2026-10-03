@@ -38,7 +38,8 @@ function initFirebaseAdmin(): admin.firestore.Firestore | null {
 }
 
 // ----------------------------------------------------
-// 2. In-Memory Fallback Rate Limiter (if no Service Account)
+// 2. In-Memory Fallback Rate Limiter (if no Service Account
+//    or if Firestore fails)
 // ----------------------------------------------------
 interface FallbackRecord {
   minuteTimestamps: number[];
@@ -84,7 +85,7 @@ function checkFallbackLimit(key: string): { allowed: boolean; retryAfter?: numbe
 }
 
 // ----------------------------------------------------
-// 3. Firestore Quota Check (Minute + Daily limits)
+// 3. Firestore Quota Check (Minute + Daily limits per user)
 // ----------------------------------------------------
 const DEFAULT_DAILY_LIMIT = 50; // מכסת ברירת מחדל יומית למשתמש רגיל
 const MAX_REQUESTS_PER_MINUTE = 10; // מתחת ל-15 של גוגל
@@ -156,8 +157,59 @@ async function checkAndIncrementQuota(
     return { allowed: true };
 
   } catch (dbError) {
-    console.error("Firestore quota check error, falling back to permissive allow:", dbError);
+    // Firestore failed: use the rough in-memory limiter instead of allowing everything.
+    console.error("Firestore quota check error, using in-memory fallback limiter:", dbError);
+    return checkFallbackLimit(identifier);
+  }
+}
+
+// ----------------------------------------------------
+// 3b. Global daily cap for the whole app (safety net)
+// ----------------------------------------------------
+const GLOBAL_DAILY_LIMIT = 1000; // סך כל קריאות ה-AI ביום, לכל המשתמשים ביחד
+
+async function checkGlobalDailyCap(
+  db: admin.firestore.Firestore
+): Promise<{ allowed: boolean; errorMsg?: string }> {
+  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const ref = db.collection("app_usage").doc(`global_${todayStr}`);
+
+  try {
+    const allowed = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const count = snap.exists ? ((snap.data() as any)?.count || 0) : 0;
+      if (count >= GLOBAL_DAILY_LIMIT) {
+        return false;
+      }
+      tx.set(ref, {
+        count: count + 1,
+        date: todayStr,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      return true;
+    });
+
+    if (!allowed) {
+      return {
+        allowed: false,
+        errorMsg: "שירות ה-AI הגיע למכסה היומית הכללית שלו. הוא יחזור לעבוד מחר. אפשר להמשיך להשתמש בשאר חלקי האתר."
+      };
+    }
     return { allowed: true };
+  } catch (e) {
+    // If only the global counter fails, don't block everyone; per-user limits still apply.
+    console.error("Global cap check failed, allowing request:", e);
+    return { allowed: true };
+  }
+}
+
+async function isAdminUser(db: admin.firestore.Firestore, uid: string): Promise<boolean> {
+  try {
+    const snap = await db.collection("users").doc(uid).get();
+    return snap.exists && (snap.data() as any)?.role === "admin";
+  } catch (e) {
+    console.warn("Admin check (global cap) failed:", e);
+    return false;
   }
 }
 
@@ -306,6 +358,21 @@ export default async (req: Request, context?: any) => {
           "Retry-After": String(limitCheck.retryAfter || 5)
         }
       });
+    }
+
+    // Global daily cap for the whole app (admins bypass)
+    if (!(await isAdminUser(adminDb, verifiedUid))) {
+      const globalCheck = await checkGlobalDailyCap(adminDb);
+      if (!globalCheck.allowed) {
+        return new Response(JSON.stringify({
+          error: globalCheck.errorMsg || "הגענו למכסה היומית הכללית.",
+          rateLimited: true,
+          globalLimited: true
+        }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
     }
 
     // API Key Validation
