@@ -6,6 +6,7 @@ import { CombinedAnalysis } from './CombinedAnalysis';
 import { generateProfileAnalysis } from '../services/analysisService';
 import { getIntegratedInsights } from '../services/geminiService';
 import { AiCoach } from './AiCoach';
+import { ModelPrimer } from './ModelPrimer';
 import { useCoachArchive } from './useCoachArchive';
 import type { Message as CoachMessage } from './useCoachArchive';
 import { CaseStudiesSimulator } from './CaseStudiesSimulator';
@@ -213,6 +214,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                   <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{t('resultsChrome', 'tagEffectiveComm')}</span>
                 </div>
               </div>
+
+              {/* Short, collapsible primer on the model (based on the lecture) */}
+              <ModelPrimer />
 
               <div className="flex flex-col lg:flex-row gap-8 mb-8 items-stretch relative z-10">
                 <div className="flex-none lg:w-[40%] bg-glass-light p-6 rounded-[2rem] border border-glass-border shadow-inner backdrop-blur-sm">
