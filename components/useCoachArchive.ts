@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { collection, deleteDoc, doc, getDocs, limit, orderBy, query, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
+import type { Scores } from '../types';
 
 export interface Message {
   sender: 'user' | 'ai';
@@ -14,6 +15,8 @@ export interface CoachChat {
   createdAt: string;
   updatedAt: string;
   messages: Message[];
+  // The profile (questionnaire scores) the conversation was last based on.
+  profile?: Scores;
 }
 
 export interface CoachArchive {
@@ -21,6 +24,9 @@ export interface CoachArchive {
   activeId: string | null;
   loaded: boolean;
   saveFailed: boolean;
+  // Set when the open conversation was based on a different profile than the current one.
+  profileChange: { previous: Scores } | null;
+  clearProfileChange: () => void;
   newChat: () => void;
   openChat: (id: string) => void;
   removeChat: (id: string) => Promise<void>;
@@ -41,6 +47,22 @@ const makeTitle = (msgs: Message[]): string => {
   return text.length > 48 ? text.slice(0, 48) + '…' : text || '...';
 };
 
+const colorShares = (s: Scores) => {
+  const a = Number(s?.a || 0), b = Number(s?.b || 0), c = Number(s?.c || 0), d = Number(s?.d || 0);
+  const raw = [a + c, a + d, b + d, b + c]; // red, yellow, green, blue
+  const total = raw.reduce((x, y) => x + y, 0) || 1;
+  return raw.map(v => (v / total) * 100);
+};
+
+/** A real change: a different dominant color, or any color moved by 10+ points. */
+const profileChanged = (prev: Scores, cur: Scores): boolean => {
+  const p = colorShares(prev);
+  const c = colorShares(cur);
+  const dominant = (arr: number[]) => arr.indexOf(Math.max(...arr));
+  if (dominant(p) !== dominant(c)) return true;
+  return p.some((v, i) => Math.abs(v - c[i]) >= 10);
+};
+
 const getUid = (): string | null => (auth && auth.currentUser ? auth.currentUser.uid : null);
 
 /**
@@ -54,12 +76,16 @@ export function useCoachArchive(
   conversation: Message[],
   setConversation: React.Dispatch<React.SetStateAction<Message[]>>,
   isLoading: boolean,
-  setUserInput: React.Dispatch<React.SetStateAction<string>>
+  setUserInput: React.Dispatch<React.SetStateAction<string>>,
+  scores: Scores
 ): CoachArchive {
   const [chats, setChats] = useState<CoachChat[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [profileChange, setProfileChange] = useState<{ previous: Scores } | null>(null);
+  const scoresRef = useRef<Scores>(scores);
+  scoresRef.current = scores;
 
   const activeIdRef = useRef<string | null>(null);
   const lastSavedRef = useRef('');
@@ -73,6 +99,7 @@ export function useCoachArchive(
     setActiveId(c.id);
     lastSavedRef.current = JSON.stringify(cleanMessages(c.messages));
     setConversation(c.messages);
+    setProfileChange(c.profile && profileChanged(c.profile, scoresRef.current) ? { previous: c.profile } : null);
   };
 
   // Load the archive once, and reopen the latest conversation if nothing is open yet.
@@ -95,7 +122,8 @@ export function useCoachArchive(
             title: data.title || '...',
             createdAt: data.createdAt || data.updatedAt || '',
             updatedAt: data.updatedAt || '',
-            messages: Array.isArray(data.messages) ? data.messages : []
+            messages: Array.isArray(data.messages) ? data.messages : [],
+            profile: data.profile && typeof data.profile === 'object' ? data.profile : undefined
           };
         });
         setChats(list);
@@ -140,12 +168,13 @@ export function useCoachArchive(
           title,
           createdAt,
           updatedAt: now,
-          messages: cleaned
+          messages: cleaned,
+          profile: scoresRef.current
         });
         lastSavedRef.current = sig;
         setSaveFailed(false);
         setChats(prev => [
-          { id: savedId, title, createdAt, updatedAt: now, messages: cleaned },
+          { id: savedId, title, createdAt, updatedAt: now, messages: cleaned, profile: scoresRef.current },
           ...prev.filter(c => c.id !== savedId)
         ]);
       } catch (err) {
@@ -159,6 +188,7 @@ export function useCoachArchive(
     activeIdRef.current = null;
     setActiveId(null);
     lastSavedRef.current = '';
+    setProfileChange(null);
     setConversation([]);
     setUserInput('');
   };
@@ -186,5 +216,7 @@ export function useCoachArchive(
     }
   };
 
-  return { chats, activeId, loaded, saveFailed, newChat, openChat, removeChat };
+  const clearProfileChange = () => setProfileChange(null);
+
+  return { chats, activeId, loaded, saveFailed, profileChange, clearProfileChange, newChat, openChat, removeChat };
 }

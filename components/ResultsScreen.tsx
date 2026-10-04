@@ -43,7 +43,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const [coachConversation, setCoachConversation] = useState<CoachMessage[]>([]);
   const [coachInput, setCoachInput] = useState('');
   const [coachLoading, setCoachLoading] = useState(false);
-  const coachArchive = useCoachArchive(coachConversation, setCoachConversation, coachLoading, setCoachInput);
+  const coachArchive = useCoachArchive(coachConversation, setCoachConversation, coachLoading, setCoachInput, scores);
 
   const hasOrgContext = useMemo(() => {
     try {

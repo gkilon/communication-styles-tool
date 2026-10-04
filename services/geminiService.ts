@@ -389,10 +389,30 @@ function buildChatContents(history: SimulationMessage[] | undefined, userInput: 
  * action plan -> follow-up) in a light, flexible way. Needs the chat history so it knows
  * what was already asked and answered.
  */
-export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he', history?: SimulationMessage[]): Promise<string> => {
+/**
+ * One-time note for the advisor when the user retook the questionnaire and the results are
+ * different from the profile this conversation started with.
+ */
+function buildProfileChangeNote(previousScores: Scores): string {
+  return `
+
+שינוי בפרופיל (חשוב, מתייחס רק לתשובה הזו):
+המשתמש מילא את השאלון מחדש מאז ההודעות הקודמות בשיחה הזו, והתוצאות שונות. כך נראה הפרופיל הקודם שלו:
+${buildColorProfile(previousScores)}
+הפרופיל שמופיע למעלה הוא העדכני, ועליו אתה מתבסס מעכשיו.
+- בתחילת התשובה, במשפט אחד קצר, ציין שאתה רואה שהשאלון מולא מחדש והתוצאות שונות, ושאתה מתייחס עכשיו לפרופיל העדכני.
+- ענה על מה שהמשתמש ביקש כרגיל.
+- בסוף התשובה, במקום שאלת הסיום הרגילה, שאל בטון קליל ולא חוקר מה גרם לו למלא שוב, ואם משהו בתוצאה הקודמת לא דיבר אליו.
+- אם עצות קודמות בשיחה נבנו על הפרופיל הישן, ציין זאת בקצרה במקום שבו זה רלוונטי.
+- הזכר זאת פעם אחת בלבד. אם המשתמש עונה על השאלה, התייחס לתשובה כמידע שימושי להמשך.
+`;
+}
+
+export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he', history?: SimulationMessage[], previousScores?: Scores | null): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
   const orgContext = buildOrgContext();
+  const profileChangeNote = previousScores ? buildProfileChangeNote(previousScores) : '';
 
   const systemInstruction = `אתה Kilon, יועץ אישי וארגוני מנוסה מבית Kilon Consulting. תפקידך להכיר את האדם שמולך ולעזור לו עם מה שהוא באמת מתמודד איתו, בצורה מעשית ותכליתית.
 
@@ -426,7 +446,7 @@ ${COLOR_TRAITS}
 
 זה ייעוץ וליווי ארגוני, לא טיפול. אל תאבחן. אם עולה מצוקה נפשית אמיתית, הכר בזה בחום והצע לפנות לאיש מקצוע.
 
-${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
+${profileChangeNote}${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
   return callGeminiApiStream('generateContent', {
     model: "gemini-3.8-flash",

@@ -244,6 +244,8 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
 
     // Everything said so far (without failed replies) goes to the model as context.
     const history = conversation.filter(m => !m.isError);
+    // If the profile changed since this conversation was last saved, the advisor mentions it once.
+    const profileChange = archive.profileChange;
 
     setConversation(prev => [...prev, { sender: 'user', text }, { sender: 'ai', text: '' }]);
     setUserInput('');
@@ -252,7 +254,8 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
     try {
       await getAiCoachAdviceStream(scores, text, (chunk) => {
         updateLastAi(m => ({ ...m, text: chunk }));
-      }, backgroundData, lang, history);
+      }, backgroundData, lang, history, profileChange ? profileChange.previous : null);
+      if (profileChange) archive.clearProfileChange();
     } catch (error: any) {
       console.error("AI Coach interaction failed:", error);
       updateLastAi(m => m.text ? m : {
