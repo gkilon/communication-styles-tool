@@ -26,7 +26,7 @@ export async function refreshSessionContext(force = false): Promise<void> {
     const res = await fetch('/api/validate-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code })
+      body: JSON.stringify({ code, teamName: new URLSearchParams(window.location.search).get("team") || session?.teamName || undefined })
     });
     if (!res.ok) return;
     const v = await res.json();
