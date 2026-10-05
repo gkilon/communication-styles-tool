@@ -1,16 +1,29 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { Scores, BackgroundData } from '../types';
+
 import { ResultsChart } from './ResultsChart';
+
 import { CombinedAnalysis } from './CombinedAnalysis';
+
 import { generateProfileAnalysis } from '../services/analysisService';
+
 import { getIntegratedInsights, refreshSessionContext } from '../services/geminiService';
+
 import { AiCoach } from './AiCoach';
+
 import { ModelPrimer } from './ModelPrimer';
+
 import { useCoachArchive } from './useCoachArchive';
+
 import type { Message as CoachMessage } from './useCoachArchive';
+
 import { CaseStudiesSimulator } from './CaseStudiesSimulator';
+
 import { useT } from '../i18n/useT';
+
 import { useLanguage } from '../i18n/LanguageContext';
 
 declare global {
@@ -30,10 +43,21 @@ interface ResultsScreenProps {
 
 type TabId = 'profile' | 'coach' | 'simulator';
 
-export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, backgroundData, onReset, onEdit, onLogout }) => {
+export const ResultsScreen: React.FC<ResultsScreenProps> = ({
+  scores,
+  backgroundData,
+  onReset,
+  onEdit,
+  onLogout
+}) => {
   const { t } = useT();
   const { lang, dir } = useLanguage();
-  const profileAnalysis = useMemo(() => generateProfileAnalysis(scores, lang, backgroundData), [scores, lang, backgroundData]);
+
+  const profileAnalysis = useMemo(
+    () => generateProfileAnalysis(scores, lang, backgroundData),
+    [scores, lang, backgroundData]
+  );
+
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
@@ -41,6 +65,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   // Organization context must be refreshed before deciding whether
   // organization-specific AI insights should run.
   const [hasOrgContext, setHasOrgContext] = useState(false);
+
+  // Organization name used for visible personalization in the report.
+  const [companyName, setCompanyName] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -52,12 +79,18 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
       try {
         const raw = localStorage.getItem('comm_style_session');
+
         if (!raw) {
           setHasOrgContext(false);
+          setCompanyName('');
           return;
         }
 
         const session = JSON.parse(raw);
+
+        if (cancelled) return;
+
+        setCompanyName(session?.companyName || '');
 
         setHasOrgContext(
           !!(
@@ -68,6 +101,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
         );
       } catch {
         setHasOrgContext(false);
+        setCompanyName('');
       }
     };
 
@@ -83,7 +117,14 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const [coachConversation, setCoachConversation] = useState<CoachMessage[]>([]);
   const [coachInput, setCoachInput] = useState('');
   const [coachLoading, setCoachLoading] = useState(false);
-  const coachArchive = useCoachArchive(coachConversation, setCoachConversation, coachLoading, setCoachInput, scores);
+
+  const coachArchive = useCoachArchive(
+    coachConversation,
+    setCoachConversation,
+    coachLoading,
+    setCoachInput,
+    scores
+  );
 
   // AI call for the org-fit addendum only — goal/role personalization is now handled
   // deterministically inside generateProfileAnalysis (no AI, always instant/reliable).
@@ -154,17 +195,34 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
       const imgData = canvas.toDataURL('image/jpeg', 0.8);
       const pdf = new jsPDF('p', 'mm', 'a4', true);
+
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
+
       const imgProps = pdf.getImageProperties(imgData);
+
       const margin = 8;
       const pdfContentWidth = pageWidth - (margin * 2);
       const maxContentHeight = pageHeight - (margin * 2);
-      const calculatedHeight = (imgProps.height * pdfContentWidth) / imgProps.width;
-      const finalContentHeight = Math.min(calculatedHeight, maxContentHeight);
+
+      const calculatedHeight =
+        (imgProps.height * pdfContentWidth) / imgProps.width;
+
+      const finalContentHeight = Math.min(
+        calculatedHeight,
+        maxContentHeight
+      );
 
       pdf.setFillColor(15, 23, 42);
-      pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+
+      pdf.rect(
+        0,
+        0,
+        pageWidth,
+        pageHeight,
+        'F'
+      );
+
       pdf.addImage(
         imgData,
         'JPEG',
@@ -178,6 +236,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
       pdf.setFontSize(7);
       pdf.setTextColor(80, 80, 80);
+
       pdf.text(
         'Kilon Consulting - דו"ח סגנון תקשורת אישי',
         pageWidth / 2,
@@ -185,12 +244,16 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
         { align: 'center' }
       );
 
-      pdf.save(`Communication_Profile_${new Date().toISOString().split('T')[0]}.pdf`);
+      pdf.save(
+        `Communication_Profile_${new Date().toISOString().split('T')[0]}.pdf`
+      );
     } catch (error) {
       console.error("Error generating PDF:", error);
       alert(t('resultsChrome', 'pdfError'));
 
-      if (input) input.classList.remove('pdf-export-mode');
+      if (input) {
+        input.classList.remove('pdf-export-mode');
+      }
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -255,6 +318,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
             exit="exit"
             className="space-y-6 mt-4"
           >
+
             {/* PDF Wrapper */}
             <div
               ref={resultsRef}
@@ -262,11 +326,15 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 dir === 'rtl' ? 'text-right' : 'text-left'
               } relative`}
             >
+
               <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] -mr-32 -mt-32 pointer-events-none"></div>
+
               <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px] -ml-32 -mb-32 pointer-events-none"></div>
 
               <div className="border-b border-glass-border pb-8 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
+
                 <div className={`${dir === 'rtl' ? 'text-right' : 'text-left'} flex-1`}>
+
                   <h1 className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300 mb-3 drop-shadow-sm">
                     {t('resultsChrome', 'reportTitle')}
                   </h1>
@@ -280,21 +348,28 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                       {t('resultsChrome', 'managerBadge')}
                     </span>
                   )}
+
                 </div>
 
                 <div className="bg-glass-light p-5 rounded-2xl border border-glass-border text-center min-w-[180px] backdrop-blur-md">
+
                   <div className="text-gray-400 text-xs font-bold uppercase mb-1 tracking-widest">
                     {t('resultsChrome', 'issueDate')}
                   </div>
 
                   <div className="text-white font-mono text-lg">
-                    {new Date().toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US')}
+                    {new Date().toLocaleDateString(
+                      lang === 'he' ? 'he-IL' : 'en-US'
+                    )}
                   </div>
+
                 </div>
+
               </div>
 
               {/* Quick orientation — a short intro before the detailed map & analysis below */}
               <div className="bg-gradient-to-br from-slate-800/40 to-cyan-900/20 p-8 rounded-[2rem] border border-dashed border-cyan-500/30 relative overflow-hidden z-10 shadow-lg backdrop-blur-sm mb-8">
+
                 <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-3">
                   <span className="text-cyan-400 text-2xl">📌</span>
                   {t('resultsChrome', 'quickSummaryTitle')}
@@ -305,6 +380,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 </p>
 
                 <ul className="space-y-2.5 text-gray-300 leading-relaxed">
+
                   <li className="flex gap-2">
                     <span className="text-white font-bold">
                       {t('resultsChrome', 'quickStrengthLabel')}
@@ -325,9 +401,11 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                     </span>
                     <span>{profileAnalysis.quickRecommendation}</span>
                   </li>
+
                 </ul>
 
                 <div className="mt-6 flex gap-3 flex-wrap">
+
                   <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">
                     {t('resultsChrome', 'tagCombinedMap')}
                   </span>
@@ -343,30 +421,39 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                   <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">
                     {t('resultsChrome', 'tagEffectiveComm')}
                   </span>
+
                 </div>
+
               </div>
 
               {/* Short, collapsible primer on the model (based on the lecture) */}
               <ModelPrimer />
 
               <div className="flex flex-col lg:flex-row gap-8 mb-8 items-stretch relative z-10">
+
                 <div className="flex-none lg:w-[40%] bg-glass-light p-6 rounded-[2rem] border border-glass-border shadow-inner backdrop-blur-sm">
                   <ResultsChart scores={scores} />
                 </div>
 
                 <div className="flex-1 bg-glass-light p-6 rounded-[2rem] border border-glass-border shadow-inner backdrop-blur-sm">
+
                   <CombinedAnalysis
                     analysis={profileAnalysis}
+                    companyName={companyName}
                     insightAddendum={insightsText}
                     insightLoading={insightsLoading}
                     insightError={insightsError}
                   />
+
                 </div>
+
               </div>
+
             </div>
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 no-print">
+
               <motion.button
                 whileHover={{
                   scale: 1.03,
@@ -377,6 +464,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 disabled={isGeneratingPdf}
                 className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-black py-4 px-10 rounded-2xl text-lg transition-all shadow-2xl disabled:opacity-50 flex items-center gap-3 border border-emerald-500/50"
               >
+
                 {isGeneratingPdf ? (
                   <span className="flex items-center gap-3">
                     <span className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin"></span>
@@ -388,9 +476,11 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                     <span>{t('resultsChrome', 'downloadPdf')}</span>
                   </>
                 )}
+
               </motion.button>
 
               <div className="flex gap-3">
+
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -408,7 +498,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 >
                   {t('resultsChrome', 'resetButton')}
                 </motion.button>
+
               </div>
+
             </div>
 
             {onLogout && (
@@ -421,6 +513,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 </button>
               </div>
             )}
+
           </motion.div>
         )}
 
@@ -435,6 +528,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
             className="mt-4"
           >
             <div className="bg-glass-dark p-6 sm:p-8 rounded-[2rem] shadow-xl border border-glass-border backdrop-blur-xl">
+
               <AiCoach
                 scores={scores}
                 backgroundData={backgroundData}
@@ -446,6 +540,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 setIsLoading={setCoachLoading}
                 archive={coachArchive}
               />
+
             </div>
           </motion.div>
         )}
@@ -461,7 +556,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
             className="mt-4"
           >
             <div className="bg-glass-dark p-6 sm:p-8 rounded-[2rem] shadow-xl border border-glass-border backdrop-blur-xl">
+
               <CaseStudiesSimulator scores={scores} />
+
             </div>
           </motion.div>
         )}

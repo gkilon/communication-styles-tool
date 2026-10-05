@@ -1,5 +1,7 @@
 import React from 'react';
+
 import { useLanguage } from '../i18n/LanguageContext';
+
 import { useT } from '../i18n/useT';
 
 interface Analysis {
@@ -11,6 +13,7 @@ interface Analysis {
 
 interface CombinedAnalysisProps {
   analysis: Analysis;
+  companyName?: string;
   insightAddendum?: string;
   insightLoading?: boolean;
   insightError?: boolean;
@@ -18,6 +21,7 @@ interface CombinedAnalysisProps {
 
 export const CombinedAnalysis: React.FC<CombinedAnalysisProps> = ({
   analysis,
+  companyName = '',
   insightAddendum = '',
   insightLoading = false,
   insightError = false,
@@ -45,19 +49,25 @@ export const CombinedAnalysis: React.FC<CombinedAnalysisProps> = ({
         {/* Organization-specific insight */}
         {(insightLoading || insightAddendum || insightError) && (
           <div className="group transition-all duration-300">
+
             <h4 className="text-lg font-black text-white mb-2 flex items-center gap-2 group-hover:text-cyan-400">
               <span className="opacity-50 text-sm">↳</span>
-              {dir === 'rtl' ? 'בהקשר הארגוני' : 'Organizational context'}
+
+              {dir === 'rtl'
+                ? `בהקשר הארגוני${companyName ? ` של ${companyName}` : ''}`
+                : `Organizational context${companyName ? ` — ${companyName}` : ''}`}
             </h4>
 
             <div className="bg-cyan-900/10 p-4 rounded-xl border border-cyan-500/20 transition-all font-light">
+
               {insightLoading && (
                 <div className="flex items-center gap-2 text-gray-400">
                   <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></span>
+
                   <span>
                     {dir === 'rtl'
-                      ? 'מנתח את החיבור בין הפרופיל שלך לבין ההקשר הארגוני...'
-                      : 'Analyzing the connection between your profile and the organizational context...'}
+                      ? `מנתח את החיבור בין הפרופיל שלך לבין ההקשר הארגוני${companyName ? ` של ${companyName}` : ''}...`
+                      : `Analyzing the connection between your profile and the organizational context${companyName ? ` of ${companyName}` : ''}...`}
                   </span>
                 </div>
               )}
@@ -75,6 +85,7 @@ export const CombinedAnalysis: React.FC<CombinedAnalysisProps> = ({
                   {insightAddendum}
                 </p>
               )}
+
             </div>
           </div>
         )}
