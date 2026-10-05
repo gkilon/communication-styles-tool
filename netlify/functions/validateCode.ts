@@ -50,7 +50,12 @@ export default async (req: Request, context?: any) => {
       return json({ valid: false, type: 'invalid', message: 'יותר מדי ניסיונות. נסה שוב בעוד דקה.' }, 429);
     }
 
-    const { code: rawCode } = await req.json();
+   const { code: rawCode, teamName: rawTeamName } = await req.json();
+
+const requestedTeamName =
+  typeof rawTeamName === "string"
+    ? rawTeamName.trim()
+    : "";
     const code = (typeof rawCode === "string" ? rawCode : "").trim();
     if (!code) return json({ valid: false, type: 'invalid', message: 'נא להזין קוד גישה' });
 
@@ -59,8 +64,32 @@ export default async (req: Request, context?: any) => {
       const accessSnap = await db.collection("settings").doc("access").get();
       const qPass = (accessSnap.data() as any)?.questionnairePassword;
       if (qPass && code.toLowerCase() === String(qPass).toLowerCase()) {
-        return json({ valid: true, type: 'global', teamName: 'General', dailyLimit: 30 });
-      }
+
+  if (requestedTeamName) {
+    const teamObj = await getTeamByName(db, requestedTeamName);
+
+    if (teamObj) {
+      return json({
+        valid: true,
+        type: 'team',
+        teamName: teamObj.name || requestedTeamName,
+        companyName: teamObj.companyName,
+        logoUrl: teamObj.logoUrl,
+        orgContext: teamObj.orgContext,
+        knowledgeBase: teamObj.knowledgeBase,
+        dailyLimit: 30
+      });
+    }
+  }
+
+  return json({
+    valid: true,
+    type: 'global',
+    teamName: 'General',
+    dailyLimit: 30
+  });
+
+}
     } catch (e) {
       console.warn("Could not check settings/access:", e);
     }

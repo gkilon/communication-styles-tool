@@ -369,27 +369,41 @@ export interface AccessValidationResult {
   message?: string;
 }
 
-export const validateAccessCode = async (rawCode: string): Promise<AccessValidationResult> => {
+export const validateAccessCode = async (
+  rawCode: string,
+  teamName?: string
+): Promise<AccessValidationResult> => {
   const code = rawCode.trim();
-  if (!code) return { valid: false, type: 'invalid', message: 'נא להזין קוד גישה' };
 
-  // Validated server-side now (netlify/functions/validateCode.ts) via the Admin
-  // SDK — the browser no longer reads access_codes/teams/organizations/settings
-  // directly, so those collections can be locked down to admin-only in
-  // firestore.rules instead of staying world-readable.
+  if (!code) {
+    return {
+      valid: false,
+      type: 'invalid',
+      message: 'נא להזין קוד גישה'
+    };
+  }
+
   try {
     const response = await fetch('/api/validate-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code })
+      body: JSON.stringify({
+        code,
+        teamName: teamName?.trim() || undefined
+      })
     });
+
     return await response.json() as AccessValidationResult;
   } catch (e) {
     console.error("Error calling validate-code function:", e);
-    return { valid: false, type: 'invalid', message: 'שגיאת תקשורת עם השרת. נסה שוב.' };
+
+    return {
+      valid: false,
+      type: 'invalid',
+      message: 'שגיאת תקשורת עם השרת. נסה שוב.'
+    };
   }
 };
-
 
 export interface AccessCodeRecord {
   id: string;

@@ -146,7 +146,10 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
       let validated: AccessValidationResult | null = null;
       const codeCandidate = teamCodeOrName.trim() || teamToUse;
 
-      const val = await validateAccessCode(codeCandidate);
+      const val = await validateAccessCode(
+  codeCandidate,
+  lockedTeamName || undefined
+);
       if (val.valid) {
         validated = val;
         resolvedTeam = val.teamName || teamToUse;
