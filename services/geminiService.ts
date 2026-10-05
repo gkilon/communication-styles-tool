@@ -17,7 +17,6 @@ export interface SimulationMessage {
 let sessionContextRefreshed = false;
 export async function refreshSessionContext(force = false): Promise<void> {
   if (sessionContextRefreshed && !force) return;
-  sessionContextRefreshed = true;
   try {
     const raw = localStorage.getItem('comm_style_session');
     if (!raw) return;
@@ -39,7 +38,10 @@ export async function refreshSessionContext(force = false): Promise<void> {
     if (v.knowledgeBase !== undefined) updated.knowledgeBase = v.knowledgeBase;
     if (v.teamName && !updated.teamName) updated.teamName = v.teamName;
     localStorage.setItem('comm_style_session', JSON.stringify(updated));
-  } catch (e) {
+
+sessionContextRefreshed = true;
+
+} catch (e) {
     console.warn('Could not refresh organization context:', e);
   }
 }
