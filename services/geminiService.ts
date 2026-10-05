@@ -104,7 +104,7 @@ function buildOrgContext(): string {
     return '';
   }
 
-  let prompt = `\n[ORGANIZATIONAL CONTEXT]\n`;
+  let prompt = "\n[ORGANIZATIONAL CONTEXT]\n";
 
   if (sessionData.companyName) {
     prompt += `Company: ${sessionData.companyName}\n`;
