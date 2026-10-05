@@ -107,17 +107,16 @@ function buildOrgContext(): string {
   let prompt = "\n[ORGANIZATIONAL CONTEXT]\n";
 
   if (sessionData.companyName) {
-    prompt += `Company: ${sessionData.companyName}\n`;
-  }
+  prompt += "Company: " + sessionData.companyName + "\n";
+}
 
-  if (sessionData.orgContext) {
-    prompt += `Organizational culture/context:\n${sessionData.orgContext}\n`;
-  }
+if (sessionData.orgContext) {
+  prompt += "Organizational culture/context:\n" + sessionData.orgContext + "\n";
+}
 
-  if (sessionData.knowledgeBase) {
-    prompt += `Organizational knowledge:\n${sessionData.knowledgeBase}\n`;
-  }
-
+if (sessionData.knowledgeBase) {
+  prompt += "Organizational knowledge:\n" + sessionData.knowledgeBase + "\n";
+}
   prompt += `
 Use the organizational context as real context for this user's situation.
 Tailor your response to the interaction between the user's communication profile
