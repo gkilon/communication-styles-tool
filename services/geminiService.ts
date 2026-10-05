@@ -122,15 +122,53 @@ async function callGeminiApi(action: string, payload: any): Promise<any> {
   }
 
   if (!response.ok) {
-    try {
-      const err = await response.json();
-      throw new Error(err.error || `Request failed with status ${response.status}`);
-    } catch (e) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
+    // Read the server's own message (it is written for the user), then throw outside the
+    // try so it isn't swallowed by the generic fallback.
+    let errBody: any = null;
+    try { errBody = await response.json(); } catch (e) {}
+    const failure: any = new Error(errBody?.error || `Request failed with status ${response.status}`);
+    failure.status = response.status;
+    // The account has no valid access code yet — the UI can ask for one and retry.
+    if (response.status === 403 && errBody?.needsCode) failure.needsCode = true;
+    throw failure;
   }
 
   return response;
+}
+
+/**
+ * Redeems an access code for the signed-in account (used when the account entered
+ * without one, e.g. through a team link). On success the AI works right away.
+ */
+export async function redeemAccessCode(rawCode: string): Promise<{ ok: boolean; error?: string }> {
+  const user = auth?.currentUser;
+  if (!user) return { ok: false, error: 'נדרשת התחברות' };
+  const code = (rawCode || '').trim();
+  if (!code) return { ok: false, error: 'נא להזין קוד' };
+  try {
+    const token = await user.getIdToken();
+    const res = await fetch('/api/redeem-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ code })
+    });
+    let body: any = null;
+    try { body = await res.json(); } catch (e) {}
+    if (!res.ok) return { ok: false, error: body?.error || 'הקוד לא התקבל' };
+    await user.getIdToken(true); // refresh so the new flag is inside the token
+    redeemCheckedForUid = user.uid;
+    try {
+      const raw = localStorage.getItem('comm_style_session');
+      if (raw) {
+        const s = JSON.parse(raw);
+        s.accessCode = code.toUpperCase();
+        localStorage.setItem('comm_style_session', JSON.stringify(s));
+      }
+    } catch (e) {}
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: 'שגיאת רשת, נסה שוב' };
+  }
 }
 
 
@@ -163,7 +201,7 @@ async function callGeminiApiStream(action: string, payload: any, onChunk: (chunk
     return await attempt();
   } catch (e: any) {
     const isRateLimit = e.message?.includes('429') || e.message?.includes('rateLimited') || e.message?.includes('הגעת למגבלת');
-    if (isRateLimit) throw e;
+    if (isRateLimit || e.needsCode || e.status === 429) throw e;
     // One quiet retry after a short pause for transient errors (network blips, occasional model-side timeouts/500s)
     await new Promise(res => setTimeout(res, 1200));
     return attempt();

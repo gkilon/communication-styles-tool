@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Scores, BackgroundData } from '../types';
-import { getAiCoachAdviceStream, transcribeAudio } from '../services/geminiService';
+import { getAiCoachAdviceStream, transcribeAudio, redeemAccessCode } from '../services/geminiService';
 import { SparklesIcon } from './icons/Icons';
 import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -51,6 +51,10 @@ const HEADER_TEXT = {
     subtitle: 'יועץ AI שמכיר אותך, ומייעץ בשיטה של Kilon.',
     placeholder: 'כתוב או דבר: שאל מה שבא לך, או ספר על הדילמה שלך...',
     freeAsk: '✍️ שאל מה שבא לך, או ספר על דילמה שלך',
+    needsCodeText: 'כדי להשתמש ביועץ צריך קוד גישה. הזן את הקוד שקיבלת ושלח שוב את ההודעה.',
+    needsCodeButton: 'הפעל',
+    codePlaceholder: 'קוד גישה',
+    codeAccepted: 'הקוד התקבל. אפשר לשלוח את ההודעה.',
     archive: 'שיחות קודמות',
     newChat: 'שיחה חדשה',
     noChats: 'עדיין אין שיחות שמורות. כל שיחה נשמרת אוטומטית.',
@@ -62,6 +66,10 @@ const HEADER_TEXT = {
     subtitle: 'An AI advisor who knows you and advises the Kilon way.',
     placeholder: 'Type or speak: ask anything, or tell me about your dilemma...',
     freeAsk: '✍️ Ask anything, or share a dilemma of your own',
+    needsCodeText: 'An access code is needed to use the advisor. Enter the code you received, then send your message again.',
+    needsCodeButton: 'Activate',
+    codePlaceholder: 'Access code',
+    codeAccepted: 'Code accepted. You can send your message now.',
     archive: 'Past conversations',
     newChat: 'New conversation',
     noChats: 'No saved conversations yet. Every conversation is saved automatically.',
@@ -117,6 +125,13 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [showArchive, setShowArchive] = useState(false);
+
+  // The account has no valid access code yet (e.g. it joined through a team link): ask for one.
+  const [needsCode, setNeedsCode] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeAccepted, setCodeAccepted] = useState(false);
 
   // Voice input (same approach as the dialogue simulator): browser speech recognition when
   // available, otherwise record audio and transcribe it through the AI service.
@@ -258,6 +273,14 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
       if (profileChange) archive.clearProfileChange();
     } catch (error: any) {
       console.error("AI Coach interaction failed:", error);
+      if (error?.needsCode) {
+        // Take the failed turn back out of the conversation, keep the text for a retry.
+        setConversation(prev => prev.slice(0, -2));
+        setUserInput(text);
+        setCodeAccepted(false);
+        setNeedsCode(true);
+        return;
+      }
       updateLastAi(m => m.text ? m : {
         ...m,
         isError: true,
@@ -331,6 +354,46 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
             ))
           )}
         </div>
+      )}
+
+      {needsCode && (
+        <div className={`mb-3 bg-amber-900/20 border border-amber-600/40 rounded-2xl p-4 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
+          <p className="text-sm text-amber-200 mb-3">{ht.needsCodeText}</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={codeInput}
+              onChange={(e) => setCodeInput(e.target.value)}
+              placeholder={ht.codePlaceholder}
+              dir="ltr"
+              className="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded-xl py-2.5 px-3 text-white text-center font-mono uppercase focus:ring-2 focus:ring-amber-500"
+            />
+            <button
+              onClick={async () => {
+                if (!codeInput.trim() || codeBusy) return;
+                setCodeBusy(true);
+                setCodeError('');
+                const r = await redeemAccessCode(codeInput);
+                setCodeBusy(false);
+                if (r.ok) {
+                  setNeedsCode(false);
+                  setCodeInput('');
+                  setCodeAccepted(true);
+                } else {
+                  setCodeError(r.error || '');
+                }
+              }}
+              disabled={codeBusy || !codeInput.trim()}
+              className="bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-bold px-4 rounded-xl transition-all"
+            >
+              {codeBusy ? '...' : ht.needsCodeButton}
+            </button>
+          </div>
+          {codeError && <p className="text-xs text-red-400 mt-2">⚠️ {codeError}</p>}
+        </div>
+      )}
+      {codeAccepted && !needsCode && (
+        <p className={`text-xs text-green-400 mb-3 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>✅ {ht.codeAccepted}</p>
       )}
 
       {archive.saveFailed && (

@@ -30,6 +30,9 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
   const [workshopError, setWorkshopError] = useState('');
   const [workshopLoading, setWorkshopLoading] = useState(false);
   const [lockedTeamName, setLockedTeamName] = useState<string | null>(null);
+  // A bare ?team= link names the team but carries no code — the person must still enter
+  // the access code (without it the account can't use the AI).
+  const [linkNeedsCode, setLinkNeedsCode] = useState(false);
 
   // Admin Mode State
   const [adminEmail, setAdminEmail] = useState('');
@@ -48,7 +51,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
     if (teamParam) {
       setActiveTab('workshop');
       setLockedTeamName(teamParam);
-      setTeamCodeOrName(teamParam);
+      setLinkNeedsCode(true);
     } else if (codeParam) {
       // Auto validate the code
       setPersonalLoading(true);
@@ -122,6 +125,11 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
       return;
     }
 
+    if (linkNeedsCode && !teamCodeOrName.trim()) {
+      setWorkshopError(t('password', 'workshopCodeMissing'));
+      return;
+    }
+
     const teamToUse = lockedTeamName || teamCodeOrName.trim();
     if (!teamToUse) {
       setWorkshopError(t('password', 'workshopCodeMissing'));
@@ -142,7 +150,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
       if (val.valid) {
         validated = val;
         resolvedTeam = val.teamName || teamToUse;
-      } else if (!lockedTeamName) {
+      } else {
         setWorkshopLoading(false);
         setWorkshopError(val.message || t('password', 'invalidWorkshopCode'));
         return;
@@ -378,7 +386,7 @@ export const PasswordScreen: React.FC<PasswordScreenProps> = ({
               />
             </div>
 
-            {!lockedTeamName && (
+            {(!lockedTeamName || linkNeedsCode) && (
               <div>
                 <label className="block text-gray-400 text-xs mb-1.5 font-semibold mr-1">{t('password', 'workshopCodeLabel')}</label>
                 <input
