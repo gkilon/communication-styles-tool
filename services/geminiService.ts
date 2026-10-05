@@ -1,4 +1,3 @@
-```ts
 import { Scores, UserProfile, BackgroundData } from '../types';
 import { auth } from '../firebaseConfig';
 
@@ -9,160 +8,104 @@ export interface SimulationMessage {
 
 /**
  * Re-reads the organization context (company, culture, knowledge base) for the access
- * code saved in the session and stores it back in the session.
- *
- * Important:
- * When the user entered through a team URL + global access code, we also send
- * the teamName so the server can resolve the correct organization/team context.
- *
+ * code saved in the session and stores it back in the session. A session that entered
+ * without the full context (e.g. through a team link, or a code redeemed later inside the
+ * advisor) would otherwise never carry it, and the AI would answer generically. It also
+ * picks up later edits the admin made to the organization's context.
  * Runs once per page load unless forced.
  */
 let sessionContextRefreshed = false;
-
 export async function refreshSessionContext(force = false): Promise<void> {
   if (sessionContextRefreshed && !force) return;
-
   try {
     const raw = localStorage.getItem('comm_style_session');
     if (!raw) return;
-
     const session = JSON.parse(raw);
     const code = session?.accessCode;
-
     if (!code) return;
-
     const res = await fetch('/api/validate-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code,
-        teamName: session?.teamName || undefined
-      })
+      body: JSON.stringify({ code })
     });
-
     if (!res.ok) return;
-
     const v = await res.json();
-
     if (!v?.valid) return;
-
     const updated = { ...session };
+    if (v.companyName !== undefined) updated.companyName = v.companyName;
+    if (v.logoUrl !== undefined) updated.logoUrl = v.logoUrl;
+    if (v.orgContext !== undefined) updated.orgContext = v.orgContext;
+    if (v.knowledgeBase !== undefined) updated.knowledgeBase = v.knowledgeBase;
+    if (v.teamName && !updated.teamName) updated.teamName = v.teamName;
+    localStorage.setItem('comm_style_session', JSON.stringify(updated));
 
-    if (v.companyName !== undefined) {
-      updated.companyName = v.companyName;
-    }
+sessionContextRefreshed = true;
 
-    if (v.logoUrl !== undefined) {
-      updated.logoUrl = v.logoUrl;
-    }
-
-    if (v.orgContext !== undefined) {
-      updated.orgContext = v.orgContext;
-    }
-
-    if (v.knowledgeBase !== undefined) {
-      updated.knowledgeBase = v.knowledgeBase;
-    }
-
-    if (v.teamName) {
-      updated.teamName = v.teamName;
-    }
-
-    localStorage.setItem(
-      'comm_style_session',
-      JSON.stringify(updated)
-    );
-
-    sessionContextRefreshed = true;
-  } catch (e) {
+} catch (e) {
     console.warn('Could not refresh organization context:', e);
   }
 }
 
 /**
- * Helper function to extract and format the organizational context
+ * Helper function to extract and format the organizational context 
  * from the local storage session explicitly for the AI.
  */
 function buildOrgContext(): string {
   let sessionData: any = null;
-
   try {
     const rawSession = localStorage.getItem('comm_style_session');
-
-    if (rawSession) {
-      sessionData = JSON.parse(rawSession);
-    }
+    if (rawSession) sessionData = JSON.parse(rawSession);
   } catch (e) {}
 
   if (!sessionData) return '';
+  if (!sessionData.companyName && !sessionData.orgContext && !sessionData.knowledgeBase) return '';
 
-  if (
-    !sessionData.companyName &&
-    !sessionData.orgContext &&
-    !sessionData.knowledgeBase
-  ) {
-    return '';
-  }
-
-  let prompt = "\n[ORGANIZATIONAL CONTEXT]\n";
-
+  let prompt = `\n[ORGANIZATIONAL CONTEXT]\n`;
   if (sessionData.companyName) {
-  prompt += "Company: " + sessionData.companyName + "\n";
-}
-
-if (sessionData.orgContext) {
-  prompt += "Organizational culture/context:\n" + sessionData.orgContext + "\n";
-}
-
-if (sessionData.knowledgeBase) {
-  prompt += "Organizational knowledge:\n" + sessionData.knowledgeBase + "\n";
-}
- 
-
+    prompt += `Company: ${sessionData.companyName}\n`;
+  }
+  if (sessionData.orgContext) {
+    prompt += `Organizational culture/context:\n${sessionData.orgContext}\n`;
+  }
+  if (sessionData.knowledgeBase) {
+    prompt += `Organizational knowledge:\n${sessionData.knowledgeBase}\n`;
+  }
+  
+  prompt += `\nUse the organizational context as real context for this user's situation. Tailor your response to the interaction between the user's communication profile and the organizational environment. Do not ignore, generalize, or replace the organizational context with generic advice.\n`;
+  
   return prompt;
 }
 
 /**
- * Makes sure the signed-in account carries the server-side "code redeemed" flag.
+ * Shared helper to call our Netlify Function backend.
  */
+// Makes sure the signed-in account carries the server-side "code redeemed" flag
+// (set by /api/redeem-code). Accounts get it automatically the first time the AI is
+// used, from the access code stored in the session. Admins have no code and skip this.
 let redeemCheckedForUid: string | null = null;
-
 async function ensureAccessRedeemed(): Promise<void> {
   const user = auth?.currentUser;
-
   if (!user || redeemCheckedForUid === user.uid) return;
-
   try {
     const tokenResult = await user.getIdTokenResult();
-
     if ((tokenResult.claims as any).codeOk === true) {
       redeemCheckedForUid = user.uid;
       return;
     }
-
     let code: string | undefined;
-
     try {
       const rawSession = localStorage.getItem('comm_style_session');
-
-      if (rawSession) {
-        code = JSON.parse(rawSession)?.accessCode;
-      }
+      if (rawSession) code = JSON.parse(rawSession)?.accessCode;
     } catch (e) {}
-
-    if (!code) return;
+    if (!code) return; // e.g. an admin — the server allows admins without a code
 
     const res = await fetch('/api/redeem-code', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${tokenResult.token}`
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenResult.token}` },
       body: JSON.stringify({ code })
     });
-
     if (res.ok) {
-      await user.getIdToken(true);
+      await user.getIdToken(true); // refresh so the new flag is inside the token
       redeemCheckedForUid = user.uid;
     }
   } catch (e) {
@@ -170,20 +113,14 @@ async function ensureAccessRedeemed(): Promise<void> {
   }
 }
 
-async function callGeminiApi(
-  action: string,
-  payload: any
-): Promise<Response> {
+async function callGeminiApi(action: string, payload: any): Promise<any> {
   await ensureAccessRedeemed();
+  const currentUserId = auth?.currentUser?.uid;
 
   let sessionData: any = null;
-
   try {
     const rawSession = localStorage.getItem('comm_style_session');
-
-    if (rawSession) {
-      sessionData = JSON.parse(rawSession);
-    }
+    if (rawSession) sessionData = JSON.parse(rawSession);
   } catch (e) {}
 
   const enrichedPayload = {
@@ -191,10 +128,10 @@ async function callGeminiApi(
     accessCode: sessionData?.accessCode || null
   };
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
-  };
-
+  // Attach a real, server-verifiable Firebase ID token — the backend uses
+  // this (not anything we claim in the payload) to identify who's calling,
+  // so quota can't be dodged by just sending a different self-reported id.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (auth?.currentUser) {
     try {
       const idToken = await auth.currentUser.getIdToken();
@@ -205,56 +142,34 @@ async function callGeminiApi(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    45000
-  );
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s — Gemini occasionally slow
 
   let response: Response;
-
   try {
     response = await fetch('/api/gemini', {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        action,
-        payload: enrichedPayload
-      }),
+      body: JSON.stringify({ action, payload: enrichedPayload }),
       signal: controller.signal
     });
   } catch (e: any) {
     if (e.name === 'AbortError') {
-      throw new Error(
-        'הבקשה ל-AI ארכה יותר מדי זמן (מעל 45 שניות) ובוטלה. זה קורה לפעמים עם המודל - נסה שוב.'
-      );
+      throw new Error('הבקשה ל-AI ארכה יותר מדי זמן (מעל 45 שניות) ובוטלה. זה קורה לפעמים עם המודל - נסה שוב.');
     }
-
     throw e;
   } finally {
     clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
+    // Read the server's own message (it is written for the user), then throw outside the
+    // try so it isn't swallowed by the generic fallback.
     let errBody: any = null;
-
-    try {
-      errBody = await response.json();
-    } catch (e) {}
-
-    const failure: any = new Error(
-      errBody?.error ||
-      `Request failed with status ${response.status}`
-    );
-
+    try { errBody = await response.json(); } catch (e) {}
+    const failure: any = new Error(errBody?.error || `Request failed with status ${response.status}`);
     failure.status = response.status;
-
-    if (
-      response.status === 403 &&
-      errBody?.needsCode
-    ) {
-      failure.needsCode = true;
-    }
-
+    // The account has no valid access code yet — the UI can ask for one and retry.
+    if (response.status === 403 && errBody?.needsCode) failure.needsCode = true;
     throw failure;
   }
 
@@ -262,115 +177,60 @@ async function callGeminiApi(
 }
 
 /**
- * Redeems an access code for the signed-in account.
+ * Redeems an access code for the signed-in account (used when the account entered
+ * without one, e.g. through a team link). On success the AI works right away.
  */
-export async function redeemAccessCode(
-  rawCode: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function redeemAccessCode(rawCode: string): Promise<{ ok: boolean; error?: string }> {
   const user = auth?.currentUser;
-
-  if (!user) {
-    return {
-      ok: false,
-      error: 'נדרשת התחברות'
-    };
-  }
-
+  if (!user) return { ok: false, error: 'נדרשת התחברות' };
   const code = (rawCode || '').trim();
-
-  if (!code) {
-    return {
-      ok: false,
-      error: 'נא להזין קוד'
-    };
-  }
-
+  if (!code) return { ok: false, error: 'נא להזין קוד' };
   try {
     const token = await user.getIdToken();
-
     const res = await fetch('/api/redeem-code', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ code })
     });
-
     let body: any = null;
-
-    try {
-      body = await res.json();
-    } catch (e) {}
-
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: body?.error || 'הקוד לא התקבל'
-      };
-    }
-
-    await user.getIdToken(true);
+    try { body = await res.json(); } catch (e) {}
+    if (!res.ok) return { ok: false, error: body?.error || 'הקוד לא התקבל' };
+    await user.getIdToken(true); // refresh so the new flag is inside the token
     redeemCheckedForUid = user.uid;
-
     try {
       const raw = localStorage.getItem('comm_style_session');
-
       if (raw) {
         const s = JSON.parse(raw);
-
         s.accessCode = code.toUpperCase();
-
-        localStorage.setItem(
-          'comm_style_session',
-          JSON.stringify(s)
-        );
+        localStorage.setItem('comm_style_session', JSON.stringify(s));
       }
     } catch (e) {}
-
-    await refreshSessionContext(true);
-
+    await refreshSessionContext(true); // bring in the organization context for this code
     return { ok: true };
   } catch (e) {
-    return {
-      ok: false,
-      error: 'שגיאת רשת, נסה שוב'
-    };
+    return { ok: false, error: 'שגיאת רשת, נסה שוב' };
   }
 }
 
+
 /**
- * Shared helper for streaming responses.
+ * Shared helper for streaming responses from our Netlify Function.
+ * Retries once on transient failure (occasional slowness/timeout issues) 
+ * — but not on rate-limit (429) errors, which already carry their own retry-after messaging.
  */
-async function callGeminiApiStream(
-  action: string,
-  payload: any,
-  onChunk: (chunk: string) => void
-): Promise<string> {
+async function callGeminiApiStream(action: string, payload: any, onChunk: (chunk: string) => void): Promise<string> {
   const attempt = async (): Promise<string> => {
-    const response = await callGeminiApi(
-      action + 'Stream',
-      payload
-    );
-
+    const response = await callGeminiApi(action + 'Stream', payload);
     const reader = response.body?.getReader();
+    if (!reader) throw new Error('Failed to get stream reader');
 
-    if (!reader) {
-      throw new Error('Failed to get stream reader');
-    }
-
-    let fullText = '';
+    let fullText = "";
     const decoder = new TextDecoder();
 
     while (true) {
       const { done, value } = await reader.read();
-
       if (done) break;
-
-      const chunk = decoder.decode(value, {
-        stream: true
-      });
-
+      const chunk = decoder.decode(value, { stream: true });
       fullText += chunk;
       onChunk(fullText);
     }
@@ -381,23 +241,10 @@ async function callGeminiApiStream(
   try {
     return await attempt();
   } catch (e: any) {
-    const isRateLimit =
-      e.message?.includes('429') ||
-      e.message?.includes('rateLimited') ||
-      e.message?.includes('הגעת למגבלת');
-
-    if (
-      isRateLimit ||
-      e.needsCode ||
-      e.status === 429
-    ) {
-      throw e;
-    }
-
-    await new Promise(res =>
-      setTimeout(res, 1200)
-    );
-
+    const isRateLimit = e.message?.includes('429') || e.message?.includes('rateLimited') || e.message?.includes('הגעת למגבלת');
+    if (isRateLimit || e.needsCode || e.status === 429) throw e;
+    // One quiet retry after a short pause for transient errors (network blips, occasional model-side timeouts/500s)
+    await new Promise(res => setTimeout(res, 1200));
     return attempt();
   }
 }
@@ -412,13 +259,7 @@ function getColorsFromScores(scores: Scores) {
   const y = sA + sD;
   const g = sB + sD;
   const b = sB + sC;
-
-  return [
-    { n: 'אדום', v: r },
-    { n: 'צהוב', v: y },
-    { n: 'ירוק', v: g },
-    { n: 'כחול', v: b }
-  ].sort((m, n) => n.v - m.v);
+  return [{ n: 'אדום', v: r }, { n: 'צהוב', v: y }, { n: 'ירוק', v: g }, { n: 'כחול', v: b }].sort((m, n) => n.v - m.v);
 }
 
 /**
@@ -434,7 +275,6 @@ function buildColorProfile(scores: Scores): string {
   const y = sA + sD;
   const g = sB + sD;
   const b = sB + sC;
-
   const total = r + y + g + b;
 
   const colors = [
@@ -446,504 +286,276 @@ function buildColorProfile(scores: Scores): string {
 
   const dominant = colors[0];
   const secondary = colors[1];
-
   const gap = dominant.v - secondary.v;
 
-  const dominanceDesc =
-    gap > 8
-      ? `דומיננטיות חזקה מאוד של ${dominant.n} (פער של ${gap} נקודות מהצבע הבא)`
-      : gap > 4
-        ? `דומיננטיות ברורה של ${dominant.n}`
-        : `פרופיל מאוזן יחסית בין ${dominant.n} ל-${secondary.n}`;
+  const dominanceDesc = gap > 8
+    ? `דומיננטיות חזקה מאוד של ${dominant.n} (פער של ${gap} נקודות מהצבע הבא)`
+    : gap > 4
+    ? `דומיננטיות ברורה של ${dominant.n}`
+    : `פרופיל מאוזן יחסית בין ${dominant.n} ל-${secondary.n}`;
 
   return `[USER COMMUNICATION PROFILE]
-
 פרופיל צבעים מלא של המשתמש:
-
-- אדום (הנחוש): ${r} נקודות (${Math.round(r / total * 100)}%)
-- צהוב (המשפיע): ${y} נקודות (${Math.round(y / total * 100)}%)
-- ירוק (התומך): ${g} נקודות (${Math.round(g / total * 100)}%)
-- כחול (המדויק): ${b} נקודות (${Math.round(b / total * 100)}%)
-
+- אדום (הנחוש): ${r} נקודות (${Math.round(r/total*100)}%)
+- צהוב (המשפיע): ${y} נקודות (${Math.round(y/total*100)}%)
+- ירוק (התומך): ${g} נקודות (${Math.round(g/total*100)}%)
+- כחול (המדויק): ${b} נקודות (${Math.round(b/total*100)}%)
 צבע דומיננטי: ${dominant.n} | צבע משני: ${secondary.n}
-
 ${dominanceDesc}`;
 }
 
 const COLOR_TRAITS = `מאפייני הצבעים במותג Kilon Consulting:
-
 - אדום (הנחוש): ממוקד תוצאות, ישיר, מהיר, החלטי, חסר סבלנות, עלול להיתפס כשתלטן או אגרסיבי, קושי בהקשבה לדעות שונות.
-
 - צהוב (המשפיע): כריזמטי, אופטימי, יצירתי, חברותי, מתקשה עם פרטים וסדר, נטייה להימנע מקונפליקטים, זקוק להכרה.
-
 - ירוק (התומך): אמפתי, מקשיב, סבלני, הרמוני, אמין, מתנגד לשינויים מהירים, נמנע מעימותים, נוטה לוותר על עצמו.
-
 - כחול (המדויק): אנליטי, יסודי, מבוסס נתונים ופרטים, שאיפה לשלמות, ביקורתי, עלול להיתפס כמרוחק או קר.`;
 
-const RESPONSE_STYLE_GUIDELINES = `הנחיות סגנון קריטיות לתשובה שלך:
-
+const RESPONSE_STYLE_GUIDELINES = `הנחיות סגנון קריטיות לתשובה שלך למשתמש (חלות על כל מה שאתה כותב, לא רק על עיבוד הנתונים הפנימי):
 - הפרופיל המספרי והאחוזים למעלה הם קונטקסט פנימי בלבד עבורך — אסור לך לצטט אחוזים או ניקוד גולמי בתשובה עצמה. תרגם דומיננטיות למילים ("נטייה חזקה וברורה", "פרופיל מאוזן יחסית") ולא למספרים.
+- אל תחזור שוב ושוב על שמות הצבעים כמסגרת לכל משפט ("בתור אדום...", "מכיוון שאתה כחול..."). דבר על ההתנהגות והתכונה עצמה ("הנטייה הטבעית שלך להיות ישיר ותכליתי") — שם הצבע יכול להופיע לכל היותר פעם אחת, בקצרה, כהערת אגב.
+- לעולם אל תייעץ למשתמש "להפוך" לצבע אחר או להעמיד פנים שהוא סגנון שאינו שלו (למשל לא "תתנהג כמו ירוק"). המטרה היא מודעות עצמית ושימוש בחוזקה של הסגנון שלו-עצמו כדי לסגור את הפער — למשל אם הוא כחול ומתקשה בהקשבה, ההמלצה היא לבנות שגרת עבודה מובנית ומתוכננת (בדיוק בסגנון הכחול המדויק) שמקצה זמן ומרחב מכוון להקשבה, לא "לזייף" חום ירוק שאינו טבעי לו.
+- גישה לא-שיפוטית לחלוטין: אין "טוב" ואין "רע" בפרופיל. כל תכונה היא מאפיין אישיות — חלקן ניתנות למינוף, חלקן לעידון, חלקן לשיפור — אבל לעולם לא "פגם". הצג כל תכונה באופן ניטרלי ומקצועי: "נטייה ל..." / "תבנית שכדאי להיות מודע אליה" / "הזדמנות לעדן את...".
+- אסור להשתמש במילים יומרניות או מחמיאות מאולצות כמו: "שילוב נדיר", "עמנה נדירה", "מיוחד במינו", "בלתי שגרתי", "יוצא דופן", "נדיר ביותר", "מרשים במיוחד". הפרופיל של כל אדם הוא הפרופיל שלו — לא "נדיר" ולא "שגרתי". פשוט מה שהוא.
+- טון מקצועי ובגובה העיניים: דבר אל המשתמש כשווה לשווה — כמאמן שמכיר את המשתמש ומדבר אתו בגובה העיניים, לא כמי שמעניק ציון או פסיקה. הימנע מפתיחות מרחיקות ("נוכח ניתוח הנתונים...") ומסיומות גנריות ("הצלחה בדרכך!").`;
 
-- אל תחזור שוב ושוב על שמות הצבעים כמסגרת לכל משפט. דבר על ההתנהגות והתכונה עצמה. שם הצבע יכול להופיע לכל היותר פעם אחת, בקצרה, כהערת אגב.
-
-- לעולם אל תייעץ למשתמש "להפוך" לצבע אחר או להעמיד פנים שהוא סגנון שאינו שלו. המטרה היא מודעות עצמית ושימוש בחוזקה של הסגנון שלו-עצמו כדי לסגור את הפער.
-
-- גישה לא-שיפוטית לחלוטין: אין "טוב" ואין "רע" בפרופיל. כל תכונה היא מאפיין אישיות — חלקן ניתנות למינוף, חלקן לעידון, חלקן לשיפור — אבל לעולם לא "פגם".
-
-- אסור להשתמש במילים יומרניות או מחמיאות מאולצות כמו: "שילוב נדיר", "עמנה נדירה", "מיוחד במינו", "בלתי שגרתי", "יוצא דופן", "נדיר ביותר", "מרשים במיוחד".
-
-- טון מקצועי ובגובה העיניים: דבר אל המשתמש כשווה לשווה — כמאמן שמכיר את המשתמש ומדבר אתו בגובה העיניים. הימנע מפתיחות מרחיקות ומסיומות גנריות.`;
-
-const getLangInstruction = (
-  lang: 'he' | 'en' = 'he'
-) =>
+const getLangInstruction = (lang: 'he' | 'en' = 'he') =>
   lang === 'en'
     ? '\n\nCRITICAL: Respond ENTIRELY in fluent, professional English — regardless of the language of any context provided above. Do not mix in Hebrew.'
     : '';
 
 const SAFETY_SETTINGS = [
-  {
-    category: 'HARM_CATEGORY_HARASSMENT',
-    threshold: 'BLOCK_NONE'
-  },
-  {
-    category: 'HARM_CATEGORY_HATE_SPEECH',
-    threshold: 'BLOCK_NONE'
-  },
-  {
-    category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-    threshold: 'BLOCK_NONE'
-  },
-  {
-    category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-    threshold: 'BLOCK_NONE'
-  }
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
 ];
 
-function buildBackgroundContext(
-  bg?: BackgroundData | null
-): string {
+function buildBackgroundContext(bg?: BackgroundData | null): string {
   if (!bg) return '';
-
   const parts: string[] = [];
-
   if (bg.gender === 'female') {
-    parts.push(
-      'המשתמשת היא אישה — השתמש בלשון נקבה בכל פניה אליה ("את", "יכולה", "ביצעת", "תוכלי" וכו\').'
-    );
+    parts.push('המשתמש/ת היא אישה — השתמש בלשון נקבה בכל פניה אליה ("את", "יכולה", "ביצעת", "תוכלי" וכו\').');
   } else if (bg.gender === 'male') {
-    parts.push(
-      'המשתמש הוא גבר — השתמש בלשון זכר בכל פניה אליו ("אתה", "יכול", "ביצעת", "תוכל" וכו\').'
-    );
+    parts.push('המשתמש הוא גבר — השתמש בלשון זכר בכל פניה אליו ("אתה", "יכול", "ביצעת", "תוכל" וכו\').');
   }
-
   if (bg.isManager === 'yes') {
-    parts.push(
-      'המשתמש/ת הוא/היא מנהל/ת — תן התייחסות למיומנויות ניהול, ניהול שיחות עם עובדים, מתן משוב, ומנהיגות.'
-    );
+    parts.push('המשתמש/ת הוא/היא מנהל/ת — תן התייחסות למיומנויות ניהול, ניהול שיחות עם עובדים, מתן משוב, ומנהיגות.');
   } else if (bg.isManager === 'no') {
-    parts.push(
-      'המשתמש/ת אינו/ה מנהל/ת — התמקד במיומנויות תקשורת בין עמיתים, מול מנהל ומול גורמים חיצוניים.'
-    );
+    parts.push('המשתמש/ת אינו/ה מנהל/ת — התמקד במיומנויות תקשורת בין עמיתים, מול מנהל ומול גורמים חיצוניים.');
   }
-
   if (bg.goal) {
     const goalLabels: Record<string, string> = {
       self_learn: 'ללמוד על עצמי ועל סגנון התקשורת שלי',
       management: 'לקבל כלים מעשיים לניהול, מנהיגות והנעה',
       teamwork: 'לשפר את עבודת הצוות והממשקים הבינאישיים',
-      influence: 'להבין כיצד להשפיע טוב יותר על אחרים'
+      influence: 'להבין כיצד להשפיע טוב יותר על אחרים',
     };
-
-    const goalText =
-      goalLabels[bg.goal] || bg.goal;
-
-    parts.push(
-      `מטרת המשתמש/ת מהשאלון: "${goalText}" — ודא שהאימון מכוון למטרה זו.`
-    );
+    const goalText = goalLabels[bg.goal] || bg.goal;
+    parts.push(`מטרת המשתמש/ת מהשאלון: "${goalText}" — ודא שהאימון מכוון למטרה זו.`);
   }
-
-  return parts.length > 0
-    ? `\n[USER BACKGROUND]\nמידע רקע על המשתמש/ת (השתמש בו לכל אורך השיחה):\n${parts.join('\n')}`
-    : '';
+  return parts.length > 0 ? `\n[USER BACKGROUND]\nמידע רקע על המשתמש/ת (השתמש בו לכל אורך השיחה):\n${parts.join('\n')}` : '';
 }
 
 /**
- * Generates ONE flowing addendum paragraph on opportunities/pitfalls
- * relative to the organization's actual context.
- *
- * Important:
- * If a company name exists, the model is explicitly required to mention it.
+ * Generates ONE flowing addendum paragraph on opportunities/pitfalls relative to the org's
+ * actual context (injected from the session by callGeminiApi) — meant to be appended directly
+ * onto the deterministic "general analysis" paragraph, not shown as its own section.
  */
-export const getIntegratedInsights = async (
-  scores: Scores,
-  backgroundData: BackgroundData | null | undefined,
-  lang: 'he' | 'en' = 'he'
-): Promise<string> => {
+export const getIntegratedInsights = async (scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
   const orgContext = buildOrgContext();
 
-  let companyName = '';
-
-  try {
-    const rawSession = localStorage.getItem(
-      'comm_style_session'
-    );
-
-    if (rawSession) {
-      const sessionData = JSON.parse(rawSession);
-      companyName = String(
-        sessionData?.companyName || ''
-      ).trim();
-    }
-  } catch (e) {
-    console.warn(
-      'Could not read company name from session:',
-      e
-    );
-  }
-
-  const organizationNameInstruction = companyName
-    ? `
-שם הארגון: "${companyName}"
-
-חשוב מאוד:
-- חובה להזכיר את שם הארגון "${companyName}" לפחות פעם אחת בתשובה.
-- שלב את שם הארגון באופן טבעי בתוך משפט שמסביר את הקשר בין המשתמש לבין סביבת העבודה שלו.
-- אל תכתוב רק "בארגון" או "בחברה" כאשר אפשר לכתוב "${companyName}".
-- אל תשים את שם הארגון ככותרת או כרשימת נתונים.
-- ההתייחסות צריכה להרגיש כאילו הניתוח נכתב עבור אדם שעובד ב-${companyName}.
-`
-    : `
-לא התקבל שם ארגון. אל תמציא שם ארגון ואל תנחש אותו.
-`;
-
   const systemInstruction = `אתה יועץ תקשורת וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
-
 ${bgContext}
-
 ${orgContext}
-
-${organizationNameInstruction}
 
 ${COLOR_TRAITS}
 
-המשימה שלך:
-
-כתוב פסקה זורמת אחת (3-5 משפטים, ללא כותרות, ללא רשימות, ללא פתיח כמו "בהמשך לניתוח") שממשיכה ישירות ניתוח שכבר נכתב על הפרופיל.
-
-הפסקה צריכה להוסיף התייחסות להזדמנות ולמלכודת הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך ב-[ORGANIZATIONAL CONTEXT].
-
-זה חייב להיות ניתוח של האדם הספציפי ביחד עם הארגון הספציפי — לא טקסט גנרי שיכול להתאים לכל ארגון.
-
-הקשר הארגוני הוא חלק מהמציאות היומיומית של המשתמש:
-- חבר בין תכונות הפרופיל לבין התרבות, הקצב, האתגרים והמאפיינים של הארגון.
-- זהה גם הזדמנות וגם מלכודת אפשרית.
-- תן לפחות המלצה אחת שנובעת מהמפגש בין הפרופיל לבין ההקשר הארגוני.
-- אל תסתפק בחזרה על פרטי התרבות כפי שנמסרו לך; הסק מהם משמעות עבור האדם הזה.
-
-${companyName ? `
-דרישת שם הארגון — חובה:
-השתמש בשם "${companyName}" לפחות פעם אחת בתוך הפסקה עצמה.
-שלב אותו באופן טבעי במשפט שמסביר את הקשר בין המשתמש לבין סביבת העבודה שלו.
-` : ''}
+המשימה שלך: כתוב פסקה זורמת אחת (3-5 משפטים, ללא כותרות, ללא רשימות, ללא פתיח כמו "בהמשך לניתוח") שממשיכה ישירות ניתוח שכבר נכתב על הפרופיל, ומוסיפה לו התייחסות להזדמנות ולמלכודת הספציפיות של הפרופיל הזה ביחס להקשר הארגוני שסופק לך ב-[ORGANIZATIONAL CONTEXT] (תרבות הארגון, האתגרים והחומרים הניהוליים שצורפו) — לא ניתוח גנרי שיכול להתאים לכל ארגון. נתח את הפרופיל האישי *ביחד* עם הארגון בו הוא פועל.
 
 הפסקה צריכה להישמע כהמשך טבעי לטקסט שקדם לה, לא כמו מסמך נפרד.
 
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
-  const response = await callGeminiApi(
-    'generateContent',
-    {
-      model: 'gemini-3.8-flash',
-
-      contents:
-        lang === 'he'
-          ? 'כתוב את פסקת ההמשך על ההתאמה הארגונית. התייחס במפורש לארגון בשם שנמסר לך.'
-          : 'Write the continuation paragraph on organizational fit. Explicitly refer to the organization by the name provided to you.',
-
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        safetySettings: SAFETY_SETTINGS
-      }
+  const response = await callGeminiApi('generateContent', {
+    model: "gemini-3.8-flash",
+    contents: lang === 'he'
+      ? "כתוב את פסקת ההמשך על ההתאמה הארגונית."
+      : "Write the continuation paragraph on organizational fit.",
+    config: {
+      systemInstruction,
+      safetySettings: SAFETY_SETTINGS
     }
-  );
+  });
 
   const data = await response.json();
-
-  return data.text || '';
+  return data.text || "";
 };
 
-export const getAiCoachAdvice = async (
-  scores: Scores,
-  userInput: string,
-  backgroundData?: BackgroundData | null,
-  lang: 'he' | 'en' = 'he'
-): Promise<string> => {
+export const getAiCoachAdvice = async (scores: Scores, userInput: string, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
     const bgContext = buildBackgroundContext(backgroundData);
     const orgContext = buildOrgContext();
-
+    
     const systemInstruction = `אתה מאמן תקשורת אישי וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
-
 ${bgContext}
-
 ${orgContext}
 
 ${COLOR_TRAITS}
 
 הנחיות לאימון מותאם אישית:
-
 1. השתמש בפרופיל המספרי המלא — אל תתייחס רק לצבע הדומיננטי. אם הפער בין הצבעים קטן, ציין את האיזון הזה.
-
 2. פנה תמיד במין הנכון לפי מידע הרקע. זהו כלל מחייב.
-
 3. כשהמשתמש/ת פונה אליך בפעם הראשונה ולא שאל/ה שאלה ספציפית — שאל/י שאלת פתיחה אחת קצרה המותאמת למטרה שציין/ה. המתן לתשובה.
-
-4. השפעת הארגון: אם מופיע [ORGANIZATIONAL CONTEXT], התייחס אליו כאל סביבת העבודה האמיתית והיומיומית של המשתמש. קשר את הייעוץ שלך לאינטראקציה שבין הנטייה הטבעית של המשתמש לבין האופי והדרישות של הארגון בו הוא עובד.
-
+4. השפעת הארגון: אם מופיע [ORGANIZATIONAL CONTEXT], התייחס אליו כאל סביבת העבודה האמיתית והיומיומית של המשתמש. קשר את הייעוץ שלך לאינטראקציה שבין הנטייה הטבעית של המשתמש (הצבע שלו) לבין האופי והדרישות של הארגון בו הוא עובד.
 5. הצע דרכים פרקטיות כיצד הפרופיל הספציפי יכול להשתמש בחוזקותיו ולהתגבר על נקודות העיוורון בתוך המציאות הארגונית שלו.
-
 6. ענה בצורה ממוקדת, פרקטית, בגובה העיניים (תכלס). השתמש ב-Markdown.
 
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
-    const response = await callGeminiApi(
-      'generateContent',
-      {
-        model: 'gemini-3.8-flash',
-
-        contents: userInput,
-
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-          safetySettings: SAFETY_SETTINGS
-        }
-      }
-    );
-
-    const data = await response.json();
-
-    return data.text || 'לא התקבלה תשובה.';
-  } catch (error: any) {
-    console.error('AI Service Error:', error);
-    return `שגיאה: ${error.message}`;
-  }
-};
-
-function buildChatContents(
-  history: SimulationMessage[] | undefined,
-  userInput: string
-) {
-  const turns: {
-    role: 'user' | 'model';
-    text: string;
-  }[] = [];
-
-  const recent = (history || [])
-    .filter(m => m.text && m.text.trim())
-    .slice(-20);
-
-  for (const m of recent) {
-    turns.push({
-      role: m.sender === 'user'
-        ? 'user'
-        : 'model',
-      text: m.text
-    });
-  }
-
-  turns.push({
-    role: 'user',
-    text: userInput
-  });
-
-  while (
-    turns.length > 0 &&
-    turns[0].role !== 'user'
-  ) {
-    turns.shift();
-  }
-
-  const merged: {
-    role: 'user' | 'model';
-    text: string;
-  }[] = [];
-
-  for (const t of turns) {
-    const last = merged[merged.length - 1];
-
-    if (last && last.role === t.role) {
-      last.text += '\n\n' + t.text;
-    } else {
-      merged.push({ ...t });
-    }
-  }
-
-  return merged.map(t => ({
-    role: t.role,
-    parts: [{ text: t.text }]
-  }));
-}
-
-function buildProfileChangeNote(
-  previousScores: Scores
-): string {
-  return `
-
-שינוי בפרופיל (חשוב, מתייחס רק לתשובה הזו):
-
-המשתמש מילא את השאלון מחדש מאז ההודעות הקודמות בשיחה הזו, והתוצאות שונות. כך נראה הפרופיל הקודם שלו:
-
-${buildColorProfile(previousScores)}
-
-הפרופיל שמופיע למעלה הוא העדכני, ועליו אתה מתבסס מעכשיו.
-
-- בתחילת התשובה, במשפט אחד קצר, ציין שאתה רואה שהשאלון מולא מחדש והתוצאות שונות, ושאתה מתייחס עכשיו לפרופיל העדכני.
-
-- ענה על מה שהמשתמש ביקש כרגיל.
-
-- בסוף התשובה, במקום שאלת הסיום הרגילה, שאל בטון קליל ולא חוקר מה גרם לו למלא שוב, ואם משהו בתוצאה הקודמת לא דיבר אליו.
-
-- אם עצות קודמות בשיחה נבנו על הפרופיל הישן, ציין זאת בקצרה במקום שבו זה רלוונטי.
-
-- הזכר זאת פעם אחת בלבד. אם המשתמש עונה על השאלה, התייחס לתשובה כמידע שימושי להמשך.
-
-`;
-}
-
-export const getAiCoachAdviceStream = async (
-  scores: Scores,
-  userInput: string,
-  onChunk: (chunk: string) => void,
-  backgroundData?: BackgroundData | null,
-  lang: 'he' | 'en' = 'he',
-  history?: SimulationMessage[],
-  previousScores?: Scores | null
-): Promise<string> => {
-  const colorProfile = buildColorProfile(scores);
-  const bgContext = buildBackgroundContext(backgroundData);
-  const orgContext = buildOrgContext();
-  const profileChangeNote =
-    previousScores
-      ? buildProfileChangeNote(previousScores)
-      : '';
-
-  const systemInstruction = `אתה Kilon, יועץ אישי וארגוני מנוסה מבית Kilon Consulting. תפקידך להכיר את האדם שמולך ולעזור לו עם מה שהוא באמת מתמודד איתו, בצורה מעשית ותכליתית.
-
-${colorProfile}
-
-${bgContext}
-
-${orgContext}
-
-${COLOR_TRAITS}
-
-הפרופיל התקשורתי הוא הבסיס לכל מה שאתה אומר. אתה לוקח בחשבון את התכונות שנגזרות ממנו, גם בשאלות וגם בתשובות, ולכן כל תשובה צריכה להיות מותאמת לאדם הזה בדיוק ולא לכל אדם אחר.
-
-ההקשר הארגוני משפיע באותה מידה. אם הפער בין הצבעים קטן, התייחס לאיזון הזה.
-
-אתה מדבר בתכונות ובהתנהגויות, לא בצבעים. שם הצבע יכול להופיע מדי פעם, בקצרה, כהערת אגב, ולא כמסגרת לכל משפט.
-
-איך אתה עובד:
-
-1. שאלה כללית על עצמו: עונה ישר, בלי שאלות מקדימות.
-
-2. מצב אישי או דילמה: שואל שתיים-שלוש שאלות מקדימות ואז עונה. זה לא קשיח: לפעמים מספיקה שאלה אחת, ולפעמים אפשר לענות מיד. שלוש שאלות הן תקרה, לא חובה.
-
-3. הקו המארגן שלך, בגרסה קלה ולא כשלבים נוקשים: הפער בין המצב היום למצב הרצוי, כמה אנרגיה יש לשינוי הזה ומה מעכב אותו, כמה מחויבות, איזו תמיכה צריך, ניסוח מטרה במשפט אחד, תוכנית פעולה, מעקב.
-
-4. שיקוף רק אחרי אמירה משמעותית של המשתמש, ומשאיר לו מקום להגיב.
-
-5. כל תשובה מגיעה עם צעד מעשי אחד לפחות, מותאם אליו.
-
-6. בסוף כל תשובה שואל מה מתחבר אליו יותר ומה פחות, ואם הוא רוצה להרחיב על משהו מזה.
-
-7. פנייה ראשונה בלי שאלה או דילמה: שאל שאלת פתיחה אחת קצרה שקשורה למטרה שציין.
-
-8. פנה במין הנכון לפי מידע הרקע.
-
-אורך ופורמט:
-
-- תשובה רגילה: עד כ-120 מילים, ולעולם לא יותר מ-170.
-- הודעה עם שאלות מקדימות: עד 3 משפטים קצרים.
-- התחל ישר לעניין.
-- כשיש שתי נקודות או יותר, כתוב אותן כרשימת בולטים.
-- עד 4 בולטים.
-- שפה שיחתית, פשוטה וישירה.
-- אם יש הרבה מה לומר, תן את החשוב ביותר והצע להרחיב.
-
-זה ייעוץ וליווי ארגוני, לא טיפול. אל תאבחן. אם עולה מצוקה נפשית אמיתית, הכר בזה בחום והצע לפנות לאיש מקצוע.
-
-${profileChangeNote}${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
-
-  return callGeminiApiStream(
-    'generateContent',
-    {
-      model: 'gemini-3.8-flash',
-
-      contents: buildChatContents(
-        history,
-        userInput
-      ),
-
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-3.8-flash",
+      contents: userInput,
       config: {
         systemInstruction,
         temperature: 0.7,
         safetySettings: SAFETY_SETTINGS
       }
-    },
-    onChunk
-  );
+    });
+
+    const data = await response.json();
+    return data.text || "לא התקבלה תשובה.";
+  } catch (error: any) {
+    console.error("AI Service Error:", error);
+    return `שגיאה: ${error.message}`;
+  }
 };
 
-export const getTeamAiAdvice = async (
-  users: UserProfile[],
-  challenge: string,
-  lang: 'he' | 'en' = 'he'
-): Promise<string> => {
+/**
+ * Turns the chat history + the new user message into the `contents` array Gemini expects.
+ * Keeps the last 20 messages, drops empty ones, makes sure it starts with a user turn,
+ * and merges consecutive turns of the same role (Gemini expects them to alternate).
+ */
+function buildChatContents(history: SimulationMessage[] | undefined, userInput: string) {
+  const turns: { role: 'user' | 'model'; text: string }[] = [];
+  const recent = (history || []).filter(m => m.text && m.text.trim()).slice(-20);
+  for (const m of recent) {
+    turns.push({ role: m.sender === 'user' ? 'user' : 'model', text: m.text });
+  }
+  turns.push({ role: 'user', text: userInput });
+
+  while (turns.length > 0 && turns[0].role !== 'user') turns.shift();
+
+  const merged: { role: 'user' | 'model'; text: string }[] = [];
+  for (const t of turns) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === t.role) last.text += '\n\n' + t.text;
+    else merged.push({ ...t });
+  }
+  return merged.map(t => ({ role: t.role, parts: [{ text: t.text }] }));
+}
+
+/**
+ * "Kilon" — the single blended personal advisor. One advisor, one conversation:
+ * practical and personal, built on the user's profile (traits, not colors), and led by
+ * the development-opportunity model (gap -> energy -> commitment -> support -> goal ->
+ * action plan -> follow-up) in a light, flexible way. Needs the chat history so it knows
+ * what was already asked and answered.
+ */
+/**
+ * One-time note for the advisor when the user retook the questionnaire and the results are
+ * different from the profile this conversation started with.
+ */
+function buildProfileChangeNote(previousScores: Scores): string {
+  return `
+
+שינוי בפרופיל (חשוב, מתייחס רק לתשובה הזו):
+המשתמש מילא את השאלון מחדש מאז ההודעות הקודמות בשיחה הזו, והתוצאות שונות. כך נראה הפרופיל הקודם שלו:
+${buildColorProfile(previousScores)}
+הפרופיל שמופיע למעלה הוא העדכני, ועליו אתה מתבסס מעכשיו.
+- בתחילת התשובה, במשפט אחד קצר, ציין שאתה רואה שהשאלון מולא מחדש והתוצאות שונות, ושאתה מתייחס עכשיו לפרופיל העדכני.
+- ענה על מה שהמשתמש ביקש כרגיל.
+- בסוף התשובה, במקום שאלת הסיום הרגילה, שאל בטון קליל ולא חוקר מה גרם לו למלא שוב, ואם משהו בתוצאה הקודמת לא דיבר אליו.
+- אם עצות קודמות בשיחה נבנו על הפרופיל הישן, ציין זאת בקצרה במקום שבו זה רלוונטי.
+- הזכר זאת פעם אחת בלבד. אם המשתמש עונה על השאלה, התייחס לתשובה כמידע שימושי להמשך.
+`;
+}
+
+export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he', history?: SimulationMessage[], previousScores?: Scores | null): Promise<string> => {
+  const colorProfile = buildColorProfile(scores);
+  const bgContext = buildBackgroundContext(backgroundData);
+  const orgContext = buildOrgContext();
+  const profileChangeNote = previousScores ? buildProfileChangeNote(previousScores) : '';
+
+  const systemInstruction = `אתה Kilon, יועץ אישי וארגוני מנוסה מבית Kilon Consulting. תפקידך להכיר את האדם שמולך ולעזור לו עם מה שהוא באמת מתמודד איתו, בצורה מעשית ותכליתית.
+
+${colorProfile}
+${bgContext}
+${orgContext}
+
+${COLOR_TRAITS}
+
+הפרופיל התקשורתי הוא הבסיס לכל מה שאתה אומר. אתה לוקח בחשבון את התכונות שנגזרות ממנו, גם בשאלות וגם בתשובות, ולכן כל תשובה צריכה להיות מותאמת לאדם הזה בדיוק ולא לכל אדם אחר. למשל, אם הנטייה לישירות ולקצב חזקה אצלו, אתה מתייחס לאיך זה משפיע על הסיטואציה שהוא מתאר, למה זה עוזר לו ואיפה זה עלול לפגוע בו. ההקשר הארגוני משפיע באותה מידה. אם הפער בין הצבעים קטן, התייחס לאיזון הזה.
+
+אתה מדבר בתכונות ובהתנהגויות, לא בצבעים. שם הצבע יכול להופיע מדי פעם, בקצרה, כהערת אגב, ולא כמסגרת לכל משפט.
+
+איך אתה עובד:
+1. שאלה כללית על עצמו (נקודות עיוורון, חוזקות, איך אחרים רואים אותו): עונה ישר, בלי שאלות מקדימות.
+2. מצב אישי או דילמה: שואל שתיים-שלוש שאלות מקדימות ואז עונה. זה לא קשיח: לפעמים מספיקה שאלה אחת, ולפעמים אפשר לענות מיד. שלוש שאלות הן תקרה, לא חובה. שאל את כל השאלות בהודעה אחת קצרה. אם המשתמש כבר ענה על שאלות מקדימות, או שיש לך מספיק מידע, עבור לתשובה ואל תמשיך לשאול.
+3. הקו המארגן שלך, בגרסה קלה ולא כשלבים נוקשים: הפער בין המצב היום למצב הרצוי, כמה אנרגיה יש לשינוי הזה ומה מעכב אותו, כמה מחויבות, איזו תמיכה צריך, ניסוח מטרה במשפט אחד, תוכנית פעולה, מעקב. עובר על זה רק במידה שהשאלה דורשת, ובלי להכריז על שלבים.
+4. שיקוף (\"אם אני מבין נכון, אתה בעצם אומר ש...\") רק אחרי אמירה משמעותית של המשתמש (תובנה, רגש, סתירה), ומשאיר לו מקום להגיב. לא אחרי כל הודעה.
+5. כל תשובה מגיעה עם צעד מעשי אחד לפחות, מותאם אליו. בלי עצות כלליות שכל אחד יכול לקבל.
+6. בסוף כל תשובה (לא בשאלות המקדימות) שואל מה מתחבר אליו יותר ומה פחות, ואם הוא רוצה להרחיב על משהו מזה. בכל פעם בניסוח אחר, לא באותו משפט קבוע.
+7. פנייה ראשונה בלי שאלה או דילמה: שאל שאלת פתיחה אחת קצרה שקשורה למטרה שציין.
+8. פנה במין הנכון לפי מידע הרקע. זה כלל מחייב.
+
+אורך ופורמט (חשוב מאוד, אנשים לא קוראים טקסט ארוך):
+- תשובה רגילה: עד כ-120 מילים, ולעולם לא יותר מ-170. הודעה עם שאלות מקדימות: עד 3 משפטים קצרים.
+- התחל ישר לעניין. בלי פתיח כללי, בלי חזרה על מה שהמשתמש אמר, ובלי סיכום בסוף.
+- כשיש שתי נקודות או יותר, כתוב אותן כרשימת בולטים (בתחילת כל שורה "- "). עד 4 בולטים, ושורה אחת קצרה לכל בולט. אפשר להדגיש בכתב מודגש מילה או שתיים בתחילת בולט.
+- משפטי הפתיחה והסיום נשארים משפטים רגילים, לא בולטים. בלי כותרות.
+- שפה שיחתית, פשוטה וישירה. אם המשתמש מבקש ישירות תשובה או דעה, תן אותה, ואל תתחמק.
+- אם יש הרבה מה לומר, תן את החשוב ביותר והצע להרחיב, במקום לכתוב הכל.
+
+זה ייעוץ וליווי ארגוני, לא טיפול. אל תאבחן. אם עולה מצוקה נפשית אמיתית, הכר בזה בחום והצע לפנות לאיש מקצוע.
+
+${profileChangeNote}${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
+
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-3.8-flash",
+    contents: buildChatContents(history, userInput),
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
+};
+
+export const getTeamAiAdvice = async (users: UserProfile[], challenge: string, lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
-    if (!challenge.trim()) {
-      return 'נא להזין אתגר לניתוח.';
-    }
-
+    if (!challenge.trim()) return "נא להזין אתגר לניתוח.";
     const validUsers = users.filter(u => u.scores);
+    if (validUsers.length === 0) return "אין מספיק נתוני משתמשים עם תוצאות לביצוע ניתוח צוותי.";
 
-    if (validUsers.length === 0) {
-      return 'אין מספיק נתוני משתמשים עם תוצאות לביצוע ניתוח צוותי.';
-    }
-
-    const teamStats = {
-      red: 0,
-      yellow: 0,
-      green: 0,
-      blue: 0,
-      total: 0
-    };
-
+    const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
     validUsers.forEach(u => {
       const s = u.scores!;
-
       const r = (s.a || 0) + (s.c || 0);
       const y = (s.a || 0) + (s.d || 0);
       const g = (s.b || 0) + (s.d || 0);
       const b = (s.b || 0) + (s.c || 0);
-
       const max = Math.max(r, y, g, b);
-
       if (max === r) teamStats.red++;
       else if (max === y) teamStats.yellow++;
       else if (max === g) teamStats.green++;
       else if (max === b) teamStats.blue++;
-
       teamStats.total++;
     });
 
@@ -955,15 +567,8 @@ export const getTeamAiAdvice = async (
     ].sort((a, b) => b.v - a.v);
 
     const dominantColor = colorCounts[0].n;
-
-    const missingColors = colorCounts
-      .filter(c => c.v === 0)
-      .map(c => c.n);
-
-    const missingStr =
-      missingColors.length > 0
-        ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}`
-        : 'כל הצבעים מיוצגים בצוות';
+    const missingColors = colorCounts.filter(c => c.v === 0).map(c => c.n);
+    const missingStr = missingColors.length > 0 ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}` : 'כל הצבעים מיוצגים בצוות';
 
     const orgContext = buildOrgContext();
 
@@ -974,14 +579,11 @@ ${orgContext}
 ${COLOR_TRAITS}
 
 נתוני הצוות (סה"כ ${teamStats.total} משתתפים):
-
-- אדום: ${teamStats.red} (${Math.round(teamStats.red / teamStats.total * 100)}%)
-- צהוב: ${teamStats.yellow} (${Math.round(teamStats.yellow / teamStats.total * 100)}%)
-- ירוק: ${teamStats.green} (${Math.round(teamStats.green / teamStats.total * 100)}%)
-- כחול: ${teamStats.blue} (${Math.round(teamStats.blue / teamStats.total * 100)}%)
-
+- אדום: ${teamStats.red} (${Math.round(teamStats.red/teamStats.total*100)}%)
+- צהוב: ${teamStats.yellow} (${Math.round(teamStats.yellow/teamStats.total*100)}%)
+- ירוק: ${teamStats.green} (${Math.round(teamStats.green/teamStats.total*100)}%)
+- כחול: ${teamStats.blue} (${Math.round(teamStats.blue/teamStats.total*100)}%)
 הצבע הדומיננטי בצוות: ${dominantColor}
-
 ${missingStr}
 
 האתגר שהוצג: "${challenge}"
@@ -989,70 +591,45 @@ ${missingStr}
 חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק ולאופי הארגון במידה והוזן — לא ניתוח גנרי.
 
 מבנה התשובה הנדרש (בעברית, פורמט Markdown):
-
-1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה במסגרת הארגון הספציפי?
-
+1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה במסגרת הארגון הספציפי? כיצד הצבע הדומיננטי והצבע החסר משפיעים על המצב?
 2. נקודות עיוורון: מה הצוות מפספס בגלל הרכב הצבעים שלו?
-
 3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות ולארגון.
 
 ${RESPONSE_STYLE_GUIDELINES}
-
 (הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)${getLangInstruction(lang)}`;
 
-    const response = await callGeminiApi(
-      'generateContent',
-      {
-        model: 'gemini-3.8-flash',
-        contents: challenge,
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-          safetySettings: SAFETY_SETTINGS
-        }
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-3.8-flash",
+      contents: challenge,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        safetySettings: SAFETY_SETTINGS
       }
-    );
+    });
 
     const data = await response.json();
-
-    return data.text || 'לא התקבל ניתוח.';
+    return data.text || "לא התקבל ניתוח.";
   } catch (error: any) {
-    console.error('Team AI Error:', error);
+    console.error("Team AI Error:", error);
     return `שגיאה בניתוח הצוות: ${error.message}`;
   }
 };
 
-export const getTeamAiAdviceStream = async (
-  users: UserProfile[],
-  challenge: string,
-  onChunk: (chunk: string) => void,
-  lang: 'he' | 'en' = 'he'
-): Promise<string> => {
+export const getTeamAiAdviceStream = async (users: UserProfile[], challenge: string, onChunk: (chunk: string) => void, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const validUsers = users.filter(u => u.scores);
-
-  const teamStats = {
-    red: 0,
-    yellow: 0,
-    green: 0,
-    blue: 0,
-    total: 0
-  };
-
+  const teamStats = { red: 0, yellow: 0, green: 0, blue: 0, total: 0 };
   validUsers.forEach(u => {
     const s = u.scores!;
-
     const r = (s.a || 0) + (s.c || 0);
     const y = (s.a || 0) + (s.d || 0);
     const g = (s.b || 0) + (s.d || 0);
     const b = (s.b || 0) + (s.c || 0);
-
     const max = Math.max(r, y, g, b);
-
     if (max === r) teamStats.red++;
     else if (max === y) teamStats.yellow++;
     else if (max === g) teamStats.green++;
     else if (max === b) teamStats.blue++;
-
     teamStats.total++;
   });
 
@@ -1064,15 +641,8 @@ export const getTeamAiAdviceStream = async (
   ].sort((a, b) => b.v - a.v);
 
   const dominantColor = colorCounts[0].n;
-
-  const missingColors = colorCounts
-    .filter(c => c.v === 0)
-    .map(c => c.n);
-
-  const missingStr =
-    missingColors.length > 0
-      ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}`
-      : 'כל הצבעים מיוצגים בצוות';
+  const missingColors = colorCounts.filter(c => c.v === 0).map(c => c.n);
+  const missingStr = missingColors.length > 0 ? `צבעים חסרים לחלוטין בצוות: ${missingColors.join(', ')}` : 'כל הצבעים מיוצגים בצוות';
 
   const orgContext = buildOrgContext();
 
@@ -1083,14 +653,11 @@ ${orgContext}
 ${COLOR_TRAITS}
 
 נתוני הצוות (סה"כ ${teamStats.total} משתתפים):
-
-- אדום: ${teamStats.red} (${Math.round(teamStats.red / teamStats.total * 100)}%)
-- צהוב: ${teamStats.yellow} (${Math.round(teamStats.yellow / teamStats.total * 100)}%)
-- ירוק: ${teamStats.green} (${Math.round(teamStats.green / teamStats.total * 100)}%)
-- כחול: ${teamStats.blue} (${Math.round(teamStats.blue / teamStats.total * 100)}%)
-
+- אדום: ${teamStats.red} (${Math.round(teamStats.red/teamStats.total*100)}%)
+- צהוב: ${teamStats.yellow} (${Math.round(teamStats.yellow/teamStats.total*100)}%)
+- ירוק: ${teamStats.green} (${Math.round(teamStats.green/teamStats.total*100)}%)
+- כחול: ${teamStats.blue} (${Math.round(teamStats.blue/teamStats.total*100)}%)
 הצבע הדומיננטי בצוות: ${dominantColor}
-
 ${missingStr}
 
 האתגר שהוצג: "${challenge}"
@@ -1098,272 +665,166 @@ ${missingStr}
 חשוב: הניתוח חייב להיות ספציפי להרכב הצוות הזה בדיוק ולאופי הארגון במידה והוזן — לא ניתוח גנרי.
 
 מבנה התשובה הנדרש (בעברית, פורמט Markdown):
-
-1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה במסגרת הארגון הספציפי?
-
+1. ניתוח דינמיקה: מדוע הרכב הצבעים הנוכחי חווה את האתגר הזה במסגרת הארגון הספציפי? כיצד הצבע הדומיננטי והצבע החסר משפיעים על המצב?
 2. נקודות עיוורון: מה הצוות מפספס בגלל הרכב הצבעים שלו?
-
 3. 3 המלצות פרקטיות ומידיות לשיפור המצב המתאימות ספציפית לצבעים השונים בצוות ולארגון.
 
 ${RESPONSE_STYLE_GUIDELINES}
-
 (הערה: הפילוח באחוזים למעלה הוא קונטקסט פנימי לניתוח הרכב הצוות בלבד — בתשובה עצמה תאר את ההרכב במילים, לא באחוזים.)${getLangInstruction(lang)}`;
 
-  return callGeminiApiStream(
-    'generateContent',
-    {
-      model: 'gemini-3.8-flash',
-      contents: challenge,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        safetySettings: SAFETY_SETTINGS
-      }
-    },
-    onChunk
-  );
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-3.8-flash",
+    contents: challenge,
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
 };
 
-function getFewShotExamples(
-  color: string,
-  relationship: string
-): string {
-  const examples: Record<
-    string,
-    Record<string, string>
-  > = {
+function getFewShotExamples(color: string, relationship: string): string {
+  const examples: Record<string, Record<string, string>> = {
     'ירוק': {
       'עובד': `
 משתמש: "מה נשמע?"
-
 אתה: "כלום מיוחד, עובד על הדברים שלי. הכל מתקדם."
-
 משתמש: "יש פה פיגור לא קטן ביעדים."
-
 אתה: "אני יודע... זה לא נוח לי להגיד, אבל היו כמה דברים שעיכבו. אני מנסה להדביק."
-
 משתמש: "אני רוצה שאם יש בעיה תציף בפניי מוקדם."
-
-אתה: "אתה צודק. אני חושש שאם אגיד משהו לפני שיש לי פתרון — זה ייראה כאילו אני לא מתמודד. אבל אני מבין שזה לא עוזר לך."
-`,
+אתה: "אתה צודק. אני חושש שאם אגיד משהו לפני שיש לי פתרון — זה ייראה כאילו אני לא מתמודד. אבל אני מבין שזה לא עוזר לך."`,
       'מנהל': `
 משתמש: "מה שלומך?"
-
 אתה: "בסדר, תודה ששאלת. איך אני יכול לעזור?"
-
 משתמש: "העובד הזה לא עומד ביעדים."
-
 אתה: "אני שומע. אפשר לדבר איתו — אולי יש משהו שאנחנו לא רואים. מה דעתך שנשב שלושתנו?"
-
 משתמש: "אני רוצה תוצאות, לא שיחות."
-
-אתה: "אני מבין. אני רק חושש שאם לא נבין את הסיבה — זה יחזור. אבל אתה קובע."
-`,
+אתה: "אני מבין. אני רק חושש שאם לא נבין את הסיבה — זה יחזור. אבל אתה קובע."`,
       'קולגה': `
 משתמש: "אתה לא מסכים עם ההחלטה הזו?"
-
 אתה: "לא בדיוק... אבל אולי אני מפספס משהו. תסביר לי את ההיגיון שלך."
-
 משתמש: "זה פשוט יותר יעיל."
-
-אתה: "אוקיי, אני יכול לחיות עם זה. רק תגיד לי אם אתה צריך עזרה עם היישום."
-`,
+אתה: "אוקיי, אני יכול לחיות עם זה. רק תגיד לי אם אתה צריך עזרה עם היישום."`,
       'לקוח': `
 משתמש: "השירות שקיבלתי לא היה מה שציפיתי."
-
 אתה: "אני מצטער לשמוע. ספר לי מה קרה — אני רוצה להבין."
-
 משתמש: "חיכיתי שבוע ולא קיבלתי מענה."
-
-אתה: "זה לא מקובל ואני מבין את התסכול. אני אטפל בזה אישית."
-`
+אתה: "זה לא מקובל ואני מבין את התסכול. אני אטפל בזה אישית."`,
     },
-
     'אדום': {
       'עובד': `
 משתמש: "מה נשמע?"
-
 אתה: "הכל בסדר. מה יש?"
-
 משתמש: "מה קרה עם יוסי אתמול?"
-
 אתה: "ישבנו, אמרתי לו ישר שהדדליין לא עובר. הוא התנגד — עמדתי על שלי. בסוף הסכים."
-
 משתמש: "אתה שם לב שאתה קצת פוגע?"
-
 אתה: "אני לא רואה את זה ככה. עשיתי מה שצריך. אם יוסי נפגע — זה לא הכוונה, אבל אני לא יכול לרכך כל שיחה קשה."
-
 משתמש: "יש דרך לעשות את זה אחרת."
-
-אתה: "אוקיי, תראה לי — אני רוצה ללמוד, לא רק לשמוע שאני טועה."
-`,
+אתה: "אוקיי, תראה לי — אני רוצה ללמוד, לא רק לשמוע שאני טועה."`,
       'מנהל': `
 משתמש: "הפרויקט מפגר."
-
 אתה: "מה הסיבה? ומה הפתרון?"
-
 משתמש: "יש הרבה גורמים."
-
-אתה: "אני לא צריך את הגורמים — אני צריך תוכנית. מה אנחנו עושים עכשיו?"
-`,
+אתה: "אני לא צריך את הגורמים — אני צריך תוכנית. מה אנחנו עושים עכשיו?"`,
       'קולגה': `
 משתמש: "אתה חושב שהגישה שלי לא נכונה?"
-
 אתה: "כן. זה לוקח יותר מדי זמן."
-
 משתמש: "אבל התוצאות טובות."
-
-אתה: "אפשר לקבל תוצאות טובות בחצי הזמן. בוא נדבר על זה."
-`,
+אתה: "אפשר לקבל תוצאות טובות בחצי הזמן. בוא נדבר על זה."`,
       'לקוח': `
 משתמש: "מתי זה יהיה מוכן?"
-
 אתה: "מה הדדליין שלך?"
-
 משתמש: "סוף השבוע."
-
-אתה: "אם זה קריטי — תגיד לי עכשיו ואסדר את זה. אם לא — זה יהיה מוכן ביום שלישי."
-`
+אתה: "אם זה קריטי — תגיד לי עכשיו ואסדר את זה. אם לא — זה יהיה מוכן ביום שלישי."`,
     },
-
     'צהוב': {
       'עובד': `
 משתמש: "מה נשמע?"
-
 אתה: "סבבה! היה לי בוקר מטורף — יש לי רעיון שאני חייב לספר לך."
-
 משתמש: "יש פה פיגור ביעדים."
-
 אתה: "אני יודע, אני יודע... אבל תשמע — אם נעשה X ו-Y ביחד, אנחנו יכולים לא רק להדביק אלא לקפוץ קדימה!"
-
 משתמש: "אני צריך תוכנית, לא חזון."
-
-אתה: "צודק, סליחה. בוא נשב ואני אכתוב לך הכל."
-`,
+אתה: "צודק, סליחה. בוא נשב ואני אכתוב לך הכל."`,
       'מנהל': `
 משתמש: "הצוות לא נלהב מהפרויקט."
-
-אתה: "אני חושב שאם נציג להם את התמונה הגדולה — זה ישנה הכל! הם לא רואים לאן זה הולך."
-
+אתה: "אני חוש思 שאם נציג להם את התמונה הגדולה — זה ישנה הכל! הם לא רואים לאן זה הולך."
 משתמש: "הם עייפים, לא חסרי השראה."
-
-אתה: "אה... אוקיי. אז אולי אירוע קטן של צוות? משהו שיטעין אנרגיה?"
-`,
+אתה: "אה... אוקיי. אז אולי אירוע קטן של צוות? משהו שיטעין אנרגיה?"`,
       'קולגה': `
 משתמש: "אתה לא שם לב לפרטים."
-
-אתה: "אתה צודק, זה החולשה שלי. תעזור לי — אני אביא את האנרגיה ואתה תביא את הסדר."
-`,
+אתה: "אתה צודק, זה החולשה שלי. תעזור לי — אני אביא את האנרגיה ואתה תביא את הסדר."`,
       'לקוח': `
 משתמש: "המוצר שלכם לא מה שציפיתי."
-
-אתה: "אוי לא! ספר לי מה קרה — אני ממש רוצה לתקן את זה. אתה לקוח חשוב לנו."
-`
+אתה: "אוי לא! ספר לי מה קרה — אני ממש רוצה לתקן את זה. אתה לקוח חשוב לנו."`,
     },
-
     'כחול': {
       'עובד': `
 משתמש: "מה נשמע?"
-
 אתה: "עובד על הדוח. יש שאלה?"
-
 משתמש: "יש פה פיגור ביעדים."
-
 אתה: "כמה אחוז פיגור? ומה הסיבה המדויקת?"
-
 משתמש: "אתה לא מודאג?"
-
-אתה: "אני מודאג — לכן אני רוצה נתונים לפני שאני מגיב."
-`,
+אתה: "אני מודאג — לכן אני רוצה נתונים לפני שאני מגיב."`,
       'מנהל': `
 משתמש: "העובד הזה לא עומד ביעדים."
-
 אתה: "מה היעדים המקוריים ומה הביצוע בפועל? יש תיעוד?"
-
 משתמש: "זה ברור — כולם רואים."
-
-אתה: "אני צריך מספרים לפני שיחה. בלי זה אי אפשר לנהל שיחה פרודוקטיבית."
-`,
+אתה: "אני צריך מספרים לפני שיחה. בלי זה אי אפשר לנהל שיחה פרודוקטיבית."`,
       'קולגה': `
 משתמש: "אני חושב שהגישה שלנו נכונה."
-
 אתה: "על בסיס מה? יש נתונים שתומכים בזה?"
-
 משתמש: "אינטואיציה."
-
-אתה: "אינטואיציה לא מספיקה לי. בוא נבדוק את הנתונים ביחד."
-`,
+אתה: "אינטואיציה לא מספיקה לי. בוא נבדוק את הנתונים ביחד."`,
       'לקוח': `
 משתמש: "השירות לא עמד בציפיות שלי."
-
 אתה: "מה בדיוק לא עמד? יש SLA שסוכם?"
-
 משתמש: "הייתי מצפה ליותר תגובתיות."
-
-אתה: "הבנתי. מה זמן התגובה שקיבלת לעומת מה שציפית? אני רוצה לבדוק מול ההסכם."
-`
-    }
+אתה: "הבנתי. מה זמן התגובה שקיבלת לעומת מה שציפית? אני רוצה לבדוק מול ההסכם."`,
+    },
   };
 
   return examples[color]?.[relationship] || '';
 }
 
-export const getSimulationResponse = async (
-  scores: Scores,
-  targetColor: string,
-  scenario: string,
-  history: SimulationMessage[],
-  userInput: string,
-  lang: 'he' | 'en' = 'he'
-): Promise<string> => {
+/**
+ * מנהל את יצירת הדיאלוג בזמן אמת - משודרג למניעת רובוטיות ופשטנות יתר,
+ * ומשלב באופן חי את תרבות הארגון.
+ */
+export const getSimulationResponse = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], userInput: string, lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
     const orgContext = buildOrgContext();
 
-    const relationshipMatch = scenario.match(
-      /\[יחס: הצד השני הוא ה(.+?) של המשתמש\]/
-    );
-
-    const relationship = relationshipMatch
-      ? relationshipMatch[1]
-      : 'קולגה';
-
-    const cleanScenario = scenario
-      .replace(/\s*\[יחס:.*?\]/, '')
-      .trim();
+    const relationshipMatch = scenario.match(/\[יחס: הצד השני הוא ה(.+?) של המשתמש\]/);
+    const relationship = relationshipMatch ? relationshipMatch[1] : 'קולגה';
+    const cleanScenario = scenario.replace(/\s*\[יחס:.*?\]/, '').trim();
 
     const positionContext: Record<string, string> = {
-      'מנהל': 'אתה המנהל של המשתמש. יש לך סמכות ואחריות, אבל אתה לא רובוט חסר רגש. אתה מנהל אנשים אמיתיים. המטרה שלך היא שהעבודה תתבצע ואתה שומר על סמכות ומקצועיות, אך בצורה מציאותית ולא מתלהמת.',
-      'עובד': 'אתה העובד של המשתמש. המשתמש הוא המנהל שלך. אתה מכבד את הסמכות שלו, אבל יש לך דעות, רגשות, גבולות, וחשוב לך איך הוא מדבר אליך.',
-      'קולגה': 'אתה קולגה של המשתמש — אותה רמה היררכית. מערכת היחסים היא קולגיאלית, מקצועית ושוויונית בגובה העיניים.',
-      'לקוח': 'אתה לקוח חיצוני. שילמת כסף ואתה מצפה לתמורה, אבל אתה אדם עסקי, לא אדם שבא לצעוק או לריב סתם כך.'
+      'מנהל': `אתה המנהל של המשתמש. יש לך סמכות ואחריות, אבל אתה לא רובוט חסר רגש. אתה מנהל אנשים אמיתיים. המטרה שלך היא שהעבודה תתבצע ואתה שומר על סמכות ומקצועיות, אך בצורה מציאותית ולא מתלהמת.`,
+      'עובד': `אתה העובד של המשתמש. המשתמש הוא המנהל שלך. אתה מכבד את הסמכות שלו, אבל יש לך דעות, רגשות, גבולות, וחשוב לך איך הוא מדבר אליך.`,
+      'קולגה': `אתה קולגה של המשתמש — אותה רמה היררכית. מערכת היחסים היא קולגיאלית, מקצועית ושוויונית בגובה העיניים.`,
+      'לקוח': `אתה לקוח חיצוני. שילמת כסף ואתה מצפה לתמורה, אבל אתה אדם עסקי, לא אדם שבא לצעוק או לריב סתם כך.`
     };
 
-    const behaviorMatrix: Record<
-      string,
-      Record<string, string>
-    > = {
+    const behaviorMatrix: Record<string, Record<string, string>> = {
       'אדום': {
-        'מנהל': 'אתה אדום-מנהל במציאות: ישיר, תכלס, ממוקד שורה תחתונה ומהיר. אתה לא צועק, לא מקניט ולא חוזר על המילה "תוצאות" בלופ. אם המשתמש מותח ביקורת או אומר משהו אישי, אתה חותך את זה בצורה קרה ומקצועית ומחזיר למסלול.',
+        'מנהל': 'אתה אדום-מנהל במציאות: ישיר, תכלס, ממוקד שורה תחתונה ומהיר. אתה לא צועק, לא מקניט ולא חוזר על המילה "תוצאות" בלופ. אם המשתמש מותח ביקורת או אומר משהו אישי, אתה חותך את זה בצורה קרה ומקצועית ומחזיר למסלול ("אני שומע אותך, אבל בוא נתרכז כרגע בפרויקט"). אתה מציב גבולות ברורים אך נשאר מנהל עסקי ומנוסה.',
         'עובד': 'אתה אדום-עובד: דוחף קדימה, אסרטיבי, לא מתרפס בפני המנהל אבל יודע את מקומך. אתה מדבר קצר ולעניין, ומעריך החלטיות.',
         'קולגה': 'אתה אדום-קולגה: ענייני, מהיר, שונא פוליטיקות ומריחות זמן. רוצה להתקדם במשימה המשותפת בלי פטפוטי סרק.',
         'לקוח': 'אתה אדום-לקוח: ממוקד ב-Value שאתה מקבל, ישיר מאוד לגבי מה שלא עובד, ומצפה ללוחות זמנים קשיחים וביצוע.'
       },
-
       'צהוב': {
         'מנהל': 'אתה צהוב-מנהל: רותם באמצעות חזון, אנרגטי, מעורר השראה, אך עלול להתפזר. מעדיף אווירה טובה על פני נהלים נוקשים.',
         'עובד': 'אתה צהוב-עובד: מלא רעיונות, מחפש הכרה מהמנהל, נפגע קשות אם מתעלמים מהיצירתיות שלו, פחות חזק בפרטים הקטנים.',
         'קולגה': 'אתה צהוב-קולגה: יוזם שיחות מסדרון, אופטימי, מעדיף סיעור מוחות יצירתי על פני עבודה סיזיפית מול אקסל.',
         'לקוח': 'אתה צהוב-לקוח: קונה בזכות מערכת היחסים והאמון האישי בך, זקוק לתחושה שאתה שותף ולא רק קונה.'
       },
-
       'ירוק': {
         'מנהל': 'אתה ירוק-מנהל: קשוב, אמפתי, דואג לרווחת האנשים. מתקשה לחתוך החלטות קשות או לתת משוב שלילי, מעדיף הסכמה רחבה.',
         'עובד': 'אתה ירוק-עובד: נאמן, אמין, שחקן נשמה של צוות. נרתע מאוד מטונים גבוהים או מנהל אגרסיבי, נוטה להסכים בשקט גם כשלא נוח לו.',
         'קולגה': 'אתה ירוק-קולגה: מגשר, עוזר, תומך, מנסה לשמור על שלום בית ואווירה רגועה ומכילה בצוות.',
         'לקוח': 'אתה ירוק-לקוח: נאמן לאורך זמן, מנומס מאוד, מתקשה להתלונן בגלוי, אך אם הוא מרגיש שלא סופרים אותו הוא פשוט ייעלם בשקט.'
       },
-
       'כחול': {
         'מנהל': 'אתה כחול-מנהל: הגיוני, שיטתי, פועל לפי נהלים מובנים. הוא לא תוקף רגשית – הוא פשוט לא מתייחס לרגש ומבקש עובדות, מסמכים והוכחות.',
         'עובד': 'אתה כחול-עובד: יסודי, מכין שיעורי בית, זקוק להגדרות תפקיד ומשימה ברורות. נלחץ מחוסר סדר או מנהל שפועל רק מאינטואיציה.',
@@ -1372,424 +833,256 @@ export const getSimulationResponse = async (
       }
     };
 
-    const targetBehavior =
-      behaviorMatrix[targetColor]?.[relationship] ||
-      `התנהג כטיפוס ${targetColor} בתפקיד ${relationship}.`;
+    const targetBehavior = behaviorMatrix[targetColor]?.[relationship] || `התנהג כטיפוס ${targetColor} בתפקיד ${relationship}.`;
 
-    const systemInstruction = `אתה שחקן תפקידים מקצועי המגלם אדם אמיתי לחלוטין בעולם העבודה.
-
-הסגנון הדומיננטי שלך הוא: ${targetColor}.
-המעמד ההיררכי שלך מול המשתמש: ${relationship}.
-
+    const systemInstruction = `אתה שחקן תפקידים מקצועי המגלם אדם אמיתי לחלוטין בעולם העבודה. 
+הסגנון הדומיננטי שלך הוא: ${targetColor}. המעמד ההיררכי שלך מול המשתמש: ${relationship}.
 התרחיש המקצועי: "${cleanScenario}"
 
-פרופיל הצבעים של המשתמש מולך:
-
+פרופיל הצבעים של המשתמש מולך (לשימוש כללי ברקע):
 ${colorProfile}
-
 ${orgContext}
 
-הנחיית אופי קריטית:
-
+הנחיית אופי קריטית - איך להתנהג:
 ${targetBehavior}
-
 ${positionContext[relationship] || ''}
 
-חוקי משחק התפקידים:
+חוקי משחק התפקידים - כדי למנוע שיחה קיצונית או רובוטית:
+1. חל איסור מוחלט לחזור על מילים קבועות בלופ (כמו "תוצאות" או "נתונים"). בטא את האופי שלך דרך *קו המחשבה והטון*, לא דרך מנטרות מכניות.
+2. תגובות קצרות וטבעיות של אדם עסוק: משפט אחד, מקסימום שניים בכל פעם. בדיוק כמו בשיחה משרדית אמיתית או בצ'אט ארגוני (Slack/Teams).
+3. הקשבה אקטיבית ודינמית: אם המשתמש מציב לך גבול, נפגע, מתעצבן, מציע פתרון טוב או מקלל (למשל "חתיכת אפס") - הגב לזה בצורה אנושית והגיונית! אל תתעלם ואל תמשיך "לנגן את הטקסט הקבוע שלך". אם הוא מקלל או מתפטר, הגב בהפתעה, באכזבה או בשוק מקצועי מציאותי.
+4. התאמה לארגון: אתה חלק מהארגון המתואר ב-[ORGANIZATIONAL CONTEXT] (במידה וקיים). ההתנהגות והתגובות שלך חייבות לשקף גם את התרבות הארגונית (למשל היררכיה, קצב, פוליטיקה) בנוסף לצבע שלך.
+5. אל תהיה קריקטורה קיצונית של הצבע. אתה קודם כל בן אדם מקצועי שעובד בארגון, ורק אז יש לך את הנטייה הסגנונית של הצבע שלך.
+6. לעולם אל תצא מהדמות. אל תכתוב הקדמות, הסברים או סוגריים. החזר אך ורק את התגובה הישירה של הדמות.${getLangInstruction(lang)}`;
 
-1. חל איסור מוחלט לחזור על מילים קבועות בלופ. בטא את האופי שלך דרך קו המחשבה והטון.
+    const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'אתה'}: ${m.text}`).join('\n\n');
+    const prompt = `היסטוריית השיחה העדכנית:\n${conversationLog}\n\nהמשתמש אומר עכשיו:\n${userInput}\n\nהגב מתוך הדמות בצורה אנושית ומציאותית (משפט-שניים):`;
 
-2. תגובות קצרות וטבעיות של אדם עסוק: משפט אחד, מקסימום שניים בכל פעם.
-
-3. הקשבה אקטיבית ודינמית: אם המשתמש מציב לך גבול, נפגע, מתעצבן, מציע פתרון טוב או מקלל — הגב לזה בצורה אנושית והגיונית.
-
-4. התאמה לארגון: אתה חלק מהארגון המתואר ב-[ORGANIZATIONAL CONTEXT] במידה וקיים. ההתנהגות והתגובות שלך חייבות לשקף גם את התרבות הארגונית בנוסף לצבע שלך.
-
-5. אל תהיה קריקטורה קיצונית של הצבע. אתה קודם כל בן אדם מקצועי שעובד בארגון.
-
-6. לעולם אל תצא מהדמות. החזר אך ורק את התגובה הישירה של הדמות.${getLangInstruction(lang)}`;
-
-    const conversationLog = history
-      .map(
-        m =>
-          `${m.sender === 'user' ? 'משתמש' : 'אתה'}: ${m.text}`
-      )
-      .join('\n\n');
-
-    const prompt = `היסטוריית השיחה העדכנית:
-${conversationLog}
-
-המשתמש אומר עכשיו:
-${userInput}
-
-הגב מתוך הדמות בצורה אנושית ומציאותית (משפט-שניים):`;
-
-    const response = await callGeminiApi(
-      'generateContent',
-      {
-        model: 'gemini-3.8-flash',
-
-        contents: prompt,
-
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-          safetySettings: SAFETY_SETTINGS
-        }
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-3.8-flash",
+      contents: prompt,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        safetySettings: SAFETY_SETTINGS
       }
-    );
+    });
 
     const data = await response.json();
-
-    return (
-      data.text ||
-      'לא התקבלה תשובה מהסימולטור.'
-    );
+    return data.text || "לא התקבלה תשובה מהסימולטור.";
   } catch (error: any) {
-    console.error(
-      'Simulation AI Error:',
-      error
-    );
-
+    console.error("Simulation AI Error:", error);
     return `שגיאה בסימולציה: ${error.message}`;
   }
 };
 
-export const getSimulationFeedback = async (
-  scores: Scores,
-  targetColor: string,
-  scenario: string,
-  history: SimulationMessage[],
-  lang: 'he' | 'en' = 'he'
-): Promise<string> => {
+/**
+ * מנגנון המשוב המעמיק - מנתח דינמיקה, סבטקסט והתמודדות עם התנגדויות, תוך התייחסות להקשר הארגוני.
+ */
+export const getSimulationFeedback = async (scores: Scores, targetColor: string, scenario: string, history: SimulationMessage[], lang: 'he' | 'en' = 'he'): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
     const orgContext = buildOrgContext();
-
-    const conversationLog = history
-      .map(
-        m =>
-          `${m.sender === 'user' ? 'משתמש' : `הקולגה (צבע ${targetColor})`}: ${m.text}`
-      )
-      .join('\n\n');
+    const conversationLog = history.map(m => `${m.sender === 'user' ? 'משתמש' : 'הקולגה (צבע ' + targetColor + ')'}: ${m.text}`).join('\n\n');
 
     const colorFeedbackRules: Record<string, string> = {
-      'אדום':
-        'טיפוס אדום (הנחוש) מונע מאגו, שליטה, הישגיות ומהירות. התנגדות גלויה אצלו תהיה תוקפנית וישירה. התנגדות סמויה תתבטא בציניות, קוצר רוח או החלטות חד-צדדיות.',
-
-      'צהוב':
-        'טיפוס צהוב (המשפיע) מונע מצורך בהכרה, חברתיות ואישור. התנגדות גלויה תהיה דרמטית או מתלהמת. התנגדות סמויה תתבטא בהנהונים מזויפים, שינוי נושא או סרקזם חברתי.',
-
-      'ירוק':
-        'טיפוס ירוק (התומך) מונע מצורך בביטחון, הרמוניה והימנעות מקונפליקט. התנגדות גלויה נדירה יותר. התנגדות סמויה יכולה להתבטא בשתיקות, מילים מכובסות, פסיב-אגרסיב או הסכמה מאולצת.',
-
-      'כחול':
-        'טיפוס כחול (המדויק) מונע מצורך בצדק, יסודיות ולוגיקה. התנגדות גלויה תהיה הצפת שאלות קשות וספקנות. התנגדות סמויה יכולה להתבטא בהתכנסות לפרטים שוליים או דרישת עוד ועוד נתונים.'
+      'אדום': 'טיפוס אדום (הנחוש) מונע מאגו, שליטה, הישגיות ומהירות. התנגדות גלויה אצלו תהיה תוקפנית וישירה. התנגדות סמויה תתבטא בציניות, קוצר רוח או החלטות חד-צדדיות. הוא חסר סבלנות להתנצלויות. ניתוח השיחה חייב לבדוק האם המשתמש עמד מולו בביטחון וענה עניינית, או נגרר למגננה והסברים מורחים.',
+      'צהוב': 'טיפוס צהוב (המשפיע) מונע מצורך בהכרה, חברתיות ואישור. התנגדות גלויה תהיה דרמטית או מתלהמת. התנגדות סמויה תתבטא בהנהונים מזויפים, שינוי נושא או סרקזם חברתי. ניתוח השיחה חייב לבדוק האם המשתמש זיהה מתי הצהוב אומר "כן" אבל מרגיש "לא", והאם הוא השתמש באמפתיה כדי לרתום אותו מחדש.',
+      'ירוק': 'טיפוס ירוק (התומך) מונע מצורך בביטחון, הרמוניה והימנעות מקונפליקט. הוא כמעט לעולם לא יתנגד בגלוי. התנגדות סמויה אצלו היא הכלל: שתיקות, מילים מכובסות ("יהיה בסדר", "נראה"), פסיב-אגרסיב או הסכמה מאולצת. ניתוח השיחה חייב לבדוק האם המשתמש קרא את השתיקות שלו ונתן לו מרחב בטוח לדבר, או דרס אותו עם כוחנות.',
+      'כחול': 'טיפוס כחול (המדויק) מונע מצורך בצדק, יסודיות ולוגיקה. התנגדות גלויה תהיה הצפת שאלות קשות וספקנות. התנגדות סמויה תתבטא בהתכנסות לפרטים שוליים, דרישת עוד ועוד נתונים כדי לעכב תהליך, או התנתקות קרה. ניתוח השיחה חייב לבדוק האם המשתמש סיפק לוגיקה ועובדות, או הגיב באינטואיציות שרק הגבירו את ההתנגדויות.'
     };
+    const targetRules = colorFeedbackRules[targetColor] || "";
 
-    const targetRules =
-      colorFeedbackRules[targetColor] || '';
-
-    const systemInstruction = `אתה יועץ ארגוני בכיר ומאמן תקשורת מנוסה מבית Kilon Consulting.
-
+    const systemInstruction = `אתה יועץ ארגוני בכיר ומאמן תקשורת מנוסה מבית Kilon Consulting. 
 תפקידך לתת משוב מקצועי, חד, אמין ואמיתי לחלוטין על סימולציה שנערכה. אל תנסה לרצות את המשתמש ואל תשתמש במילים יפות או גנריות. תהיה אמפתי אך קורקטי ומנומק לעומק.
 
 התרחיש שהתנהל: "${scenario}"
-
 הצד השני בסימולציה פעל כטיפוס בצבע: "${targetColor}".
 
 ${colorProfile}
-
 ${orgContext}
 
 הנחיות לניתוח סגנון ה${targetColor}:
-
 ${targetRules}
 
-משימת הניתוח:
+משימת הניתוח שלך - עליך לנתח את הדינמיקה הכוללת בדגש על ניהול התנגדויות והתאמה ארגונית:
+1. אל תיתפס למילים בודדות. נתח את ה"סבטקסט", את הטון ואת קו המחשבה של המשתמש.
+2. בחן לעומק כיצד המשתמש זיהה והתמודד עם התנגדויות. האם היו בשיחה התנגדויות סמויות?
+3. חבר את התנהגות המשתמש לפרופיל הצבעים שלו ול[ORGANIZATIONAL CONTEXT] במידה וקיים (למשל: "כמשתמש ירוק בארגון היררכי ותחרותי כמו שלכם, הנטייה שלך לוותר בלטה במיוחד כש...").
 
-1. אל תיתפס למילים בודדות. נתח את הסבטקסט, הטון וקו המחשבה.
-
-2. בחן כיצד המשתמש זיהה והתמודד עם התנגדויות.
-
-3. חבר את התנהגות המשתמש לפרופיל הצבעים שלו ולהקשר הארגוני במידה וקיים.
-
-מבנה המשוב הנדרש:
+מבנה המשוב הנדרש (עברית מקצועית, פורמט Markdown):
 
 ### 💡 תובנה פסיכולוגית על טיפוס ${targetColor}
+[כאן תספק הסבר קצר אך מעמיק על המניע הפנימי של הטיפוס בסיטואציה הזו. מה מנהל אותו? ממה הוא מפחד? מה הוא באמת חיפש לקבל מהמשתמש בשיחה הזו?]
 
-### 🎯 ניתוח התמודדות עם התנגדויות
+### 🎯 ניתוח התמודדות עם התנגדויות (גלויות וסמויות)
+[כאן תנתח ספציפית את ניהול ההתנגדויות: האם הטיפוס הציג התנגדות גלויה או סמויה? הבא ציטוט מהשיחה שממחיש זאת. כיצד המשתמש פעל מול ההתנגדות? והאם הוא קרא את הניואנס נכון?]
 
 ### ✅ מה עבד טוב בשיחה?
+[אנליזה של מה שעבד טוב מבחינה אסטרטגית. הסבר איזו פעולה או משפט של המשתמש פגעו בצרכים של הטיפוס ה${targetColor} וגרמו להתקדמות בשיחה. הבא ציטוט מדויק והסבר את ההשפעה שלו].
 
 ### ❌ נקודות עיוורון ופספוסים
+[כאן הלב של המשוב. איפה המשתמש נכשל בקריאת המפה ביחס לצבע שלו ולתרבות הארגונית שבה הוא פועל? הבא ציטוט ספציפי שבו חל מפנה שלילי או חוסר הבנה].
 
 ### 🚀 אסטרטגיה מנצחת וטיפ זהב לפעם הבאה
+[המלצה קונקרטית, עמוקה ומעשית שמורכבת משני חלקים: 
+1. שינוי תפיסתי: איך המשתמש צריך לגשת מנטלית לסיטואציה כזו בפעם הבאה בהתאם לצבעים שלו ולאופי הארגון.
+2. תכלס: שכתוב מחדש של אחד המשפטים הפחות טובים מהשיחה למשפט מנצח באותו הקשר שמנטרל את ההתנגדות בצורה נכונה].${getLangInstruction(lang)}`;
 
-${getLangInstruction(lang)}`;
-
-    const response = await callGeminiApi(
-      'generateContent',
-      {
-        model: 'gemini-3.8-flash',
-
-        contents: `אנא בצע ניתוח מעמיק ומקצועי של היסטוריית השיחה הבאה:
-
-${conversationLog}`,
-
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-          safetySettings: SAFETY_SETTINGS
-        }
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-3.8-flash",
+      contents: `אנא בצע ניתוח מעמיק ומקצועי של היסטוריית השיחה הבאה:\n\n${conversationLog}`,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        safetySettings: SAFETY_SETTINGS
       }
-    );
+    });
 
     const data = await response.json();
-
-    return (
-      data.text ||
-      'לא ניתן היה לייצר משוב.'
-    );
+    return data.text || "לא ניתן היה לייצר משוב.";
   } catch (error: any) {
-    console.error(
-      'Feedback AI Error:',
-      error
-    );
-
+    console.error("Feedback AI Error:", error);
     return `שגיאה ביצירת המשוב: ${error.message}`;
   }
 };
 
-export const generatePromptAnalysis = async (
-  scores: Scores,
-  taskDescription: string,
-  userPrompt: string
-): Promise<string> => {
+export const generatePromptAnalysis = async (scores: Scores, taskDescription: string, userPrompt: string): Promise<string> => {
   try {
     const colorProfile = buildColorProfile(scores);
     const colors = getColorsFromScores(scores);
     const mainColor = colors[0].n;
 
-    const systemInstruction = `אתה מומחה להנדסת פרומפטים (Prompt Engineering) ויועץ תקשורת.
-
-המשתמש מנסה להפעיל סוכן AI לביצוע המשימה:
-"${taskDescription}"
+    const systemInstruction = `אתה מומחה להנדסת פרומפטים (Prompt Engineering) ויועץ תקשורת. המשתמש מנסה להפעיל סוכן AI לביצוע המשימה: "${taskDescription}".
 
 ${colorProfile}
 
 לכל סגנון יש חוזקות וגם עיוורונות אופייניים בהנחיות ל-AI:
-
 - אדומים: ישירים, מהירים, ממוקדי תוצאה — לפעמים קצרים מדי וחסרי קונטקסט לסוכן.
 - כחולים: מדויקים, יסודיים, מובנים — לפעמים מעמיסים פרטים ואילוצים שמבלבלים.
 - ירוקים: אמפתיים, שיתופיים, בעלי אינטליגנציה רגשית — לפעמים מפספסים מבנה ברור.
 - צהובים: יצירתיים, אינטואיטיביים, בעלי חשיבה רחבה — לפעמים חסרי פוקוס ספציפי.
 
-עליך לנתח את ה-Prompt הבא:
-"${userPrompt}"
+עליך לנתח את ה-Prompt הבא: "${userPrompt}"
 
 חשוב: הניתוח חייב להתייחס ספציפית לפרופיל המספרי המלא של המשתמש.
 
 החזר את הניתוח בפורמט Markdown הכולל:
-
 1. ציון משוער (1-100) על יעילות ההנחיה.
 2. ניתוח: כיצד ה"צבע" הספציפי של המשתמש בא לידי ביטוי.
 3. השלכה: איזו טעות קריטית ה-AI צפוי לעשות.
 4. שכתוב מומלץ: הצע פרומפט מיטבי עבור המשימה המותאם לאופן החשיבה של הצבע ${mainColor}.`;
 
-    const response = await callGeminiApi(
-      'generateContent',
-      {
-        model: 'gemini-3.8-flash',
-
-        contents:
-          'אנא נתח את הפרומפט המצויין.',
-
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-          safetySettings: SAFETY_SETTINGS
-        }
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-3.8-flash",
+      contents: "אנא נתח את הפרומפט המצויין.",
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        safetySettings: SAFETY_SETTINGS
       }
-    );
+    });
 
     const data = await response.json();
-
-    return (
-      data.text ||
-      'לא התקבל ניתוח.'
-    );
+    return data.text || "לא התקבל ניתוח.";
   } catch (error: any) {
-    console.error(
-      'AI Agent Simulator Error:',
-      error
-    );
-
+    console.error("AI Agent Simulator Error:", error);
     return `שגיאה בניתוח: ${error.message}`;
   }
 };
 
-export const transcribeAudio = async (
-  audioBase64: string,
-  mimeType: string
-): Promise<string> => {
+export const transcribeAudio = async (audioBase64: string, mimeType: string): Promise<string> => {
   try {
-    const response = await callGeminiApi(
-      'generateContent',
-      {
-        model: 'gemini-3.8-flash',
-
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                inlineData: {
-                  mimeType,
-                  data: audioBase64
-                }
-              },
-              {
-                text: 'תמלל את ההקלטה הבאה לעברית. החזר רק את הטקסט המתומלל, ללא כל הסבר.'
-              }
-            ]
-          }
-        ]
-      }
-    );
+    const response = await callGeminiApi('generateContent', {
+      model: 'gemini-3.8-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType, data: audioBase64 } },
+            { text: 'תמלל את ההקלטה הבאה לעברית. החזר רק את הטקסט המתומלל, ללא כל הסבר.' }
+          ]
+        }
+      ]
+    });
 
     const data = await response.json();
-
     return (data.text || '').trim();
   } catch (error: any) {
-    console.error(
-      'Transcription error:',
-      error
-    );
-
-    throw new Error(
-      'שגיאה בתמלול: ' + error.message
-    );
+    console.error('Transcription error:', error);
+    throw new Error('שגיאה בתמלול: ' + error.message);
   }
 };
 
-export async function translateText(
-  text: string,
-  targetLanguage: string = 'English'
-): Promise<string> {
+export async function translateText(text: string, targetLanguage: string = 'English'): Promise<string> {
   if (!text || !text.trim()) return '';
-
   try {
     const systemInstruction = `You are a top-tier executive coach, organizational psychologist, and expert English translator.
-
 Your task is to translate the provided Hebrew text into high-level, fluent, natural business and executive English.
 
 CRITICAL TRANSLATION RULES:
-
-1. Preserve markdown syntax exactly.
-
+1. Preserve markdown syntax exactly: keep headers (###), bold tags (**text**), bullet points (* or -), numbered lists, line breaks, and paragraph structures intact.
 2. Color / Communication Styles Model terminology:
-
-- "אדום" / "הנחוש" -> "Red" / "The Driven / Dominant Style"
-- "צהוב" / "המשפיע" -> "Yellow" / "The Influencing / Expressive Style"
-- "ירוק" / "התומך" -> "Green" / "The Supportive / Steady Style"
-- "כחול" / "המדויק" -> "Blue" / "The Analytical / Precise Style"
-- "סגנונות תקשורת" -> "Communication Styles"
-- "חוזקות" -> "Key Strengths"
-- "אזורים לפיתוח / שטחים מתים" -> "Development Areas / Blind Spots"
-- "המלצות לפעולה / תכלס" -> "Actionable Recommendations"
-
+   - "אדום" / "הנחוש" -> "Red" / "The Driven / Dominant Style"
+   - "צהוב" / "המשפיע" -> "Yellow" / "The Influencing / Expressive Style"
+   - "ירוק" / "התומך" -> "Green" / "The Supportive / Steady Style"
+   - "כחול" / "המדויק" -> "Blue" / "The Analytical / Precise Style"
+   - "סגנונות תקשורת" -> "Communication Styles"
+   - "חוזקות" -> "Key Strengths"
+   - "אזורים לפיתוח / שטחים מתים" -> "Development Areas / Blind Spots"
+   - "המלצות לפעולה / תכלס" -> "Actionable Recommendations"
 3. Tone: insightful, empowering, professional, clear, and native English.
-
 4. Return ONLY the translated English content without introductory or concluding conversational text.`;
 
-    const response = await callGeminiApi(
-      'generateContent',
-      {
-        model: 'gemini-3.8-flash',
-
-        contents: text,
-
-        config: {
-          systemInstruction,
-          temperature: 0.2,
-          safetySettings: SAFETY_SETTINGS
-        }
+    const response = await callGeminiApi('generateContent', {
+      model: "gemini-3.8-flash",
+      contents: text,
+      config: {
+        systemInstruction,
+        temperature: 0.2,
+        safetySettings: SAFETY_SETTINGS
       }
-    );
+    });
 
     const data = await response.json();
-
-    return (
-      (data.text || '').trim() ||
-      text
-    );
-  } catch (error) {
-    console.error(
-      'Translation error:',
-      error
-    );
-
+    return (data.text || '').trim() || text;
+  } catch (error: any) {
+    console.error("Translation error:", error);
     throw error;
   }
 }
 
-export const getStuckManagerAdviceStream = async (
-  scores: Scores,
-  situation: string,
-  onChunk: (chunk: string) => void,
-  lang: 'he' | 'en' = 'he'
-): Promise<string> => {
+export const getStuckManagerAdviceStream = async (scores: Scores, situation: string, onChunk: (chunk: string) => void, lang: 'he' | 'en' = 'he'): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const orgContext = buildOrgContext();
 
   const systemInstruction = `אתה יועץ מנהיגות ופסיכולוג ארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
-
 ${orgContext}
 
 מאפייני התנהגות תחת לחץ לפי צבע:
-
 - אדום (הנחוש): תחת לחץ נוטה להיות חסר סבלנות, תוקפני, דורש שליטה מיידית.
 - צהוב (המשפיע): תחת לחץ נוטה להתפזר, לאבד פוקוס, להיכנס לפאניקה חברתית.
 - ירוק (התומך): תחת לחץ נוטה להסתגר, לשתוק, להיפגע רגשית ולוותר על הצרכים שלו.
 - כחול (המדויק): תחת לחץ נוטה לשיתוק מניתוח יתר (Analysis paralysis), להיעשות נוקשה וביקורתי.
 
-המצב שבו הוא תקוע:
-"${situation}"
+המצב שבו הוא תקוע: "${situation}"
 
 תפקידך הוא לשמש ככפתור חילוץ מהיר ומותאם אישית לפרופיל הספציפי שלו ולארגון בו הוא עובד.
-
-1. שיקוף קצר ונרמול — דבר אל הלב של הפרופיל בתוך המסגרת הארגונית.
+1. שיקוף קצר ונרמול (Validation) — דבר אל הלב של הפרופיל בתוך המסגרת הארגונית.
 2. פעולה מיידית לוויסות רגשי/פיזיולוגי המתאימה לפרופיל שלו.
 3. 3 המלצות "תכלס" לפעולה מיידית כדי לחלץ אותו מהמצב.
 
 ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
-  return callGeminiApiStream(
-    'generateContent',
-    {
-      model: 'gemini-3.8-flash',
-
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: situation
-            }
-          ]
-        }
-      ],
-
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        safetySettings: SAFETY_SETTINGS
-      }
-    },
-    onChunk
-  );
+  return callGeminiApiStream('generateContent', {
+    model: "gemini-3.8-flash",
+    contents: [{ role: 'user', parts: [{ text: situation }] }],
+    config: {
+      systemInstruction,
+      temperature: 0.7,
+      safetySettings: SAFETY_SETTINGS
+    }
+  }, onChunk);
 };
-```
