@@ -4,7 +4,7 @@ import { Scores, BackgroundData } from '../types';
 import { ResultsChart } from './ResultsChart';
 import { CombinedAnalysis } from './CombinedAnalysis';
 import { generateProfileAnalysis } from '../services/analysisService';
-import { getIntegratedInsights } from '../services/geminiService';
+import { getIntegratedInsights, refreshSessionContext } from '../services/geminiService';
 import { AiCoach } from './AiCoach';
 import { ModelPrimer } from './ModelPrimer';
 import { useCoachArchive } from './useCoachArchive';
@@ -37,6 +37,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const resultsRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
+
+  // Make sure the AI tools have this person's organization context before they are used.
+  useEffect(() => { refreshSessionContext(); }, []);
 
   // The advisor conversation is kept here (not inside the coach tab) so switching tabs
   // and coming back doesn't erase it.

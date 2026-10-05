@@ -7,6 +7,44 @@ export interface SimulationMessage {
 }
 
 /**
+ * Re-reads the organization context (company, culture, knowledge base) for the access
+ * code saved in the session and stores it back in the session. A session that entered
+ * without the full context (e.g. through a team link, or a code redeemed later inside the
+ * advisor) would otherwise never carry it, and the AI would answer generically. It also
+ * picks up later edits the admin made to the organization's context.
+ * Runs once per page load unless forced.
+ */
+let sessionContextRefreshed = false;
+export async function refreshSessionContext(force = false): Promise<void> {
+  if (sessionContextRefreshed && !force) return;
+  sessionContextRefreshed = true;
+  try {
+    const raw = localStorage.getItem('comm_style_session');
+    if (!raw) return;
+    const session = JSON.parse(raw);
+    const code = session?.accessCode;
+    if (!code) return;
+    const res = await fetch('/api/validate-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    if (!res.ok) return;
+    const v = await res.json();
+    if (!v?.valid) return;
+    const updated = { ...session };
+    if (v.companyName !== undefined) updated.companyName = v.companyName;
+    if (v.logoUrl !== undefined) updated.logoUrl = v.logoUrl;
+    if (v.orgContext !== undefined) updated.orgContext = v.orgContext;
+    if (v.knowledgeBase !== undefined) updated.knowledgeBase = v.knowledgeBase;
+    if (v.teamName && !updated.teamName) updated.teamName = v.teamName;
+    localStorage.setItem('comm_style_session', JSON.stringify(updated));
+  } catch (e) {
+    console.warn('Could not refresh organization context:', e);
+  }
+}
+
+/**
  * Helper function to extract and format the organizational context 
  * from the local storage session explicitly for the AI.
  */
@@ -165,6 +203,7 @@ export async function redeemAccessCode(rawCode: string): Promise<{ ok: boolean; 
         localStorage.setItem('comm_style_session', JSON.stringify(s));
       }
     } catch (e) {}
+    await refreshSessionContext(true); // bring in the organization context for this code
     return { ok: true };
   } catch (e) {
     return { ok: false, error: 'שגיאת רשת, נסה שוב' };
