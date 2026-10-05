@@ -38,8 +38,45 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
 
-  // Make sure the AI tools have this person's organization context before they are used.
-  useEffect(() => { refreshSessionContext(); }, []);
+  // Organization context must be refreshed before deciding whether
+  // organization-specific AI insights should run.
+  const [hasOrgContext, setHasOrgContext] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadOrganizationContext = async () => {
+      await refreshSessionContext();
+
+      if (cancelled) return;
+
+      try {
+        const raw = localStorage.getItem('comm_style_session');
+        if (!raw) {
+          setHasOrgContext(false);
+          return;
+        }
+
+        const session = JSON.parse(raw);
+
+        setHasOrgContext(
+          !!(
+            session?.companyName ||
+            session?.orgContext ||
+            session?.knowledgeBase
+          )
+        );
+      } catch {
+        setHasOrgContext(false);
+      }
+    };
+
+    loadOrganizationContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // The advisor conversation is kept here (not inside the coach tab) so switching tabs
   // and coming back doesn't erase it.
@@ -47,17 +84,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
   const [coachInput, setCoachInput] = useState('');
   const [coachLoading, setCoachLoading] = useState(false);
   const coachArchive = useCoachArchive(coachConversation, setCoachConversation, coachLoading, setCoachInput, scores);
-
-  const hasOrgContext = useMemo(() => {
-    try {
-      const raw = localStorage.getItem('comm_style_session');
-      if (!raw) return false;
-      const session = JSON.parse(raw);
-      return !!(session?.companyName || session?.orgContext || session?.knowledgeBase);
-    } catch {
-      return false;
-    }
-  }, []);
 
   // AI call for the org-fit addendum only — goal/role personalization is now handled
   // deterministically inside generateProfileAnalysis (no AI, always instant/reliable).
@@ -69,14 +95,26 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
   useEffect(() => {
     if (!hasOrgContext) return;
+
     let cancelled = false;
+
     setInsightsLoading(true);
     setInsightsError(false);
+
     getIntegratedInsights(scores, backgroundData, lang)
-      .then(text => { if (!cancelled) setInsightsText(text); })
-      .catch(() => { if (!cancelled) setInsightsError(true); })
-      .finally(() => { if (!cancelled) setInsightsLoading(false); });
-    return () => { cancelled = true; };
+      .then(text => {
+        if (!cancelled) setInsightsText(text);
+      })
+      .catch(() => {
+        if (!cancelled) setInsightsError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setInsightsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [scores, backgroundData, hasOrgContext, lang]);
 
   const TABS: { id: TabId; label: string; emoji: string }[] = [
@@ -98,8 +136,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
     }
 
     setIsGeneratingPdf(true);
+
     try {
       input.classList.add('pdf-export-mode');
+
       const canvas = await html2canvas(input, {
         scale: 1.5,
         backgroundColor: '#0f172a',
@@ -109,6 +149,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
         scrollY: -window.scrollY,
         scrollX: 0,
       });
+
       input.classList.remove('pdf-export-mode');
 
       const imgData = canvas.toDataURL('image/jpeg', 0.8);
@@ -124,26 +165,53 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
       pdf.setFillColor(15, 23, 42);
       pdf.rect(0, 0, pageWidth, pageHeight, 'F');
-      pdf.addImage(imgData, 'JPEG', margin, margin, pdfContentWidth, finalContentHeight, undefined, 'FAST');
+      pdf.addImage(
+        imgData,
+        'JPEG',
+        margin,
+        margin,
+        pdfContentWidth,
+        finalContentHeight,
+        undefined,
+        'FAST'
+      );
+
       pdf.setFontSize(7);
       pdf.setTextColor(80, 80, 80);
-      pdf.text('Kilon Consulting - דו"ח סגנון תקשורת אישי', pageWidth / 2, pageHeight - 5, { align: 'center' });
+      pdf.text(
+        'Kilon Consulting - דו"ח סגנון תקשורת אישי',
+        pageWidth / 2,
+        pageHeight - 5,
+        { align: 'center' }
+      );
+
       pdf.save(`Communication_Profile_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
       alert(t('resultsChrome', 'pdfError'));
+
       if (input) input.classList.remove('pdf-export-mode');
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
-  const managerTag = isManager ? t('resultsChrome', 'tagLeadership') : t('resultsChrome', 'tagPeerComm');
+  const managerTag = isManager
+    ? t('resultsChrome', 'tagLeadership')
+    : t('resultsChrome', 'tagPeerComm');
 
   const tabVariants = {
     hidden: { opacity: 0, x: 20 },
-    visible: { opacity: 1, x: 0, transition: { duration: 0.25 } },
-    exit: { opacity: 0, x: -20, transition: { duration: 0.15 } },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: { duration: 0.25 }
+    },
+    exit: {
+      opacity: 0,
+      x: -20,
+      transition: { duration: 0.15 }
+    },
   };
 
   return (
@@ -179,42 +247,102 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
         {/* ── Tab: Profile ── */}
         {activeTab === 'profile' && (
-          <motion.div key="profile" variants={tabVariants} initial="hidden" animate="visible" exit="exit" className="space-y-6 mt-4">
+          <motion.div
+            key="profile"
+            variants={tabVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="space-y-6 mt-4"
+          >
             {/* PDF Wrapper */}
-            <div ref={resultsRef} className={`bg-glass-dark backdrop-blur-2xl p-6 sm:p-10 rounded-[2rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-glass-border overflow-hidden ${dir === 'rtl' ? 'text-right' : 'text-left'} relative`}>
+            <div
+              ref={resultsRef}
+              className={`bg-glass-dark backdrop-blur-2xl p-6 sm:p-10 rounded-[2rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-glass-border overflow-hidden ${
+                dir === 'rtl' ? 'text-right' : 'text-left'
+              } relative`}
+            >
               <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] -mr-32 -mt-32 pointer-events-none"></div>
               <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px] -ml-32 -mb-32 pointer-events-none"></div>
 
               <div className="border-b border-glass-border pb-8 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
                 <div className={`${dir === 'rtl' ? 'text-right' : 'text-left'} flex-1`}>
-                  <h1 className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300 mb-3 drop-shadow-sm">{t('resultsChrome', 'reportTitle')}</h1>
-                  <p className="text-cyan-400 font-bold uppercase tracking-[0.2em]">{t('resultsChrome', 'reportSubtitle')}</p>
+                  <h1 className="text-4xl lg:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300 mb-3 drop-shadow-sm">
+                    {t('resultsChrome', 'reportTitle')}
+                  </h1>
+
+                  <p className="text-cyan-400 font-bold uppercase tracking-[0.2em]">
+                    {t('resultsChrome', 'reportSubtitle')}
+                  </p>
+
                   {backgroundData?.isManager === 'yes' && (
-                    <span className="mt-2 inline-block text-xs bg-amber-500/20 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-full font-semibold">{t('resultsChrome', 'managerBadge')}</span>
+                    <span className="mt-2 inline-block text-xs bg-amber-500/20 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-full font-semibold">
+                      {t('resultsChrome', 'managerBadge')}
+                    </span>
                   )}
                 </div>
+
                 <div className="bg-glass-light p-5 rounded-2xl border border-glass-border text-center min-w-[180px] backdrop-blur-md">
-                  <div className="text-gray-400 text-xs font-bold uppercase mb-1 tracking-widest">{t('resultsChrome', 'issueDate')}</div>
-                  <div className="text-white font-mono text-lg">{new Date().toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US')}</div>
+                  <div className="text-gray-400 text-xs font-bold uppercase mb-1 tracking-widest">
+                    {t('resultsChrome', 'issueDate')}
+                  </div>
+
+                  <div className="text-white font-mono text-lg">
+                    {new Date().toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-US')}
+                  </div>
                 </div>
               </div>
 
               {/* Quick orientation — a short intro before the detailed map & analysis below */}
               <div className="bg-gradient-to-br from-slate-800/40 to-cyan-900/20 p-8 rounded-[2rem] border border-dashed border-cyan-500/30 relative overflow-hidden z-10 shadow-lg backdrop-blur-sm mb-8">
                 <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-3">
-                  <span className="text-cyan-400 text-2xl">📌</span> {t('resultsChrome', 'quickSummaryTitle')}
+                  <span className="text-cyan-400 text-2xl">📌</span>
+                  {t('resultsChrome', 'quickSummaryTitle')}
                 </h3>
-                <p className="text-xs text-gray-400 mb-4">{t('resultsChrome', 'quickSummarySubtitle')}</p>
+
+                <p className="text-xs text-gray-400 mb-4">
+                  {t('resultsChrome', 'quickSummarySubtitle')}
+                </p>
+
                 <ul className="space-y-2.5 text-gray-300 leading-relaxed">
-                  <li className="flex gap-2"><span className="text-white font-bold">{t('resultsChrome', 'quickStrengthLabel')}</span><span>{profileAnalysis.quickStrength}</span></li>
-                  <li className="flex gap-2"><span className="text-white font-bold">{t('resultsChrome', 'quickWeaknessLabel')}</span><span>{profileAnalysis.quickWeakness}</span></li>
-                  <li className="flex gap-2"><span className="text-white font-bold">{t('resultsChrome', 'quickRecommendationLabel')}</span><span>{profileAnalysis.quickRecommendation}</span></li>
+                  <li className="flex gap-2">
+                    <span className="text-white font-bold">
+                      {t('resultsChrome', 'quickStrengthLabel')}
+                    </span>
+                    <span>{profileAnalysis.quickStrength}</span>
+                  </li>
+
+                  <li className="flex gap-2">
+                    <span className="text-white font-bold">
+                      {t('resultsChrome', 'quickWeaknessLabel')}
+                    </span>
+                    <span>{profileAnalysis.quickWeakness}</span>
+                  </li>
+
+                  <li className="flex gap-2">
+                    <span className="text-white font-bold">
+                      {t('resultsChrome', 'quickRecommendationLabel')}
+                    </span>
+                    <span>{profileAnalysis.quickRecommendation}</span>
+                  </li>
                 </ul>
+
                 <div className="mt-6 flex gap-3 flex-wrap">
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{t('resultsChrome', 'tagCombinedMap')}</span>
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{t('resultsChrome', 'tagSelfAwareness')}</span>
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{managerTag}</span>
-                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">{t('resultsChrome', 'tagEffectiveComm')}</span>
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">
+                    {t('resultsChrome', 'tagCombinedMap')}
+                  </span>
+
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">
+                    {t('resultsChrome', 'tagSelfAwareness')}
+                  </span>
+
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">
+                    {managerTag}
+                  </span>
+
+                  <span className="bg-glass-dark px-4 py-2 rounded-full text-xs text-cyan-400 font-bold border border-cyan-500/20 shadow-sm">
+                    {t('resultsChrome', 'tagEffectiveComm')}
+                  </span>
                 </div>
               </div>
 
@@ -225,6 +353,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
                 <div className="flex-none lg:w-[40%] bg-glass-light p-6 rounded-[2rem] border border-glass-border shadow-inner backdrop-blur-sm">
                   <ResultsChart scores={scores} />
                 </div>
+
                 <div className="flex-1 bg-glass-light p-6 rounded-[2rem] border border-glass-border shadow-inner backdrop-blur-sm">
                   <CombinedAnalysis
                     analysis={profileAnalysis}
@@ -239,7 +368,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 no-print">
               <motion.button
-                whileHover={{ scale: 1.03, boxShadow: "0px 10px 30px rgba(16,185,129,0.3)" }}
+                whileHover={{
+                  scale: 1.03,
+                  boxShadow: "0px 10px 30px rgba(16,185,129,0.3)"
+                }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleDownloadPdf}
                 disabled={isGeneratingPdf}
@@ -260,14 +392,17 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
               <div className="flex gap-3">
                 <motion.button
-                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={onEdit}
                   className="bg-glass-light hover:bg-glass-dark text-white font-bold py-3 px-6 rounded-2xl transition-all border border-glass-border text-base shadow-lg backdrop-blur-sm"
                 >
                   {t('resultsChrome', 'editAnswers')}
                 </motion.button>
+
                 <motion.button
-                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={onReset}
                   className="bg-red-900/10 hover:bg-red-900/30 text-red-500 font-bold py-3 px-6 rounded-2xl transition-all border border-red-900/30 text-base shadow-lg backdrop-blur-sm"
                 >
@@ -278,7 +413,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
             {onLogout && (
               <div className="pt-4 pb-2 text-center">
-                <button onClick={onLogout} className="text-gray-500 hover:text-white underline text-sm tracking-[0.2em] font-medium uppercase transition-colors">
+                <button
+                  onClick={onLogout}
+                  className="text-gray-500 hover:text-white underline text-sm tracking-[0.2em] font-medium uppercase transition-colors"
+                >
                   {t('resultsChrome', 'logOutEndSession')}
                 </button>
               </div>
@@ -288,7 +426,14 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
         {/* ── Tab: AI Coach ── */}
         {activeTab === 'coach' && (
-          <motion.div key="coach" variants={tabVariants} initial="hidden" animate="visible" exit="exit" className="mt-4">
+          <motion.div
+            key="coach"
+            variants={tabVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="mt-4"
+          >
             <div className="bg-glass-dark p-6 sm:p-8 rounded-[2rem] shadow-xl border border-glass-border backdrop-blur-xl">
               <AiCoach
                 scores={scores}
@@ -307,7 +452,14 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({ scores, background
 
         {/* ── Tab: Simulator ── */}
         {activeTab === 'simulator' && (
-          <motion.div key="simulator" variants={tabVariants} initial="hidden" animate="visible" exit="exit" className="mt-4">
+          <motion.div
+            key="simulator"
+            variants={tabVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="mt-4"
+          >
             <div className="bg-glass-dark p-6 sm:p-8 rounded-[2rem] shadow-xl border border-glass-border backdrop-blur-xl">
               <CaseStudiesSimulator scores={scores} />
             </div>
