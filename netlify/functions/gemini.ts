@@ -436,7 +436,7 @@ export default async (req: Request, context?: any) => {
         const isQuota = streamError.message?.includes('429') || streamError.message?.includes('RESOURCE_EXHAUSTED') || streamError.message?.includes('quota');
         const isServerBusy = streamError.status === 503 || streamError.message?.includes('503');
 
-        let userMsg = streamError.message || "שגיאה בתקשורת עם ה-AI";
+        let userMsg = "שגיאה בתקשורת עם ה-AI";
         let statusCode = 500;
 
         if (isQuota) {
@@ -473,7 +473,7 @@ export default async (req: Request, context?: any) => {
     const isQuota = error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('quota');
     const isServerBusy = error.status === 503 || error.message?.includes('503');
 
-    let userMsg = error.message || "חלה שגיאה בביצוע הבקשה";
+    let userMsg = "חלה שגיאה בביצוע הבקשה";
     let statusCode = 500;
 
     if (isQuota) {
