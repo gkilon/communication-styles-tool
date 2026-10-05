@@ -86,14 +86,27 @@ export default async (req: Request, context?: any) => {
         dailyLimit: Number(data.dailyLimit ?? 50) || 50
       };
 
-      // Merge in the team's / organization's branding and context
+      // Organization-level branding and context, through the code's own organizationId.
+      // Admin-created codes carry only the id (not the context itself), and an
+      // organization-wide code has no team at all — so this is the only way it gets context.
+      if (data.organizationId) {
+        const org = await getOrganizationById(db, String(data.organizationId));
+        if (org) {
+          result.companyName = result.companyName ?? org.companyName;
+          result.logoUrl = result.logoUrl ?? org.logoUrl;
+          result.orgContext = result.orgContext ?? org.orgContext;
+          result.knowledgeBase = result.knowledgeBase ?? org.knowledgeBase;
+        }
+      }
+
+      // Team-level branding and context (the team's own values win over the organization's)
       if (teamName !== 'General') {
         const teamObj = await getTeamByName(db, teamName);
         if (teamObj) {
-          result.companyName = teamObj.companyName;
-          result.logoUrl = teamObj.logoUrl;
-          result.orgContext = teamObj.orgContext;
-          result.knowledgeBase = teamObj.knowledgeBase;
+          result.companyName = teamObj.companyName ?? result.companyName;
+          result.logoUrl = teamObj.logoUrl ?? result.logoUrl;
+          result.orgContext = teamObj.orgContext ?? result.orgContext;
+          result.knowledgeBase = teamObj.knowledgeBase ?? result.knowledgeBase;
         }
       }
       return json(result);
