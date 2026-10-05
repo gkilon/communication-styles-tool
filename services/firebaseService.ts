@@ -1,5 +1,5 @@
 import { db, auth, isFirebaseInitialized } from '../firebaseConfig';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { Scores, UserProfile, Team, Organization, BackgroundData } from '../types';
 import { User } from 'firebase/auth';
 
@@ -7,26 +7,70 @@ import { User } from 'firebase/auth';
 // --- USERS & RESULTS ---
 
 // שמירת תוצאות המשתמש בבסיס הנתונים (למשתמש מחובר)
-export const saveUserResults = async (scores: Scores, backgroundData?: BackgroundData) => {
+export const saveUserResults = async (scores: Scores, backgroundData?: BackgroundData, answers?: Record<string, number>): Promise<string | null> => {
   const user = auth.currentUser;
-  if (!user) return;
+  if (!user) return null;
 
   const userRef = doc(db, "users", user.uid);
+  const completedAt = new Date().toISOString();
 
   try {
     const payload: any = {
       scores: scores,
-      completedAt: new Date().toISOString()
+      completedAt
     };
     if (backgroundData) {
       payload.backgroundData = backgroundData;
     }
+    // The raw answers are saved too, so the same profile (and "edit my answers") is
+    // available on every device the user signs in from.
+    if (answers) {
+      payload.answers = answers;
+    }
     await setDoc(userRef, payload, { merge: true });
     console.log("Results saved successfully");
+    return completedAt;
   } catch (error) {
     console.error("Error saving results:", error);
     throw error;
   }
+};
+
+export interface AccountProfile {
+  scores: Scores;
+  completedAt?: string;
+  backgroundData?: BackgroundData;
+  answers?: Record<string, number>;
+}
+
+// The user's saved profile from their account — one profile per account, shared by
+// every device. Returns null if the user hasn't completed the questionnaire yet.
+export const loadAccountProfile = async (): Promise<AccountProfile | null> => {
+  const user = auth.currentUser;
+  if (!user) return null;
+  const snap = await getDoc(doc(db, "users", user.uid));
+  if (!snap.exists()) return null;
+  const data = snap.data() as any;
+  if (!data.scores || typeof data.scores !== 'object') return null;
+  return {
+    scores: data.scores as Scores,
+    completedAt: data.completedAt,
+    backgroundData: data.backgroundData,
+    answers: data.answers && typeof data.answers === 'object' ? data.answers : undefined
+  };
+};
+
+// "Delete my answers and start over": removes the profile from the account too, so the
+// old one doesn't come back on this or another device.
+export const clearAccountProfile = async (): Promise<void> => {
+  const user = auth.currentUser;
+  if (!user) return;
+  await updateDoc(doc(db, "users", user.uid), {
+    scores: deleteField(),
+    answers: deleteField(),
+    backgroundData: deleteField(),
+    completedAt: deleteField()
+  });
 };
 
 // נקרא פעם אחת מיד אחרי הרשמה/כניסה מוצלחת ב-AuthGate (Google או אימייל+סיסמה),

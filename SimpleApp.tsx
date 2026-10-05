@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { IntroScreen } from './components/IntroScreen';
 import { QuestionnaireScreen } from './components/QuestionnaireScreen';
 import { ResultsScreen } from './components/ResultsScreen';
@@ -9,7 +9,8 @@ import { LanguageToggle } from './components/LanguageToggle';
 import { Scores, BackgroundData, UserSession } from './types';
 import { QUESTION_PAIRS } from './constants/questionnaireData';
 import { isFirebaseInitialized } from './firebaseConfig';
-import { saveUserResults } from './services/firebaseService';
+import { saveUserResults, loadAccountProfile, clearAccountProfile } from './services/firebaseService';
+import type { AccountProfile } from './services/firebaseService';
 import { useLanguage } from './i18n/LanguageContext';
 import { useT } from './i18n/useT';
 
@@ -25,8 +26,23 @@ const STORAGE_KEY_STEP = 'comm_style_step';
 const STORAGE_KEY_INDEX = 'comm_style_index';
 const STORAGE_KEY_BG = 'comm_style_background';
 const STORAGE_KEY_SESSION = 'comm_style_session';
+// When this device's profile was last saved to / loaded from the account.
+const STORAGE_KEY_COMPLETED = 'comm_style_completedAt';
 
 const DEFAULT_BACKGROUND: BackgroundData = { gender: '', isManager: '', goal: '' };
+
+const computeScores = (answers: Record<string, number>): Scores => {
+  const result: Scores = { a: 0, b: 0, c: 0, d: 0 };
+  QUESTION_PAIRS.forEach(q => {
+    const val = answers[q.id];
+    if (val !== undefined && val > 0) {
+      const [col1, col2] = q.columns;
+      result[col1] += (6 - val);
+      result[col2] += (val - 1);
+    }
+  });
+  return result;
+};
 
 const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPreviewingAsAdmin, onReturnToAdmin }) => {
   const { dir } = useLanguage();
@@ -78,31 +94,83 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
     }
   }, [answers, step, currentQuestionIndex, backgroundData, session]);
 
+  // One profile per account: the saved profile in the user's account is the source of
+  // truth on every device. `profileOverride` is used when the account has scores but no
+  // raw answers (profiles saved before answers were stored).
+  const [profileOverride, setProfileOverride] = useState<Scores | null>(null);
+  const [accountSynced, setAccountSynced] = useState<boolean>(false);
+  const justSubmittedRef = useRef(false);
+
   const scores = useMemo<Scores | null>(() => {
     if (step !== 'results') return null;
+    if (profileOverride && Object.keys(answers).length === 0) return profileOverride;
 
-    const newScores: Scores = { a: 0, b: 0, c: 0, d: 0 };
-    let totalQuestions = 0;
+    const answeredAny = QUESTION_PAIRS.some(q => (answers[q.id] ?? 0) > 0);
+    if (!answeredAny) return { a: 0, b: 0, c: 0, d: 0 };
+    return computeScores(answers);
+  }, [step, answers, profileOverride]);
 
-    QUESTION_PAIRS.forEach(q => {
-      const val = answers[q.id];
-      if (val !== undefined && val > 0) {
-        const [col1, col2] = q.columns;
-        newScores[col1] += (6 - val);
-        newScores[col2] += (val - 1);
-        totalQuestions++;
-      }
-    });
-
-    if (totalQuestions === 0) return { a: 0, b: 0, c: 0, d: 0 };
-    return newScores;
-  }, [step, answers]);
-
-  // Save to DB once the questionnaire is done — every participant now has a real
-  // Firebase user (created in AuthGate), so this single path covers everyone.
+  // After sign-in, compare this device with the account. If the account holds a newer
+  // profile (filled in on another device, or redone), adopt it — so the user always sees
+  // the same, latest profile. A device with no profile of its own adopts it too.
   useEffect(() => {
-    if (step === 'results' && scores && user) {
-      saveUserResults(scores, backgroundData).catch(err => console.error("Firebase save error:", err));
+    if (!user) {
+      setAccountSynced(true);
+      return;
+    }
+    let cancelled = false;
+    setAccountSynced(false);
+    (async () => {
+      try {
+        const remote: AccountProfile | null = await loadAccountProfile();
+        if (cancelled || !remote) return;
+        const localCompletedAt = localStorage.getItem(STORAGE_KEY_COMPLETED);
+        const hasLocalResult = !!localCompletedAt || (step === 'results' && Object.keys(answers).length > 0);
+        const remoteIsNewer = !!remote.completedAt && (!localCompletedAt || remote.completedAt > localCompletedAt);
+        if (!remoteIsNewer && hasLocalResult) return;
+
+        // Profiles saved before answers were stored: if this device's own answers produce
+        // exactly the saved scores, keep them (so "edit my answers" still works) and
+        // upgrade the account copy to include the answers.
+        const localScores = computeScores(answers);
+        const sameAsLocal = !remote.answers && hasLocalResult && Object.keys(answers).length > 0 &&
+          localScores.a === remote.scores.a && localScores.b === remote.scores.b &&
+          localScores.c === remote.scores.c && localScores.d === remote.scores.d;
+        if (sameAsLocal) {
+          const ts = await saveUserResults(remote.scores, remote.backgroundData || backgroundData, answers);
+          if (ts) localStorage.setItem(STORAGE_KEY_COMPLETED, ts);
+          return;
+        }
+
+        setBackgroundData(remote.backgroundData || DEFAULT_BACKGROUND);
+        if (remote.answers && Object.keys(remote.answers).length > 0) {
+          setAnswers(remote.answers);
+          setProfileOverride(null);
+        } else {
+          setAnswers({});
+          setProfileOverride(remote.scores);
+        }
+        setStep('results');
+        if (remote.completedAt) localStorage.setItem(STORAGE_KEY_COMPLETED, remote.completedAt);
+      } catch (err) {
+        console.error('Profile sync error:', err);
+      } finally {
+        if (!cancelled) setAccountSynced(true);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
+
+  // Save to the account only when the user actually completes (or redoes) the
+  // questionnaire — not whenever the results screen is merely displayed, so a device
+  // that just shows an older profile can never overwrite a newer one.
+  useEffect(() => {
+    if (step === 'results' && scores && user && justSubmittedRef.current) {
+      justSubmittedRef.current = false;
+      saveUserResults(scores, backgroundData, answers)
+        .then(ts => { if (ts) localStorage.setItem(STORAGE_KEY_COMPLETED, ts); })
+        .catch(err => console.error("Firebase save error:", err));
     }
   }, [step, scores, user]);
 
@@ -128,11 +196,15 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
     setStep('questionnaire');
   };
 
-  const handleSubmit = () => setStep('results');
+  const handleSubmit = () => {
+    justSubmittedRef.current = true;
+    setStep('results');
+  };
 
   const handleReset = () => {
     if (!window.confirm(t('shell', 'resetConfirm'))) return;
     setAnswers({});
+    setProfileOverride(null);
     setCurrentQuestionIndex(0);
     setBackgroundData(DEFAULT_BACKGROUND);
     setStep('intro');
@@ -140,6 +212,9 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
     localStorage.removeItem(STORAGE_KEY_STEP);
     localStorage.removeItem(STORAGE_KEY_INDEX);
     localStorage.removeItem(STORAGE_KEY_BG);
+    localStorage.removeItem(STORAGE_KEY_COMPLETED);
+    // Also remove it from the account, so the old profile doesn't come back on any device.
+    clearAccountProfile().catch(err => console.error('Error clearing account profile:', err));
   };
 
   const handleEditAnswers = () => {
@@ -154,10 +229,12 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
     // previous person's in-progress or completed questionnaire.
     setSession(null);
     setAnswers({});
+    setProfileOverride(null);
     setCurrentQuestionIndex(0);
     setBackgroundData(DEFAULT_BACKGROUND);
     setStep('intro');
     localStorage.removeItem(STORAGE_KEY_SESSION);
+    localStorage.removeItem(STORAGE_KEY_COMPLETED);
     localStorage.removeItem(STORAGE_KEY_ANSWERS);
     localStorage.removeItem(STORAGE_KEY_STEP);
     localStorage.removeItem(STORAGE_KEY_INDEX);
@@ -232,6 +309,8 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
             />
           ) : !user ? (
             <AuthGate session={session} onDone={() => { /* onAuthStateChanged in App.tsx picks up the new user automatically */ }} />
+          ) : !accountSynced ? (
+            <div className="text-center text-gray-300 py-20">{t('common', 'loading')}</div>
           ) : (
             <div className="w-full">
               {step === 'intro' && (

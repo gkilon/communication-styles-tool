@@ -235,23 +235,61 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
   const secondaryPercentage = Math.round((colorScores[secondary] / totalScore) * 100);
   const pairKey = comboKey(dominant, secondary);
 
+  // How strongly does one style lead? The text below changes with the *shape* of the
+  // profile, not only with the order of the colors, so two people with the same top color
+  // but a very different balance get a noticeably different reading.
+  const share = (col: Color) => (colorScores[col] / totalScore) * 100;
+  const domShare = share(dominant);
+  const gapToSecond = domShare - share(secondary);
+  const spread = domShare - share(weakest);
+  type Shape = 'balanced' | 'twoStyles' | 'strong' | 'moderate';
+  const shape: Shape =
+    spread < 12 ? 'balanced' :
+    gapToSecond < 6 ? 'twoStyles' :
+    (domShare >= 40 || gapToSecond >= 12) ? 'strong' : 'moderate';
+  const he = lang === 'he';
+
   // --- Generate Analysis Texts Dynamically ---
 
   // 1. General Analysis — trait-led, color name kept to a single small mention
-  let general = lang === 'he'
-    ? `הפרופיל שלך מראה נטייה ברורה וחזקה להיות ${dominantData.adjective} (במודל המקצועי: סגנון ${dominantData.name} דומיננטי). המשמעות היא ש${dominantData.general} המפה המשולבת שלך מגלה כיצד הנטיות הללו מתבטאות בפועל בצמתי ההתנהגות השונים.`
-    : `Your profile shows a clear, strong tendency to be ${dominantData.adjective} (in the professional model: a dominant ${dominantData.name} style). This means ${dominantData.general} Your combined map reveals how these tendencies actually play out at key behavioral moments.`;
-
-  if (secondaryPercentage > 20) {
-    general += lang === 'he'
-      ? ` לצד זה, יש בך גם מידה משמעותית של האופי ה${secondaryData.adjective}. השילוב הזה מעניק לך גישה ייחודית: `
-      : ` Alongside this, you also carry a significant measure of the ${secondaryData.adjective} character. This combination gives you a distinctive approach: `;
-    const combo = COMBO_GENERAL[pairKey];
-    if (combo) general += combo[lang];
-  } else {
-    general += lang === 'he'
+  let general: string;
+  if (shape === 'strong') {
+    general = he
+      ? `הפרופיל שלך מראה נטייה מובהקת ובולטת מאוד להיות ${dominantData.adjective} (במודל המקצועי: סגנון ${dominantData.name} דומיננטי מאוד). המשמעות היא ש${dominantData.general} המפה המשולבת שלך מגלה כיצד הנטיות הללו מתבטאות בפועל בצמתי ההתנהגות השונים.`
+      : `Your profile shows a distinct, very prominent tendency to be ${dominantData.adjective} (in the professional model: a strongly dominant ${dominantData.name} style). This means ${dominantData.general} Your combined map reveals how these tendencies actually play out at key behavioral moments.`;
+    general += he
       ? ` הפרופיל שלך ממוקד ביותר — נטייה אחת בולטת בבירור על פני האחרות. זה הופך את סגנון התקשורת שלך לעקבי ומזוהה, ומאפשר לסביבה שלך לדעת למה לצפות ממך.`
       : ` Your profile is highly focused — one tendency clearly stands out over the others. This makes your communication style consistent and recognizable, letting the people around you know what to expect from you.`;
+    if (secondaryPercentage > 20) {
+      general += he
+        ? ` הצד ה${secondaryData.adjective} שבך משמש גיבוי משני.`
+        : ` The ${secondaryData.adjective} side of you serves as a secondary backup.`;
+    }
+  } else if (shape === 'twoStyles') {
+    general = he
+      ? `הפרופיל שלך מציג שני סגנונות כמעט שווים בעוצמתם: ${dominantData.adjective} ו${secondaryData.adjective} (במודל המקצועי: ${dominantData.name} ו${secondaryData.name}). אין כאן סגנון אחד שמוביל בבירור, ואתה נע בין שני העולמות. מצד אחד: ${dominantData.general} מצד שני: ${secondaryData.general}`
+      : `Your profile shows two styles of almost equal strength: ${dominantData.adjective} and ${secondaryData.adjective} (in the professional model: ${dominantData.name} and ${secondaryData.name}). No single style clearly leads — you move between two worlds. On one hand: ${dominantData.general} On the other: ${secondaryData.general}`;
+    const combo = COMBO_GENERAL[pairKey];
+    if (combo) general += (he ? ' השילוב ביניהם: ' : ' The combination of the two: ') + combo[lang];
+  } else if (shape === 'balanced') {
+    general = he
+      ? `הפרופיל שלך מאוזן יחסית: ארבע האנרגיות נוכחות אצלך בעוצמות קרובות, ואף סגנון אינו מוביל בבירור. יש נטייה קלה להיות ${dominantData.adjective} (${dominantData.name}), אבל היא לא מה שמגדיר אותך. זה נותן לך גמישות: אתה מסוגל לעבור בין סגנונות לפי הסיטואציה ולהתחבר לסוגים שונים של אנשים.`
+      : `Your profile is relatively balanced: all four energies are present at similar strength, and no style clearly leads. There is a slight lean toward being ${dominantData.adjective} (${dominantData.name}), but it isn't what defines you. This gives you flexibility: you can move between styles depending on the situation and connect with very different kinds of people.`;
+  } else {
+    general = he
+      ? `הפרופיל שלך מראה נטייה ברורה להיות ${dominantData.adjective} (במודל המקצועי: סגנון ${dominantData.name} דומיננטי). המשמעות היא ש${dominantData.general} המפה המשולבת שלך מגלה כיצד הנטיות הללו מתבטאות בפועל בצמתי ההתנהגות השונים.`
+      : `Your profile shows a clear tendency to be ${dominantData.adjective} (in the professional model: a dominant ${dominantData.name} style). This means ${dominantData.general} Your combined map reveals how these tendencies actually play out at key behavioral moments.`;
+    if (secondaryPercentage > 20) {
+      general += he
+        ? ` לצד זה, יש בך גם מידה משמעותית של האופי ה${secondaryData.adjective}. השילוב הזה מעניק לך גישה ייחודית: `
+        : ` Alongside this, you also carry a significant measure of the ${secondaryData.adjective} character. This combination gives you a distinctive approach: `;
+      const combo = COMBO_GENERAL[pairKey];
+      if (combo) general += combo[lang];
+    } else {
+      general += he
+        ? ` הפרופיל שלך ממוקד ביותר — נטייה אחת בולטת בבירור על פני האחרות. זה הופך את סגנון התקשורת שלך לעקבי ומזוהה, ומאפשר לסביבה שלך לדעת למה לצפות ממך.`
+        : ` Your profile is highly focused — one tendency clearly stands out over the others. This makes your communication style consistent and recognizable, letting the people around you know what to expect from you.`;
+    }
   }
 
   // Goal/role-tailored addendum — deterministic (no AI call), so this always reflects the
@@ -266,62 +304,132 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
   if (goalAddendum) general += ' ' + goalAddendum;
 
   // 2. Strengths Analysis — deeper, map-oriented, no color naming
-  let strengths = lang === 'he'
-    ? `החוזקות הטבעיות שלך: ${dominantData.strengths.slice(0, 3).join(', ')}. `
-    : `Your natural strengths: ${dominantData.strengths.slice(0, 3).join(', ')}. `;
-  strengths += lang === 'he'
-    ? `אלה אינן רק תכונות — הן מתבטאות בהתנהגות יומיומית ומשפיעות על האופן שבו אחרים חווים אותך בשיחה, בישיבה, ובמצבי לחץ. `
-    : `These aren't just traits — they show up in everyday behavior and shape how others experience you in conversation, in meetings, and under pressure. `;
-  if (secondaryPercentage > 20) {
-    strengths += lang === 'he'
-      ? `הצד ה${secondaryData.adjective} שבך מעשיר את הפרופיל ב${secondaryData.strengths[0]} וב${secondaryData.strengths[1]}. `
-      : `The ${secondaryData.adjective} side of you enriches the profile with ${secondaryData.strengths[0]} and ${secondaryData.strengths[1]}. `;
-    const combo = COMBO_STRENGTHS[pairKey];
-    strengths += combo ? combo[lang] : GENERIC_COMBO_STRENGTH[lang];
+  let strengths: string;
+  if (shape === 'balanced') {
+    strengths = he
+      ? `הגמישות היא החוזקה המרכזית שלך: ארבע האנרגיות נגישות לך, ולכן קל לך להבין אנשים בסגנונות שונים ולהתאים את עצמך לסיטואציה. הנטייה הקלה להיות ${dominantData.adjective} נותנת לך נקודת פתיחה טבעית: ${dominantData.strengths[0]} ו${dominantData.strengths[1]}. `
+      : `Flexibility is your central strength: all four energies are available to you, so it's easy to understand people with different styles and adapt to the situation. Your slight lean toward being ${dominantData.adjective} gives you a natural starting point: ${dominantData.strengths[0]} and ${dominantData.strengths[1]}. `;
+  } else {
+    strengths = he
+      ? `החוזקות הטבעיות שלך: ${dominantData.strengths.slice(0, 3).join(', ')}. `
+      : `Your natural strengths: ${dominantData.strengths.slice(0, 3).join(', ')}. `;
+    strengths += he
+      ? `אלה אינן רק תכונות — הן מתבטאות בהתנהגות יומיומית ומשפיעות על האופן שבו אחרים חווים אותך בשיחה, בישיבה, ובמצבי לחץ. `
+      : `These aren't just traits — they show up in everyday behavior and shape how others experience you in conversation, in meetings, and under pressure. `;
+    if (secondaryPercentage > 20) {
+      strengths += he
+        ? `הצד ה${secondaryData.adjective} שבך מעשיר את הפרופיל ב${secondaryData.strengths[0]} וב${secondaryData.strengths[1]}. `
+        : `The ${secondaryData.adjective} side of you enriches the profile with ${secondaryData.strengths[0]} and ${secondaryData.strengths[1]}. `;
+      const combo = COMBO_STRENGTHS[pairKey];
+      strengths += combo ? combo[lang] : GENERIC_COMBO_STRENGTH[lang];
+    }
   }
 
   // 3. Weaknesses/Development Areas Analysis — deeper, candid but constructive, no color naming
-  let weaknesses = lang === 'he'
-    ? `כל סגנון חזק מגיע עם 'צד צל'. הנטייה שלך להיות ${dominantData.adjective} עלולה להוביל ל${dominantData.weaknesses[0]} ול${dominantData.weaknesses[1]} — לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
-    : `Every strong style comes with a "shadow side." Your tendency to be ${dominantData.adjective} can lead to ${dominantData.weaknesses[0]} and ${dominantData.weaknesses[1]} — not a failure, but an automatic pattern running under the radar. `;
-  weaknesses += lang === 'he'
-    ? `חשוב להכיר בכך שהחוזקה הגדולה ביותר, כשהיא מופעלת בעוצמה יתרה, היא גם נקודת הפגיעות. `
-    : `It's worth recognizing that your greatest strength, when overused, is also your point of vulnerability. `;
-  if (secondaryPercentage > 20) {
-    weaknesses += lang === 'he'
-      ? `השילוב עם הצד ה${secondaryData.adjective} יכול להעצים נקודת עיוורון ספציפית: ${secondaryData.weaknesses[0]}. `
-      : `Combined with the ${secondaryData.adjective} side, this can amplify one specific blind spot: ${secondaryData.weaknesses[0]}. `;
-  }
-  weaknesses += lang === 'he'
+  let weaknesses: string;
+  const weakestSentence = he
     ? `המפה המשולבת גם מגלה שהנטייה להיות ${weakestData.adjective} נמוכה יחסית אצלך — מה שאומר שתכונות כמו ${weakestData.strengths[0]} ו${weakestData.strengths[1]} לא מגיעות אליך באופן אוטומטי. זהו אזור פיתוח שדורש מאמץ מודע, אך גם מסמן לאן הצמיחה הגדולה ביותר שלך יכולה להגיע.`
     : `Your combined map also reveals that the tendency to be ${weakestData.adjective} is relatively low for you — meaning traits like ${weakestData.strengths[0]} and ${weakestData.strengths[1]} don't come to you automatically. This is a development area that takes conscious effort, but it also marks where your biggest growth can happen.`;
+  if (shape === 'balanced') {
+    weaknesses = he
+      ? `מכיוון שאין נטייה דומיננטית, הקושי אצלך הוא פחות 'צד צל' מובהק ויותר היעדר ברירת מחדל ברורה: לפעמים קשה להחליט איזה סגנון מתאים ברגע נתון, ואחרים עלולים לתפוס אותך כפחות עקבי או כפחות 'חד'. אם יש כיוון פיתוח, זו הנטייה להיות ${weakestData.adjective}, אבל הפער בינה לבין שאר הסגנונות אצלך קטן.`
+      : `Because there is no dominant tendency, the challenge for you is less a distinct "shadow side" and more the lack of a clear default: it can be hard to decide which style fits a given moment, and others may see you as less consistent or less "sharp." If there is a direction for development, it is the tendency to be ${weakestData.adjective}, but the gap between it and your other styles is small.`;
+  } else if (shape === 'twoStyles') {
+    weaknesses = he
+      ? `הקושי אצלך הוא פחות בצל של סגנון אחד, ויותר במתח הפנימי בין שני הסגנונות. ברגע אחד אתה ${dominantData.adjective}, וברגע אחר ${secondaryData.adjective}, ולפעמים אחרים לא יודעים למה לצפות ממך. הצל של כל צד: ${dominantData.weaknesses[0]} מצד אחד, ו${secondaryData.weaknesses[0]} מצד שני. ` + weakestSentence
+      : `The challenge for you is less the shadow of a single style and more the inner tension between two styles. One moment you're ${dominantData.adjective}, the next ${secondaryData.adjective}, and others may not know what to expect from you. The shadow of each side: ${dominantData.weaknesses[0]} on one hand, and ${secondaryData.weaknesses[0]} on the other. ` + weakestSentence;
+  } else if (shape === 'strong') {
+    weaknesses = he
+      ? `הנטייה שלך להיות ${dominantData.adjective} כל כך בולטת, שה'צד הצל' שלה מופיע מהר ובעוצמה, במיוחד בלחץ: ${dominantData.weaknesses[0]} ו${dominantData.weaknesses[1]}. זה לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
+      : `Your tendency to be ${dominantData.adjective} is so prominent that its "shadow side" shows up quickly and strongly, especially under pressure: ${dominantData.weaknesses[0]} and ${dominantData.weaknesses[1]}. This isn't a failure, but an automatic pattern running under the radar. `;
+    weaknesses += he
+      ? `חשוב להכיר בכך שהחוזקה הגדולה ביותר, כשהיא מופעלת בעוצמה יתרה, היא גם נקודת הפגיעות. `
+      : `It's worth recognizing that your greatest strength, when overused, is also your point of vulnerability. `;
+    if (secondaryPercentage > 20) {
+      weaknesses += he
+        ? `השילוב עם הצד ה${secondaryData.adjective} יכול להעצים נקודת עיוורון ספציפית: ${secondaryData.weaknesses[0]}. `
+        : `Combined with the ${secondaryData.adjective} side, this can amplify one specific blind spot: ${secondaryData.weaknesses[0]}. `;
+    }
+    weaknesses += weakestSentence;
+  } else {
+    weaknesses = he
+      ? `כל סגנון חזק מגיע עם 'צד צל'. הנטייה שלך להיות ${dominantData.adjective} עלולה להוביל ל${dominantData.weaknesses[0]} ול${dominantData.weaknesses[1]} — לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
+      : `Every strong style comes with a "shadow side." Your tendency to be ${dominantData.adjective} can lead to ${dominantData.weaknesses[0]} and ${dominantData.weaknesses[1]} — not a failure, but an automatic pattern running under the radar. `;
+    weaknesses += he
+      ? `חשוב להכיר בכך שהחוזקה הגדולה ביותר, כשהיא מופעלת בעוצמה יתרה, היא גם נקודת הפגיעות. `
+      : `It's worth recognizing that your greatest strength, when overused, is also your point of vulnerability. `;
+    if (secondaryPercentage > 20) {
+      weaknesses += he
+        ? `השילוב עם הצד ה${secondaryData.adjective} יכול להעצים נקודת עיוורון ספציפית: ${secondaryData.weaknesses[0]}. `
+        : `Combined with the ${secondaryData.adjective} side, this can amplify one specific blind spot: ${secondaryData.weaknesses[0]}. `;
+    }
+    weaknesses += weakestSentence;
+  }
 
   // 4. Recommendations Analysis — no color naming
-  let recommendations = lang === 'he'
-    ? `ההמלצה הראשונה עבורך: ${dominantData.recommendation_focus}. `
-    : `Your first recommendation: ${dominantData.recommendation_focus}. `;
-  recommendations += lang === 'he'
-    ? `נסה לשאול את עצמך בשיחות מפתח: "איך מישהו ${weakestData.adjective} היה מתייחס לרגע הזה?" — לאו דווקא כדי לשנות את עצמך, אלא כדי להרחיב את ה'תפריט' שלך. `
-    : `In key conversations, try asking yourself: "How would someone ${weakestData.adjective} approach this moment?" — not to change who you are, but to expand your own "menu" of options. `;
-  if (secondaryPercentage > 20) {
-    recommendations += lang === 'he'
-      ? `הכוח של הפרופיל שלך טמון בשילוב שבין הצד ה${dominantData.adjective} לצד ה${secondaryData.adjective} שבך. נסה לאמץ גם כלים מהצד הזה: ${secondaryData.recommendation_focus}. `
-      : `The strength of your profile lies in the combination between your ${dominantData.adjective} side and your ${secondaryData.adjective} side. Try picking up tools from that side too: ${secondaryData.recommendation_focus}. `;
+  let recommendations: string;
+  if (shape === 'balanced') {
+    recommendations = he
+      ? `ההמלצה הראשונה עבורך: לבנות 'חתימה' ברורה. בחר מראש באילו סיטואציות אתה מוביל בסגנון מסוים (למשל, בהחלטות, בשיחות קשות, בהצגת רעיונות), כדי שאחרים יידעו למה לצפות ממך. `
+      : `Your first recommendation: build a clear "signature." Decide in advance which situations you lead with a particular style (for example, decisions, difficult conversations, presenting ideas), so others know what to expect from you. `;
+    recommendations += he
+      ? `בנוסף, כדאי לשים לב לרגעים שבהם אתה 'מתאים את עצמך' אוטומטית לאדם שמולך, ולוודא שאתה עדיין נשאר נאמן לעמדה שלך. הגמישות היא כוח, כל עוד היא נעשית מתוך בחירה.`
+      : `Also, notice the moments when you automatically "adapt" to the person in front of you, and make sure you still stay true to your own position. Flexibility is a strength, as long as it's a choice.`;
+  } else {
+    recommendations = he
+      ? `ההמלצה הראשונה עבורך: ${dominantData.recommendation_focus}. `
+      : `Your first recommendation: ${dominantData.recommendation_focus}. `;
+    if (shape === 'strong') {
+      recommendations += he
+        ? `מכיוון שהנטייה שלך חזקה, שווה לקבוע לעצמך 'עצירה' קצרה לפני שיחות והחלטות חשובות, כדי לבדוק אם הסגנון האוטומטי הוא גם הבחירה המתאימה לרגע. `
+        : `Because your tendency is strong, it's worth building a short "pause" before important conversations and decisions, to check whether your automatic style is also the right choice for the moment. `;
+    }
+    if (shape === 'twoStyles') {
+      recommendations += he
+        ? `מכיוון שיש לך שני סגנונות כמעט שווים, ההמלצה המרכזית היא לזהות מתי כל אחד מהם מתעורר ולבחור במכוון באיזה מהם לפעול. כדאי גם לשתף אחרים באיזה 'מצב' אתה נמצא כרגע, כדי להפחית בלבול. `
+        : `Because you have two styles of almost equal strength, the key recommendation is to notice when each one is triggered and to deliberately choose which to act from. It also helps to tell others which "mode" you're in right now, to reduce confusion. `;
+    }
+    recommendations += he
+      ? `נסה לשאול את עצמך בשיחות מפתח: "איך מישהו ${weakestData.adjective} היה מתייחס לרגע הזה?" — לאו דווקא כדי לשנות את עצמך, אלא כדי להרחיב את ה'תפריט' שלך. `
+      : `In key conversations, try asking yourself: "How would someone ${weakestData.adjective} approach this moment?" — not to change who you are, but to expand your own "menu" of options. `;
+    if (secondaryPercentage > 20 && shape !== 'twoStyles') {
+      recommendations += he
+        ? `הכוח של הפרופיל שלך טמון בשילוב שבין הצד ה${dominantData.adjective} לצד ה${secondaryData.adjective} שבך. נסה לאמץ גם כלים מהצד הזה: ${secondaryData.recommendation_focus}. `
+        : `The strength of your profile lies in the combination between your ${dominantData.adjective} side and your ${secondaryData.adjective} side. Try picking up tools from that side too: ${secondaryData.recommendation_focus}. `;
+    }
+    recommendations += he
+      ? `ההמלצה המרכזית: ${weakestData.recommendation_focus}, גם כשזה לא מרגיש טבעי. זה יהפוך אותך מ'מומחה בסגנון שלי' לאדם שיכול לדבר בשפה של כל סגנון — וזה ההבדל בין תקשורת טובה לתקשורת מצוינת.`
+      : `The key recommendation: ${weakestData.recommendation_focus}, even when it doesn't feel natural. This is what turns you from "an expert in my own style" into someone who can speak the language of every style — and that's the difference between good communication and excellent communication.`;
   }
-  recommendations += lang === 'he'
-    ? `ההמלצה המרכזית: ${weakestData.recommendation_focus}, גם כשזה לא מרגיש טבעי. זה יהפוך אותך מ'מומחה בסגנון שלי' לאדם שיכול לדבר בשפה של כל סגנון — וזה ההבדל בין תקשורת טובה לתקשורת מצוינת.`
-    : `The key recommendation: ${weakestData.recommendation_focus}, even when it doesn't feel natural. This is what turns you from "an expert in my own style" into someone who can speak the language of every style — and that's the difference between good communication and excellent communication.`;
 
   // Short one-line versions for the "at a glance" summary box — plain trait language, no color names
-  const quickStrength = lang === 'he'
+  const quickStrength = he
     ? `${dominantData.strengths[0]} ו${dominantData.strengths[1]}`
     : `${dominantData.strengths[0]} and ${dominantData.strengths[1]}`;
-  const quickWeakness = lang === 'he'
-    ? `${dominantData.weaknesses[0]}, ו${weakestData.strengths[0]} לא מגיע אליך באופן טבעי`
-    : `${dominantData.weaknesses[0]}, and ${weakestData.strengths[0]} doesn't come naturally to you`;
-  const quickRecommendation = lang === 'he'
-    ? `${dominantData.recommendation_focus}, ולתרגל ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`
-    : `${dominantData.recommendation_focus}, and practice ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`;
+  let quickWeakness: string;
+  let quickRecommendation: string;
+  if (shape === 'balanced') {
+    quickWeakness = he
+      ? `אין סגנון ברירת מחדל ברור, ולכן לפעמים קשה לדעת איזה סגנון מתאים לרגע`
+      : `There is no clear default style, so it can be hard to know which style fits the moment`;
+    quickRecommendation = he
+      ? `לבחור מראש באילו סיטואציות אתה מוביל בסגנון מסוים`
+      : `Decide in advance which situations you lead with a particular style`;
+  } else if (shape === 'twoStyles') {
+    quickWeakness = he
+      ? `מתח בין ${dominantData.adjective} ל${secondaryData.adjective} שעלול ליצור חוסר עקביות כלפי אחרים`
+      : `Tension between being ${dominantData.adjective} and ${secondaryData.adjective}, which can look inconsistent to others`;
+    quickRecommendation = he
+      ? `לזהות מתי כל צד מתעורר ולבחור במכוון, ולתרגל ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`
+      : `Notice when each side is triggered and choose deliberately, and practice ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`;
+  } else {
+    quickWeakness = he
+      ? `${dominantData.weaknesses[0]}, ו${weakestData.strengths[0]} לא מגיע אליך באופן טבעי`
+      : `${dominantData.weaknesses[0]}, and ${weakestData.strengths[0]} doesn't come naturally to you`;
+    quickRecommendation = he
+      ? `${dominantData.recommendation_focus}, ולתרגל ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`
+      : `${dominantData.recommendation_focus}, and practice ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`;
+  }
 
   return { general, strengths, weaknesses, recommendations, quickStrength, quickWeakness, quickRecommendation };
 };
