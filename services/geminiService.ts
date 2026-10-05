@@ -72,6 +72,9 @@ function buildOrgContext(): string {
   }
   
   prompt += `\nUse the organizational context as real context for this user's situation. Tailor your response to the interaction between the user's communication profile and the organizational environment. Do not ignore, generalize, or replace the organizational context with generic advice.\n`;
+  if (sessionData.companyName) {
+    prompt += `Begin your response by explicitly mentioning the company name "${sessionData.companyName}" and how it relates to the user's question. Refer to the company by name throughout the response.\n`;
+  }
   
   return prompt;
 }
