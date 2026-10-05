@@ -117,12 +117,7 @@ if (sessionData.orgContext) {
 if (sessionData.knowledgeBase) {
   prompt += "Organizational knowledge:\n" + sessionData.knowledgeBase + "\n";
 }
-  prompt += `
-Use the organizational context as real context for this user's situation.
-Tailor your response to the interaction between the user's communication profile
-and the organizational environment.
-Do not ignore, generalize, or replace the organizational context with generic advice.
-`;
+ 
 
   return prompt;
 }
