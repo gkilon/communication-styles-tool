@@ -25,24 +25,20 @@ export type { Message };
 
 const STARTERS_HE = [
   "מהן נקודות העיוורון שלי ואיך להימנע מהן במצבי לחץ?",
-  "איך אוכל למנף את הפרופיל שלי כדי להתקדם ולהשפיע בארגון?",
+  "מהם המנופים המרכזיים שלי להתפתחות ולהשפעה בארגון?",
   "יש לי קושי מול עובד או מול הצוות שלי",
   "יש לי קושי מול קולגה",
   "יש לי קושי מול המנהל שלי",
-  "יש לי קונפליקט ואני צריך עזרה",
-  "יש לי קושי עם עומס המשימות שלי",
-  "איך להציג רעיון או יוזמה ולרתום אחרים?"
+  "יש לי קושי עם עומס המשימות שלי"
 ];
 
 const STARTERS_EN = [
   "What are my blind spots, and how do I avoid them under pressure?",
-  "How can I leverage my profile to advance and influence within the organization?",
+  "What are my main levers for development and for influence in the organization?",
   "I'm struggling with an employee or with my team",
   "I'm struggling with a colleague",
   "I'm struggling with my manager",
-  "I have a conflict and I need help",
-  "I'm struggling with my workload",
-  "How do I present an idea or initiative and win others over?"
+  "I'm struggling with my workload"
 ];
 
 const HEADER_TEXT = {
