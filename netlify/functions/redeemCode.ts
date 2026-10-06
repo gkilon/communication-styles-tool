@@ -16,7 +16,7 @@ export default async (req: Request, context?: any) => {
     if (!decoded) return json({ ok: false, error: "נדרשת התחברות" }, 401);
 
     const ip = getTrustedClientIp(req, context);
-    if (await rateLimitHit(db, "redeem", ip, 10, 60 * 1000)) {
+    if (await rateLimitHit(db, "redeem", ip, 40, 60 * 1000)) {
       return json({ ok: false, error: "יותר מדי ניסיונות. נסה שוב בעוד דקה." }, 429);
     }
 

@@ -17,16 +17,21 @@ export interface SimulationMessage {
 let sessionContextRefreshed = false;
 export async function refreshSessionContext(force = false): Promise<void> {
   if (sessionContextRefreshed && !force) return;
+  sessionContextRefreshed = true;
   try {
     const raw = localStorage.getItem('comm_style_session');
     if (!raw) return;
     const session = JSON.parse(raw);
     const code = session?.accessCode;
     if (!code) return;
+    // Don't hit the server on every page load: once the session already carries context,
+    // refresh at most every 30 minutes (a whole workshop shares one IP address).
+    const lastAt = Number(localStorage.getItem('comm_style_ctx_at') || 0);
+    if (!force && session.orgContext && Date.now() - lastAt < 30 * 60 * 1000) return;
     const res = await fetch('/api/validate-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, teamName: new URLSearchParams(window.location.search).get("team") || session?.teamName || undefined })
+      body: JSON.stringify({ code })
     });
     if (!res.ok) return;
     const v = await res.json();
@@ -38,10 +43,8 @@ export async function refreshSessionContext(force = false): Promise<void> {
     if (v.knowledgeBase !== undefined) updated.knowledgeBase = v.knowledgeBase;
     if (v.teamName && !updated.teamName) updated.teamName = v.teamName;
     localStorage.setItem('comm_style_session', JSON.stringify(updated));
-
-sessionContextRefreshed = true;
-
-} catch (e) {
+    localStorage.setItem('comm_style_ctx_at', String(Date.now()));
+  } catch (e) {
     console.warn('Could not refresh organization context:', e);
   }
 }
@@ -72,9 +75,6 @@ function buildOrgContext(): string {
   }
   
   prompt += `\nUse the organizational context as real context for this user's situation. Tailor your response to the interaction between the user's communication profile and the organizational environment. Do not ignore, generalize, or replace the organizational context with generic advice.\n`;
-  if (sessionData.companyName) {
-    prompt += `Begin your response by explicitly mentioning the company name "${sessionData.companyName}" and how it relates to the user's question. Refer to the company by name throughout the response.\n`;
-  }
   
   return prompt;
 }

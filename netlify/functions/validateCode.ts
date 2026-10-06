@@ -46,16 +46,11 @@ export default async (req: Request, context?: any) => {
     // Rate limit on the REAL client IP (from Netlify itself, not the spoofable
     // X-Forwarded-For header), stored in Firestore so it holds across instances.
     const ip = getTrustedClientIp(req, context);
-    if (await rateLimitHit(db, "validate", ip, 20, 60 * 1000)) {
+    if (await rateLimitHit(db, "validate", ip, 60, 60 * 1000)) {
       return json({ valid: false, type: 'invalid', message: 'יותר מדי ניסיונות. נסה שוב בעוד דקה.' }, 429);
     }
 
-   const { code: rawCode, teamName: rawTeamName } = await req.json();
-
-const requestedTeamName =
-  typeof rawTeamName === "string"
-    ? rawTeamName.trim()
-    : "";
+    const { code: rawCode } = await req.json();
     const code = (typeof rawCode === "string" ? rawCode : "").trim();
     if (!code) return json({ valid: false, type: 'invalid', message: 'נא להזין קוד גישה' });
 
@@ -64,32 +59,8 @@ const requestedTeamName =
       const accessSnap = await db.collection("settings").doc("access").get();
       const qPass = (accessSnap.data() as any)?.questionnairePassword;
       if (qPass && code.toLowerCase() === String(qPass).toLowerCase()) {
-
-  if (requestedTeamName) {
-    const teamObj = await getTeamByName(db, requestedTeamName);
-
-    if (teamObj) {
-      return json({
-        valid: true,
-        type: 'team',
-        teamName: teamObj.name || requestedTeamName,
-        companyName: teamObj.companyName,
-        logoUrl: teamObj.logoUrl,
-        orgContext: teamObj.orgContext,
-        knowledgeBase: teamObj.knowledgeBase,
-        dailyLimit: 30
-      });
-    }
-  }
-
-  return json({
-    valid: true,
-    type: 'global',
-    teamName: 'General',
-    dailyLimit: 30
-  });
-
-}
+        return json({ valid: true, type: 'global', teamName: 'General', dailyLimit: 30 });
+      }
     } catch (e) {
       console.warn("Could not check settings/access:", e);
     }
