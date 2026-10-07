@@ -390,9 +390,21 @@ export default async (req: Request, context?: any) => {
     // עודכן למודל יציב ומהיר
     const modelName = payload.model || "gemini-3.8-flash";
 
+    // גוגל מבטלת את הפרמטרים האלה - מסירים אותם כאן בנקודה אחת
+    const {
+      temperature: _temperature,
+      topP: _topP,
+      topK: _topK,
+      ...cleanConfig
+    } = (payload.config || {}) as Record<string, any>;
+    if (cleanConfig.thinkingConfig) {
+      const { thinkingBudget: _thinkingBudget, ...cleanThinking } = cleanConfig.thinkingConfig;
+      cleanConfig.thinkingConfig = cleanThinking;
+    }
+
     const requestConfig = {
       thinkingConfig: { thinkingLevel: "MEDIUM" },
-      ...payload.config
+      ...cleanConfig
     };
 
     // Streaming actions with Retry wrapper

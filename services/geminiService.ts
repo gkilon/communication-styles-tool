@@ -427,7 +427,6 @@ ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
       contents: userInput,
       config: {
         systemInstruction,
-        temperature: 0.7,
         safetySettings: SAFETY_SETTINGS
       }
     });
@@ -535,7 +534,6 @@ ${profileChangeNote}${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
     contents: buildChatContents(history, userInput),
     config: {
       systemInstruction,
-      temperature: 0.7,
       safetySettings: SAFETY_SETTINGS
     }
   }, onChunk);
@@ -606,7 +604,6 @@ ${RESPONSE_STYLE_GUIDELINES}
       contents: challenge,
       config: {
         systemInstruction,
-        temperature: 0.7,
         safetySettings: SAFETY_SETTINGS
       }
     });
@@ -680,7 +677,6 @@ ${RESPONSE_STYLE_GUIDELINES}
     contents: challenge,
     config: {
       systemInstruction,
-      temperature: 0.7,
       safetySettings: SAFETY_SETTINGS
     }
   }, onChunk);
@@ -866,7 +862,6 @@ ${positionContext[relationship] || ''}
       contents: prompt,
       config: {
         systemInstruction,
-        temperature: 0.7,
         safetySettings: SAFETY_SETTINGS
       }
     });
@@ -937,7 +932,6 @@ ${targetRules}
       contents: `אנא בצע ניתוח מעמיק ומקצועי של היסטוריית השיחה הבאה:\n\n${conversationLog}`,
       config: {
         systemInstruction,
-        temperature: 0.7,
         safetySettings: SAFETY_SETTINGS
       }
     });
@@ -981,7 +975,6 @@ ${colorProfile}
       contents: "אנא נתח את הפרומפט המצויין.",
       config: {
         systemInstruction,
-        temperature: 0.7,
         safetySettings: SAFETY_SETTINGS
       }
     });
@@ -1042,7 +1035,6 @@ CRITICAL TRANSLATION RULES:
       contents: text,
       config: {
         systemInstruction,
-        temperature: 0.2,
         safetySettings: SAFETY_SETTINGS
       }
     });
@@ -1084,7 +1076,6 @@ ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
     contents: [{ role: 'user', parts: [{ text: situation }] }],
     config: {
       systemInstruction,
-      temperature: 0.7,
       safetySettings: SAFETY_SETTINGS
     }
   }, onChunk);
