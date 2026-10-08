@@ -64,7 +64,7 @@ const HEADER_TEXT = {
     consultTitle: 'אני רוצה להתייעץ',
     consultSub: 'שיחה שמובילה יחד לכיווני פעולה',
     freeFeedback: '✍️ שאל שאלה על עצמך',
-    freeConsult: '✍️ ספר על המצב שלך',
+    freeConsult: '✍️ יש לי התייעצות אחרת',
     needsCodeText: 'כדי להשתמש ביועץ צריך קוד גישה. הזן את הקוד שקיבלת ושלח שוב את ההודעה.',
     needsCodeButton: 'הפעל',
     codePlaceholder: 'קוד גישה',
@@ -84,7 +84,7 @@ const HEADER_TEXT = {
     consultTitle: 'I want to consult',
     consultSub: 'A conversation that leads together to action directions',
     freeFeedback: '✍️ Ask a question about yourself',
-    freeConsult: '✍️ Tell me about your situation',
+    freeConsult: '✍️ I have a different topic to consult about',
     needsCodeText: 'An access code is needed to use the advisor. Enter the code you received, then send your message again.',
     needsCodeButton: 'Activate',
     codePlaceholder: 'Access code',
@@ -317,8 +317,51 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
     }
   };
 
+  const chatList = archive.chats.length === 0 ? (
+    <p className="text-gray-400 text-sm p-3">{ht.noChats}</p>
+  ) : (
+    archive.chats.map(c => (
+      <div
+        key={c.id}
+        className={`flex items-center gap-1 rounded-xl px-2 py-0.5 ${c.id === archive.activeId ? 'bg-cyan-900/30 border border-cyan-700/60' : 'border border-transparent hover:bg-gray-800/70'}`}
+      >
+        <button
+          onClick={() => { archive.openChat(c.id); setShowArchive(false); }}
+          disabled={isLoading}
+          className={`flex-1 min-w-0 ${dir === 'rtl' ? 'text-right' : 'text-left'} py-2 disabled:opacity-50`}
+        >
+          <span className="block text-sm text-gray-100 truncate">{c.title}</span>
+          <span className="block text-xs text-gray-500">
+            {c.updatedAt ? new Date(c.updatedAt).toLocaleDateString(lang === 'en' ? 'en-GB' : 'he-IL', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+          </span>
+        </button>
+        <button
+          onClick={() => { if (window.confirm(ht.deleteConfirm)) archive.removeChat(c.id); }}
+          className="text-gray-500 hover:text-red-400 px-1.5 py-2 transition-colors"
+          title="🗑️"
+        >
+          🗑️
+        </button>
+      </div>
+    ))
+  );
+
   return (
-    <div className="flex flex-col h-full" dir={dir}>
+    <div className="flex flex-col md:flex-row gap-5 h-full" dir={dir}>
+      {/* Side panel (desktop): the conversation history, like a chat app's sidebar */}
+      <aside className="hidden md:flex md:flex-col w-64 shrink-0 self-start bg-gray-900/60 border border-gray-700 rounded-2xl p-3 md:max-h-[820px]">
+        <button
+          onClick={() => archive.newChat()}
+          disabled={isLoading || conversation.length === 0}
+          className="w-full text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 px-3 py-2.5 rounded-xl border border-cyan-700/60 transition-all disabled:opacity-40"
+        >
+          ➕ {ht.newChat}
+        </button>
+        <div className="mt-4 mb-1 px-1 text-xs font-bold text-gray-400">{ht.archive}</div>
+        <div className="overflow-y-auto flex-1 space-y-1">{chatList}</div>
+      </aside>
+
+      <div className="flex flex-col h-full flex-1 min-w-0">
       <div className="flex items-center gap-3 mb-6">
         <div className="bg-cyan-500/20 p-2 rounded-xl">
           <SparklesIcon className="w-8 h-8 text-yellow-400" />
@@ -332,7 +375,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <button
           onClick={() => setShowArchive(v => !v)}
-          className="text-sm font-bold bg-gray-800/80 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-xl border border-gray-700 transition-all"
+          className="md:hidden text-sm font-bold bg-gray-800/80 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-xl border border-gray-700 transition-all"
         >
           🗂️ {ht.archive}{archive.chats.length > 0 ? ` (${archive.chats.length})` : ''}
         </button>
@@ -345,7 +388,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
           <button
             onClick={() => { archive.newChat(); setShowArchive(false); }}
             disabled={isLoading}
-            className="text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 px-3 py-2 rounded-xl border border-cyan-700/60 transition-all disabled:opacity-40"
+            className="md:hidden text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 px-3 py-2 rounded-xl border border-cyan-700/60 transition-all disabled:opacity-40"
           >
             ➕ {ht.newChat}
           </button>
@@ -353,35 +396,8 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
       </div>
 
       {showArchive && (
-        <div className="mb-4 bg-gray-900/70 border border-gray-700 rounded-2xl p-2 max-h-64 overflow-y-auto">
-          {archive.chats.length === 0 ? (
-            <p className="text-gray-400 text-sm p-3">{ht.noChats}</p>
-          ) : (
-            archive.chats.map(c => (
-              <div
-                key={c.id}
-                className={`flex items-center gap-2 rounded-xl px-2 py-1 ${c.id === archive.activeId ? 'bg-cyan-900/30 border border-cyan-700/60' : 'hover:bg-gray-800/70'}`}
-              >
-                <button
-                  onClick={() => { archive.openChat(c.id); setShowArchive(false); }}
-                  disabled={isLoading}
-                  className={`flex-1 min-w-0 ${dir === 'rtl' ? 'text-right' : 'text-left'} py-2 disabled:opacity-50`}
-                >
-                  <span className="block text-sm text-gray-100 truncate">{c.title}</span>
-                  <span className="block text-xs text-gray-500">
-                    {c.updatedAt ? new Date(c.updatedAt).toLocaleDateString(lang === 'en' ? 'en-GB' : 'he-IL', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-                  </span>
-                </button>
-                <button
-                  onClick={() => { if (window.confirm(ht.deleteConfirm)) archive.removeChat(c.id); }}
-                  className="text-gray-500 hover:text-red-400 px-2 py-2 transition-colors"
-                  title="🗑️"
-                >
-                  🗑️
-                </button>
-              </div>
-            ))
-          )}
+        <div className="md:hidden mb-4 bg-gray-900/70 border border-gray-700 rounded-2xl p-2 max-h-64 overflow-y-auto">
+          {chatList}
         </div>
       )}
 
@@ -558,6 +574,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
       {speechError && (
         <p className={`text-xs text-red-400 mt-2 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>⚠️ {speechError}</p>
       )}
+      </div>
     </div>
   );
 };
