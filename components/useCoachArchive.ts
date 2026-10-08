@@ -9,6 +9,10 @@ export interface Message {
   isError?: boolean;
 }
 
+// How the conversation runs: 'feedback' = a question about oneself that gets a detailed
+// answer; 'consult' = a guided consulting conversation. null = decided by the advisor.
+export type CoachMode = 'feedback' | 'consult';
+
 export interface CoachChat {
   id: string;
   title: string;
@@ -17,6 +21,7 @@ export interface CoachChat {
   messages: Message[];
   // The profile (questionnaire scores) the conversation was last based on.
   profile?: Scores;
+  mode?: CoachMode;
 }
 
 export interface CoachArchive {
@@ -77,7 +82,9 @@ export function useCoachArchive(
   setConversation: React.Dispatch<React.SetStateAction<Message[]>>,
   isLoading: boolean,
   setUserInput: React.Dispatch<React.SetStateAction<string>>,
-  scores: Scores
+  scores: Scores,
+  mode: CoachMode | null,
+  setMode: React.Dispatch<React.SetStateAction<CoachMode | null>>
 ): CoachArchive {
   const [chats, setChats] = useState<CoachChat[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -86,6 +93,8 @@ export function useCoachArchive(
   const [profileChange, setProfileChange] = useState<{ previous: Scores } | null>(null);
   const scoresRef = useRef<Scores>(scores);
   scoresRef.current = scores;
+  const modeRef = useRef<CoachMode | null>(mode);
+  modeRef.current = mode;
 
   const activeIdRef = useRef<string | null>(null);
   const lastSavedRef = useRef('');
@@ -99,6 +108,7 @@ export function useCoachArchive(
     setActiveId(c.id);
     lastSavedRef.current = JSON.stringify(cleanMessages(c.messages));
     setConversation(c.messages);
+    setMode(c.mode ?? null);
     setProfileChange(c.profile && profileChanged(c.profile, scoresRef.current) ? { previous: c.profile } : null);
   };
 
@@ -123,7 +133,8 @@ export function useCoachArchive(
             createdAt: data.createdAt || data.updatedAt || '',
             updatedAt: data.updatedAt || '',
             messages: Array.isArray(data.messages) ? data.messages : [],
-            profile: data.profile && typeof data.profile === 'object' ? data.profile : undefined
+            profile: data.profile && typeof data.profile === 'object' ? data.profile : undefined,
+            mode: data.mode === 'feedback' || data.mode === 'consult' ? data.mode : undefined
           };
         });
         setChats(list);
@@ -169,12 +180,13 @@ export function useCoachArchive(
           createdAt,
           updatedAt: now,
           messages: cleaned,
-          profile: scoresRef.current
+          profile: scoresRef.current,
+          ...(modeRef.current ? { mode: modeRef.current } : {})
         });
         lastSavedRef.current = sig;
         setSaveFailed(false);
         setChats(prev => [
-          { id: savedId, title, createdAt, updatedAt: now, messages: cleaned, profile: scoresRef.current },
+          { id: savedId, title, createdAt, updatedAt: now, messages: cleaned, profile: scoresRef.current, ...(modeRef.current ? { mode: modeRef.current } : {}) },
           ...prev.filter(c => c.id !== savedId)
         ]);
       } catch (err) {
@@ -189,6 +201,7 @@ export function useCoachArchive(
     setActiveId(null);
     lastSavedRef.current = '';
     setProfileChange(null);
+    setMode(null);
     setConversation([]);
     setUserInput('');
   };

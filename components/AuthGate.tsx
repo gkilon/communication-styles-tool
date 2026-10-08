@@ -111,7 +111,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ session, onDone }) => {
       </div>
       <h2 className="text-2xl font-black text-white mb-2">כמעט שם</h2>
       <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-        רק צריך חשבון קטן כדי שהתוצאה, המאמן האישי והסימולטור יחכו לך גם בפעם הבאה.
+        רק צריך חשבון קטן כדי שהתוצאה והיועץ האישי יחכו לך גם בפעם הבאה.
       </p>
 
       <button

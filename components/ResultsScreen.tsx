@@ -18,9 +18,8 @@ import { ModelPrimer } from './ModelPrimer';
 
 import { useCoachArchive } from './useCoachArchive';
 
-import type { Message as CoachMessage } from './useCoachArchive';
+import type { Message as CoachMessage, CoachMode } from './useCoachArchive';
 
-import { CaseStudiesSimulator } from './CaseStudiesSimulator';
 
 import { useT } from '../i18n/useT';
 
@@ -41,7 +40,7 @@ interface ResultsScreenProps {
   onLogout?: () => void;
 }
 
-type TabId = 'profile' | 'coach' | 'simulator';
+type TabId = 'profile' | 'coach';
 
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   scores,
@@ -117,13 +116,17 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   const [coachConversation, setCoachConversation] = useState<CoachMessage[]>([]);
   const [coachInput, setCoachInput] = useState('');
   const [coachLoading, setCoachLoading] = useState(false);
+  // How the conversation runs: feedback (question about myself) or consult (guided conversation)
+  const [coachMode, setCoachMode] = useState<CoachMode | null>(null);
 
   const coachArchive = useCoachArchive(
     coachConversation,
     setCoachConversation,
     coachLoading,
     setCoachInput,
-    scores
+    scores,
+    coachMode,
+    setCoachMode
   );
 
   // AI call for the org-fit addendum only — goal/role personalization is now handled
@@ -161,7 +164,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   const TABS: { id: TabId; label: string; emoji: string }[] = [
     { id: 'profile', label: t('resultsChrome', 'tabProfile'), emoji: '🗺️' },
     { id: 'coach', label: t('resultsChrome', 'tabCoach'), emoji: '🤖' },
-    { id: 'simulator', label: t('resultsChrome', 'tabSimulator'), emoji: '🎭' },
   ];
 
   const isManager = backgroundData?.isManager === 'yes';
@@ -539,25 +541,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                 isLoading={coachLoading}
                 setIsLoading={setCoachLoading}
                 archive={coachArchive}
+                mode={coachMode}
+                setMode={setCoachMode}
               />
-
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── Tab: Simulator ── */}
-        {activeTab === 'simulator' && (
-          <motion.div
-            key="simulator"
-            variants={tabVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className="mt-4"
-          >
-            <div className="bg-glass-dark p-6 sm:p-8 rounded-[2rem] shadow-xl border border-glass-border backdrop-blur-xl">
-
-              <CaseStudiesSimulator scores={scores} />
 
             </div>
           </motion.div>

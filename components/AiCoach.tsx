@@ -5,7 +5,7 @@ import { getAiCoachAdviceStream, transcribeAudio, redeemAccessCode } from '../se
 import { SparklesIcon } from './icons/Icons';
 import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
-import type { Message, CoachArchive } from './useCoachArchive';
+import type { Message, CoachArchive, CoachMode } from './useCoachArchive';
 
 interface AiCoachProps {
   scores: Scores;
@@ -19,22 +19,35 @@ interface AiCoachProps {
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
   // Saved conversations (archive) — see useCoachArchive.
   archive: CoachArchive;
+  // How this conversation runs (feedback / consult); null = the advisor decides.
+  mode: CoachMode | null;
+  setMode: React.Dispatch<React.SetStateAction<CoachMode | null>>;
 }
 
 export type { Message };
 
-const STARTERS_HE = [
+// Two kinds of conversation: "feedback" = a question about myself that gets a detailed
+// answer; "consult" = a guided consulting conversation that ends in action directions.
+const FEEDBACK_STARTERS_HE = [
   "מהן נקודות העיוורון שלי ואיך להימנע מהן במצבי לחץ?",
-  "מהם המנופים המרכזיים שלי להתפתחות ולהשפעה בארגון?",
+  "מהן החוזקות המרכזיות שלי, ואיפה כדאי לי להשתמש בהן יותר?",
+  "מהם המנופים המרכזיים שלי להתפתחות ולהשפעה בארגון?"
+];
+
+const CONSULT_STARTERS_HE = [
   "יש לי קושי מול עובד או מול הצוות שלי",
   "יש לי קושי מול קולגה",
   "יש לי קושי מול המנהל שלי",
   "יש לי קושי עם עומס המשימות שלי"
 ];
 
-const STARTERS_EN = [
+const FEEDBACK_STARTERS_EN = [
   "What are my blind spots, and how do I avoid them under pressure?",
-  "What are my main levers for development and for influence in the organization?",
+  "What are my main strengths, and where should I use them more?",
+  "What are my main levers for development and for influence in the organization?"
+];
+
+const CONSULT_STARTERS_EN = [
   "I'm struggling with an employee or with my team",
   "I'm struggling with a colleague",
   "I'm struggling with my manager",
@@ -46,7 +59,12 @@ const HEADER_TEXT = {
     title: 'דבר עם Kilon, היועץ האישי שלך',
     subtitle: 'יועץ AI שמכיר אותך, ומייעץ בשיטה של Kilon.',
     placeholder: 'כתוב או דבר: שאל מה שבא לך, או ספר על הדילמה שלך...',
-    freeAsk: '✍️ שאל מה שבא לך, או ספר על דילמה שלך',
+    feedbackTitle: 'Kilon, תן לי פידבק',
+    feedbackSub: 'שאלה על עצמי, ותשובה מפורטת',
+    consultTitle: 'אני רוצה להתייעץ',
+    consultSub: 'שיחה שמובילה יחד לכיווני פעולה',
+    freeFeedback: '✍️ שאל שאלה על עצמך',
+    freeConsult: '✍️ ספר על המצב שלך',
     needsCodeText: 'כדי להשתמש ביועץ צריך קוד גישה. הזן את הקוד שקיבלת ושלח שוב את ההודעה.',
     needsCodeButton: 'הפעל',
     codePlaceholder: 'קוד גישה',
@@ -61,7 +79,12 @@ const HEADER_TEXT = {
     title: 'Talk to Kilon, your personal advisor',
     subtitle: 'An AI advisor who knows you and advises the Kilon way.',
     placeholder: 'Type or speak: ask anything, or tell me about your dilemma...',
-    freeAsk: '✍️ Ask anything, or share a dilemma of your own',
+    feedbackTitle: 'Kilon, give me feedback',
+    feedbackSub: 'A question about myself, and a detailed answer',
+    consultTitle: 'I want to consult',
+    consultSub: 'A conversation that leads together to action directions',
+    freeFeedback: '✍️ Ask a question about yourself',
+    freeConsult: '✍️ Tell me about your situation',
     needsCodeText: 'An access code is needed to use the advisor. Enter the code you received, then send your message again.',
     needsCodeButton: 'Activate',
     codePlaceholder: 'Access code',
@@ -115,7 +138,7 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conversation, setConversation, userInput, setUserInput, isLoading, setIsLoading, archive }) => {
+export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conversation, setConversation, userInput, setUserInput, isLoading, setIsLoading, archive, mode, setMode }) => {
   const { t } = useT();
   const { lang, dir } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -140,7 +163,8 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
   const audioChunksRef = useRef<Blob[]>([]);
 
   const ht = HEADER_TEXT[lang === 'en' ? 'en' : 'he'];
-  const starters = lang === 'en' ? STARTERS_EN : STARTERS_HE;
+  const feedbackStarters = lang === 'en' ? FEEDBACK_STARTERS_EN : FEEDBACK_STARTERS_HE;
+  const consultStarters = lang === 'en' ? CONSULT_STARTERS_EN : CONSULT_STARTERS_HE;
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -249,9 +273,13 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
     });
   };
 
-  const handleSendMessage = async (messageText?: string) => {
+  const handleSendMessage = async (messageText?: string, startMode?: CoachMode) => {
     const text = messageText || userInput;
     if (!text.trim() || isLoading) return;
+
+    // A conversation opened from one of the two entry cards runs in that mode from then on.
+    const activeMode: CoachMode | null = startMode ?? mode;
+    if (startMode) setMode(startMode);
 
     // Everything said so far (without failed replies) goes to the model as context.
     const history = conversation.filter(m => !m.isError);
@@ -265,7 +293,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
     try {
       await getAiCoachAdviceStream(scores, text, (chunk) => {
         updateLastAi(m => ({ ...m, text: chunk }));
-      }, backgroundData, lang, history, profileChange ? profileChange.previous : null);
+      }, backgroundData, lang, history, profileChange ? profileChange.previous : null, activeMode);
       if (profileChange) archive.clearProfileChange();
     } catch (error: any) {
       console.error("AI Coach interaction failed:", error);
@@ -308,6 +336,11 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
         >
           🗂️ {ht.archive}{archive.chats.length > 0 ? ` (${archive.chats.length})` : ''}
         </button>
+        {conversation.length > 0 && mode && (
+          <span className={`text-xs font-bold px-3 py-2 rounded-xl border ${mode === 'feedback' ? 'text-cyan-300 border-cyan-700/60 bg-cyan-900/20' : 'text-violet-300 border-violet-600/60 bg-violet-900/20'}`}>
+            {mode === 'feedback' ? ht.feedbackTitle : ht.consultTitle}
+          </span>
+        )}
         {conversation.length > 0 && (
           <button
             onClick={() => { archive.newChat(); setShowArchive(false); }}
@@ -404,22 +437,52 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6">
             <div className="bg-gray-800/50 p-6 rounded-2xl border border-dashed border-gray-700">
                 <p className="text-gray-400 mb-4 font-medium italic">{t('aiCoach', 'greeting')}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {starters.map((q, i) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* ── Feedback: a question about myself → a detailed answer ── */}
+                  <div className="rounded-2xl border border-cyan-700/50 bg-cyan-900/10 p-4 flex flex-col gap-2">
+                    <div className={dir === 'rtl' ? 'text-right' : 'text-left'}>
+                      <div className="text-lg font-black text-cyan-300">{ht.feedbackTitle}</div>
+                      <div className="text-xs text-gray-400">{ht.feedbackSub}</div>
+                    </div>
+                    {feedbackStarters.map((q, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleSendMessage(q, 'feedback')}
+                        className={`${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm bg-gray-800 hover:bg-gray-700 hover:text-cyan-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm`}
+                      >
+                        {q}
+                      </button>
+                    ))}
                     <button
-                      key={i}
-                      onClick={() => handleSendMessage(q)}
-                      className={`${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm bg-gray-800 hover:bg-gray-700 hover:text-cyan-400 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm`}
+                      onClick={() => { setMode('feedback'); inputRef.current?.focus(); }}
+                      className={`${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 p-3 rounded-xl transition-all border border-cyan-700/60 shadow-sm`}
                     >
-                      {q}
+                      {ht.freeFeedback}
                     </button>
-                  ))}
-                  <button
-                    onClick={() => inputRef.current?.focus()}
-                    className={`sm:col-span-2 ${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 p-3 rounded-xl transition-all border border-cyan-700/60 shadow-sm`}
-                  >
-                    {ht.freeAsk}
-                  </button>
+                  </div>
+
+                  {/* ── Consult: a guided conversation → action directions ── */}
+                  <div className="rounded-2xl border border-violet-600/50 bg-violet-900/10 p-4 flex flex-col gap-2">
+                    <div className={dir === 'rtl' ? 'text-right' : 'text-left'}>
+                      <div className="text-lg font-black text-violet-300">{ht.consultTitle}</div>
+                      <div className="text-xs text-gray-400">{ht.consultSub}</div>
+                    </div>
+                    {consultStarters.map((q, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleSendMessage(q, 'consult')}
+                        className={`${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm bg-gray-800 hover:bg-gray-700 hover:text-violet-300 text-gray-300 p-3 rounded-xl transition-all border border-gray-700 shadow-sm`}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => { setMode('consult'); inputRef.current?.focus(); }}
+                      className={`${dir === 'rtl' ? 'text-right' : 'text-left'} text-sm font-bold bg-violet-900/30 hover:bg-violet-900/50 text-violet-300 p-3 rounded-xl transition-all border border-violet-600/60 shadow-sm`}
+                    >
+                      {ht.freeConsult}
+                    </button>
+                  </div>
                 </div>
             </div>
           </div>
