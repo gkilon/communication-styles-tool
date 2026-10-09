@@ -6,6 +6,9 @@ import { SparklesIcon } from './icons/Icons';
 import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { Message, CoachArchive, CoachMode } from './useCoachArchive';
+import type { CoachMemory } from './useCoachMemory';
+import { memoryToPromptLines } from './useCoachMemory';
+import { CoachMemoryPanel } from './CoachMemoryPanel';
 
 interface AiCoachProps {
   scores: Scores;
@@ -22,6 +25,8 @@ interface AiCoachProps {
   // How this conversation runs (feedback / consult); null = the advisor decides.
   mode: CoachMode | null;
   setMode: React.Dispatch<React.SetStateAction<CoachMode | null>>;
+  // "What I know about you" — the user's own, editable picture, used by the advisor.
+  memory: CoachMemory;
 }
 
 export type { Message };
@@ -59,6 +64,9 @@ const HEADER_TEXT = {
     title: 'דבר עם Kilon, היועץ האישי שלך',
     subtitle: 'יועץ AI שמכיר אותך, ומייעץ בשיטה של Kilon.',
     placeholder: 'כתוב או דבר: שאל מה שבא לך, או ספר על הדילמה שלך...',
+    memoryTitle: 'מה אני יודע עליך',
+    memoryOpen: 'קרא וערוך',
+    memoryEmpty: 'עדיין אין כאן כלום',
     feedbackTitle: 'Kilon, תן לי פידבק',
     feedbackSub: 'שאלה על עצמי, ותשובה מפורטת',
     consultTitle: 'אני רוצה להתייעץ',
@@ -79,6 +87,9 @@ const HEADER_TEXT = {
     title: 'Talk to Kilon, your personal advisor',
     subtitle: 'An AI advisor who knows you and advises the Kilon way.',
     placeholder: 'Type or speak: ask anything, or tell me about your dilemma...',
+    memoryTitle: 'What I know about you',
+    memoryOpen: 'Read and edit',
+    memoryEmpty: 'Nothing here yet',
     feedbackTitle: 'Kilon, give me feedback',
     feedbackSub: 'A question about myself, and a detailed answer',
     consultTitle: 'I want to consult',
@@ -138,12 +149,13 @@ const AiMessageContent: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conversation, setConversation, userInput, setUserInput, isLoading, setIsLoading, archive, mode, setMode }) => {
+export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conversation, setConversation, userInput, setUserInput, isLoading, setIsLoading, archive, mode, setMode, memory }) => {
   const { t } = useT();
   const { lang, dir } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [showArchive, setShowArchive] = useState(false);
+  const [showMemory, setShowMemory] = useState(false);
 
   // The account has no valid access code yet (e.g. it joined through a team link): ask for one.
   const [needsCode, setNeedsCode] = useState(false);
@@ -293,7 +305,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
     try {
       await getAiCoachAdviceStream(scores, text, (chunk) => {
         updateLastAi(m => ({ ...m, text: chunk }));
-      }, backgroundData, lang, history, profileChange ? profileChange.previous : null, activeMode);
+      }, backgroundData, lang, history, profileChange ? profileChange.previous : null, activeMode, memoryToPromptLines(memory.items));
       if (profileChange) archive.clearProfileChange();
     } catch (error: any) {
       console.error("AI Coach interaction failed:", error);
@@ -357,6 +369,24 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
         >
           ➕ {ht.newChat}
         </button>
+
+        <button
+          onClick={() => setShowMemory(true)}
+          className={`mt-3 w-full ${dir === 'rtl' ? 'text-right' : 'text-left'} bg-gray-800/70 hover:bg-gray-800 border border-gray-700 hover:border-cyan-700/60 rounded-xl p-3 transition-all`}
+        >
+          <div className="text-sm font-bold text-white">🧠 {ht.memoryTitle}</div>
+          {memory.items.length === 0 ? (
+            <div className="text-xs text-gray-500 mt-1">{ht.memoryEmpty}</div>
+          ) : (
+            <ul className="mt-1.5 space-y-1">
+              {memory.items.slice(0, 3).map(i => (
+                <li key={i.id} className="text-xs text-gray-400 truncate">• {i.text}</li>
+              ))}
+            </ul>
+          )}
+          <div className="text-xs font-bold text-cyan-400 mt-2">{ht.memoryOpen} ←</div>
+        </button>
+
         <div className="mt-4 mb-1 px-1 text-xs font-bold text-gray-400">{ht.archive}</div>
         <div className="overflow-y-auto flex-1 space-y-1">{chatList}</div>
       </aside>
@@ -373,6 +403,12 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
       </div>
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <button
+          onClick={() => setShowMemory(true)}
+          className="md:hidden text-sm font-bold bg-gray-800/80 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-xl border border-gray-700 transition-all"
+        >
+          🧠 {ht.memoryTitle}
+        </button>
         <button
           onClick={() => setShowArchive(v => !v)}
           className="md:hidden text-sm font-bold bg-gray-800/80 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-xl border border-gray-700 transition-all"
@@ -575,6 +611,10 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
         <p className={`text-xs text-red-400 mt-2 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>⚠️ {speechError}</p>
       )}
       </div>
+
+      {showMemory && (
+        <CoachMemoryPanel memory={memory} lang={lang === 'en' ? 'en' : 'he'} dir={dir} onClose={() => setShowMemory(false)} />
+      )}
     </div>
   );
 };

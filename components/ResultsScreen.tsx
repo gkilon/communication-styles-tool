@@ -17,6 +17,7 @@ import { AiCoach } from './AiCoach';
 import { ModelPrimer } from './ModelPrimer';
 
 import { useCoachArchive } from './useCoachArchive';
+import { useCoachMemory } from './useCoachMemory';
 
 import type { Message as CoachMessage, CoachMode } from './useCoachArchive';
 
@@ -118,6 +119,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   const [coachLoading, setCoachLoading] = useState(false);
   // How the conversation runs: feedback (question about myself) or consult (guided conversation)
   const [coachMode, setCoachMode] = useState<CoachMode | null>(null);
+
+  const coachMemory = useCoachMemory(scores, backgroundData, lang === 'en' ? 'en' : 'he');
 
   const coachArchive = useCoachArchive(
     coachConversation,
@@ -543,6 +546,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                 archive={coachArchive}
                 mode={coachMode}
                 setMode={setCoachMode}
+                memory={coachMemory}
               />
 
             </div>

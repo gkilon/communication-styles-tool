@@ -36,6 +36,15 @@ service cloud.firestore {
                              && request.resource.data.title.size() <= 120;
     }
 
+    // "WHAT I KNOW ABOUT YOU" — the advisor's picture of the user. Private to its owner
+    // (not even admins can read it); the user edits and deletes it from the advisor page.
+    match /users/{userId}/coach_profile/{docId} {
+      allow read, delete: if isAuth() && request.auth.uid == userId;
+      allow create, update: if isAuth() && request.auth.uid == userId
+                             && request.resource.data.items is list
+                             && request.resource.data.items.size() <= 40;
+    }
+
     // ORGANIZATIONS — only the admin dashboard reads these directly now;
     // the participant flow goes through /api/validate-code (Admin SDK, server-side).
     match /organizations/{orgId} {

@@ -489,11 +489,22 @@ ${buildColorProfile(previousScores)}
 `;
 }
 
-export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he', history?: SimulationMessage[], previousScores?: Scores | null, mode?: 'feedback' | 'consult' | null): Promise<string> => {
+export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he', history?: SimulationMessage[], previousScores?: Scores | null, mode?: 'feedback' | 'consult' | null, knownAboutUser?: string[]): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
   const orgContext = buildOrgContext();
   const profileChangeNote = previousScores ? buildProfileChangeNote(previousScores) : '';
+
+  // What the user can see on their "what I know about you" card (and edit). Their own words win.
+  const knownBlock = knownAboutUser && knownAboutUser.length > 0
+    ? `
+
+מה אתה יודע על המשתמש (הרשימה הזו גלויה לו, והוא יכול לתקן אותה, למחוק ממנה ולהוסיף לה):
+${knownAboutUser.map(l => '- ' + l).join('\n')}
+- זו הידיעה החיה שלך עליו, והפרופיל הצבעוני הוא רק כלי עזר אחד לצידה. אם יש סתירה ביניהם, הידיעה הזו קודמת.
+- השתמש בה באופן טבעי ומדויק, בלי להקריא את הרשימה. הפריטים מנוסחים אליו בגוף שני.
+- אם משהו שהוא אומר סותר פריט, בדוק איתו בעדינות במקום להניח. אל תניח שהרשימה שלמה.`
+    : '';
 
   // The user may have chosen how this conversation should run; otherwise the advisor decides.
   const modeNote = mode === 'feedback'
@@ -562,7 +573,7 @@ ${COLOR_TRAITS}
 - כל כיוון פעולה מותאם אליו. בלי עצות כלליות שכל אחד יכול לקבל.
 - זה ייעוץ וליווי ארגוני, לא טיפול. אל תאבחן. אם עולה מצוקה נפשית אמיתית, הכר בזה בחום והצע לפנות לאיש מקצוע.
 
-${profileChangeNote}${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
+${knownBlock}${profileChangeNote}${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 
   return callGeminiApiStream('generateContent', {
     model: "gemini-3.8-flash",
