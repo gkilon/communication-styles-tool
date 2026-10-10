@@ -206,6 +206,91 @@ function buildGoalFocusedAddendum(
   return text;
 }
 
+export type ProfileShape = 'balanced' | 'twoStyles' | 'strong' | 'moderate';
+
+/** How strongly one style leads. One rule, shared by the report text and the advisor's picture of the user. */
+export function profileShape(domShare: number, gapToSecond: number, spread: number): ProfileShape {
+  return spread < 12 ? 'balanced' :
+    gapToSecond < 6 ? 'twoStyles' :
+    (domShare >= 40 || gapToSecond >= 12) ? 'strong' : 'moderate';
+}
+
+// Plain-language notes per style (what the person needs from others, what works when talking to
+// them, how it tends to look under pressure). Worded without gendered forms.
+const styleNotes = {
+  he: {
+    red: {
+      needs: 'מטרה ברורה, אתגר ומרחב להחליט ולפעול',
+      speak: 'ישירות, בקיצור ועם דגש על תוצאות',
+      pressure: 'פחות סבלנות, פחות הקשבה וקצב שמקשה על אחרים'
+    },
+    yellow: {
+      needs: 'חופש לחשוב ולהציע רעיונות, אנרגיה טובה והכרה',
+      speak: 'דרך התמונה הגדולה, רעיונות ואנרגיה',
+      pressure: 'קפיצה בין נושאים וקושי עם פרטים'
+    },
+    green: {
+      needs: 'יחסים טובים, יציבות והרגשה שרואים ומעריכים',
+      speak: 'בשיחה אישית, עם אכפתיות ושיתוף',
+      pressure: 'הימנעות מעימות ודחיית החלטות'
+    },
+    blue: {
+      needs: 'נתונים, זמן לחשוב ובהירות לגבי הציפיות',
+      speak: 'דרך עובדות, נתונים והיגיון מסודר',
+      pressure: 'ביקורתיות, התרחקות ושיתוק מעודף ניתוח'
+    }
+  },
+  en: {
+    red: {
+      needs: 'a clear goal, a challenge and room to decide and act',
+      speak: 'directly, briefly and focused on results',
+      pressure: 'less patience, less listening and a pace that is hard on others'
+    },
+    yellow: {
+      needs: 'freedom to think and propose ideas, good energy and recognition',
+      speak: 'through the big picture, ideas and energy',
+      pressure: 'jumping between topics and trouble with details'
+    },
+    green: {
+      needs: 'good relationships, stability and feeling seen and appreciated',
+      speak: 'in a personal conversation, with care and collaboration',
+      pressure: 'avoiding conflict and postponing decisions'
+    },
+    blue: {
+      needs: 'data, time to think and clarity about expectations',
+      speak: 'through facts, data and orderly logic',
+      pressure: 'criticism, withdrawing and getting stuck in over-analysis'
+    }
+  }
+};
+
+export interface ProfileFacts {
+  shape: ProfileShape;
+  dom: { adjective: string; strengths: readonly string[]; weaknesses: readonly string[]; recommendation_focus: string; notes: { needs: string; speak: string; pressure: string } };
+  sec: { adjective: string; notes: { needs: string; speak: string; pressure: string } };
+  weak: { adjective: string; strengths: readonly string[]; recommendation_focus: string };
+}
+
+/** The facts behind the report, reused to build the advisor's picture of the user. Null if no scores yet. */
+export const getProfileFacts = (scores: Scores, lang: Lang = 'he'): ProfileFacts | null => {
+  const { a, b, c, d } = scores;
+  const T = colorData[lang];
+  const N = styleNotes[lang];
+  const colorScores = { red: a + c, yellow: a + d, green: b + d, blue: b + c };
+  const total = Object.values(colorScores).reduce((x, y) => x + y, 0);
+  if (total === 0) return null;
+  const sorted = (Object.keys(colorScores) as Color[]).sort((x, y) => colorScores[y] - colorScores[x]);
+  const [dom, sec, , weak] = sorted;
+  const share = (col: Color) => (colorScores[col] / total) * 100;
+  const shape = profileShape(share(dom), share(dom) - share(sec), share(dom) - share(weak));
+  return {
+    shape,
+    dom: { adjective: T[dom].adjective, strengths: T[dom].strengths, weaknesses: T[dom].weaknesses, recommendation_focus: T[dom].recommendation_focus, notes: N[dom] },
+    sec: { adjective: T[sec].adjective, notes: N[sec] },
+    weak: { adjective: T[weak].adjective, strengths: T[weak].strengths, recommendation_focus: T[weak].recommendation_focus }
+  };
+};
+
 export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backgroundData?: BackgroundData | null): Analysis => {
   const { a, b, c, d } = scores;
   const T = colorData[lang];
@@ -242,11 +327,7 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
   const domShare = share(dominant);
   const gapToSecond = domShare - share(secondary);
   const spread = domShare - share(weakest);
-  type Shape = 'balanced' | 'twoStyles' | 'strong' | 'moderate';
-  const shape: Shape =
-    spread < 12 ? 'balanced' :
-    gapToSecond < 6 ? 'twoStyles' :
-    (domShare >= 40 || gapToSecond >= 12) ? 'strong' : 'moderate';
+  const shape: ProfileShape = profileShape(domShare, gapToSecond, spread);
   const he = lang === 'he';
 
   // --- Generate Analysis Texts Dynamically ---

@@ -13,7 +13,7 @@ const TEXT: Record<Lang, {
 }> = {
   he: {
     title: 'מה אני יודע עליך',
-    sub: 'כך אני מבין אותך כרגע, ואני משתמש בזה בשיחות. קרא, תקן, מחק או הוסף. מודל הצבעים הוא רק כלי עזר אחד בתוך התמונה, ולא העיקר.',
+    sub: 'כך אני מבין אותך כרגע, ואני משתמש בזה בשיחות. קרא, תקן, מחק או הוסף. מודל הצבעים הוא רק כלי עזר אחד בתוך התמונה, ולא העיקר. השורות שמסומנות "מהשאלון" הן השערה ראשונית שלי מהתשובות שלך, לא עובדה.',
     empty: 'עדיין אין כאן כלום. אפשר להוסיף משהו בעצמך, או שנדבר ואני אלמד.',
     add: 'הוסף',
     addPlaceholder: 'הוסף משהו שחשוב שאדע עליך...',
@@ -29,7 +29,7 @@ const TEXT: Record<Lang, {
   },
   en: {
     title: 'What I know about you',
-    sub: 'This is how I understand you right now, and I use it in our conversations. Read it, correct it, delete or add. The color model is just one helper inside the picture, not the center.',
+    sub: 'This is how I understand you right now, and I use it in our conversations. Read it, correct it, delete or add. The color model is just one helper inside the picture, not the center. Lines marked "From the questionnaire" are my first hypothesis from your answers, not a fact.',
     empty: 'Nothing here yet. You can add something yourself, or we talk and I learn.',
     add: 'Add',
     addPlaceholder: 'Add something that is important for me to know about you...',

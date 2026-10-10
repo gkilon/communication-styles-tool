@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import type { Scores, BackgroundData } from '../types';
-import { generateProfileAnalysis } from '../services/analysisService';
+import { getProfileFacts } from '../services/analysisService';
 
 export type MemoryCategory = 'work' | 'values' | 'patterns' | 'focus';
 export type MemorySource = 'questionnaire' | 'user' | 'advisor';
@@ -47,17 +47,55 @@ const GOAL_LABELS: Record<string, { he: string; en: string }> = {
   influence: { he: 'להבין כיצד להשפיע טוב יותר על אחרים', en: 'to understand how to influence others better' }
 };
 
-/** A few plain-language lines taken from the questionnaire. Marked as such, replaced when it is retaken. */
-const buildSeedItems = (scores: Scores, bg: BackgroundData | null | undefined, lang: 'he' | 'en'): MemoryItem[] => {
+// Bump when the seeded wording changes, so existing accounts get the new lines.
+const SEED_VERSION = 2;
+
+/**
+ * Plain-language lines about the person, built from the questionnaire (opening questions +
+ * the profile). They are an initial hypothesis, marked as coming from the questionnaire, and
+ * replaced when it is retaken. Each line is one short sentence, worded without gendered forms.
+ */
+export const buildSeedItems = (scores: Scores, bg: BackgroundData | null | undefined, lang: 'he' | 'en'): MemoryItem[] => {
   const he = lang === 'he';
   const now = new Date().toISOString();
   const items: MemoryItem[] = [];
   const add = (id: string, category: MemoryCategory, text: string) =>
-    items.push({ id, text, category, source: 'questionnaire', updatedAt: now });
+    items.push({ id, text: text.slice(0, MAX_TEXT), category, source: 'questionnaire', updatedAt: now });
 
-  if (bg?.isManager === 'yes') add('q-role', 'work', he ? 'בתפקיד ניהולי' : 'In a management role');
-  else if (bg?.isManager === 'no') add('q-role', 'work', he ? 'לא בתפקיד ניהולי' : 'Not in a management role');
+  const f = getProfileFacts(scores, lang);
 
+  // Who you are at work
+  if (bg?.isManager === 'yes') {
+    add('q-role', 'work', he
+      ? 'בתפקיד ניהולי: הסגנון שלך משפיע ישירות על האופן שבו הצוות חווה אותך'
+      : 'In a management role: your style directly shapes how your team experiences you');
+  } else if (bg?.isManager === 'no') {
+    add('q-role', 'work', he
+      ? 'בתפקיד לא ניהולי: הסגנון שלך נראה בעיקר מול עמיתים ומול הממונים עליך'
+      : 'In a non-management role: your style shows mostly with peers and with the people you report to');
+  }
+
+  if (f) {
+    if (f.shape === 'strong') {
+      add('q-across', 'work', he
+        ? `מי שעובד איתך פוגש נטייה אחת בולטת: ${f.dom.adjective}. זה הופך אותך לעקבי ולקל לזיהוי`
+        : `People working with you meet one prominent tendency: ${f.dom.adjective}. It makes you consistent and easy to read`);
+    } else if (f.shape === 'twoStyles') {
+      add('q-across', 'work', he
+        ? `יש לך שני סגנונות כמעט שווים, ${f.dom.adjective} ו${f.sec.adjective}, ואחרים לא תמיד יודעים איזה מהם יופיע`
+        : `You have two almost equal styles, ${f.dom.adjective} and ${f.sec.adjective}, and others don't always know which will show up`);
+    } else if (f.shape === 'balanced') {
+      add('q-across', 'work', he
+        ? 'ארבע האנרגיות נוכחות אצלך בעוצמה דומה, ולכן יש לך גמישות לעבור בין סגנונות לפי הסיטואציה'
+        : 'All four energies are present at similar strength, so you can move between styles depending on the situation');
+    } else {
+      add('q-across', 'work', he
+        ? `מי שעובד איתך פוגש קודם כל את הצד ${f.dom.adjective}, ולצידו את הצד ${f.sec.adjective}`
+        : `People working with you meet the ${f.dom.adjective} side first, and the ${f.sec.adjective} side beside it`);
+    }
+  }
+
+  // What matters to you
   if (bg?.goal) {
     const label = GOAL_LABELS[bg.goal];
     add('q-goal', 'values', he
@@ -65,18 +103,54 @@ const buildSeedItems = (scores: Scores, bg: BackgroundData | null | undefined, l
       : `Goal stated in the questionnaire: ${label ? label.en : bg.goal}`);
   }
 
-  try {
-    const a = generateProfileAnalysis(scores, lang, bg);
-    add('q-strength', 'patterns', he ? `מה שמגיע לך טבעי: ${a.quickStrength}` : `What comes naturally: ${a.quickStrength}`);
-    add('q-weakness', 'patterns', he ? `מה שדורש ממך מאמץ: ${a.quickWeakness}` : `What takes effort: ${a.quickWeakness}`);
-  } catch {
-    // no scores yet — nothing to add
+  if (f) {
+    const needs = f.shape === 'twoStyles'
+      ? (he ? `${f.dom.notes.needs}, ובמקביל ${f.sec.notes.needs}` : `${f.dom.notes.needs}, and at the same time ${f.sec.notes.needs}`)
+      : f.dom.notes.needs;
+    add('q-needs', 'values', he ? `כדי להיות במיטבך חשוב לך: ${needs}` : `To be at your best you need: ${needs}`);
+    add('q-speak', 'values', he ? `מה שעובד איתך בשיחה: ${f.dom.notes.speak}` : `What works when talking with you: ${f.dom.notes.speak}`);
+
+    // Patterns
+    const strengths = f.dom.strengths.slice(0, 3);
+    add('q-strength', 'patterns', he
+      ? `חוזקות טבעיות: ${strengths[0]}, ${strengths[1]} ו${strengths[2]}`
+      : `Natural strengths: ${strengths[0]}, ${strengths[1]} and ${strengths[2]}`);
+
+    if (f.shape === 'balanced') {
+      add('q-pressure', 'patterns', he
+        ? 'בלי נטייה מובילה, בלחץ יכול להיות קשה להחליט איזה סגנון מתאים לרגע'
+        : 'With no leading tendency, under pressure it can be hard to decide which style fits the moment');
+    } else {
+      add('q-pressure', 'patterns', he
+        ? `בלחץ, הסגנון שלך עלול להיראות כך: ${f.dom.notes.pressure}`
+        : `Under pressure, your style can look like this: ${f.dom.notes.pressure}`);
+    }
+
+    if (f.shape === 'twoStyles') {
+      add('q-tension', 'patterns', he
+        ? `מתח פנימי אפשרי בין הצד ${f.dom.adjective} לצד ${f.sec.adjective}, שעלול להיראות כחוסר עקביות מול אחרים`
+        : `A possible inner tension between the ${f.dom.adjective} side and the ${f.sec.adjective} side, which can look like inconsistency to others`);
+    } else if (f.shape === 'strong' || f.shape === 'moderate') {
+      add('q-tension', 'patterns', he
+        ? `הצד האחר של החוזקה שלך: ${f.dom.weaknesses[0]}; ${f.dom.weaknesses[1]}`
+        : `The other side of your strength: ${f.dom.weaknesses[0]}; ${f.dom.weaknesses[1]}`);
+    }
+
+    add('q-effort', 'patterns', f.shape === 'balanced'
+      ? (he ? `אזור פיתוח קל, פחות אוטומטי אצלך: ${f.weak.strengths[0]}; ${f.weak.strengths[1]}` : `A mild development area, less automatic for you: ${f.weak.strengths[0]}; ${f.weak.strengths[1]}`)
+      : (he ? `מה שדורש ממך מאמץ מודע: ${f.weak.strengths[0]}; ${f.weak.strengths[1]}` : `What takes conscious effort: ${f.weak.strengths[0]}; ${f.weak.strengths[1]}`));
+
+    // What to work on
+    add('q-focus1', 'focus', he ? `כיוון פיתוח ראשון: ${f.dom.recommendation_focus}` : `First development direction: ${f.dom.recommendation_focus}`);
+    add('q-focus2', 'focus', he
+      ? `ובהמשך: ${f.weak.recommendation_focus}, גם כשזה לא מרגיש טבעי`
+      : `Then: ${f.weak.recommendation_focus}, even when it doesn't feel natural`);
   }
   return items;
 };
 
 const seedSignature = (scores: Scores, bg: BackgroundData | null | undefined, lang: string) =>
-  JSON.stringify([scores?.a, scores?.b, scores?.c, scores?.d, bg?.isManager || '', bg?.goal || '', lang]);
+  JSON.stringify([SEED_VERSION, scores?.a, scores?.b, scores?.c, scores?.d, bg?.isManager || '', bg?.goal || '', lang]);
 
 const getUid = (): string | null => (auth && auth.currentUser ? auth.currentUser.uid : null);
 
