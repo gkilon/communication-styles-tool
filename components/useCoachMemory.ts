@@ -3,42 +3,28 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import type { Scores, BackgroundData } from '../types';
 import { getProfileFacts } from '../services/analysisService';
+import { generateKnownAboutUser } from '../services/geminiService';
 
-export type MemoryCategory = 'work' | 'values' | 'patterns' | 'focus';
-export type MemorySource = 'questionnaire' | 'user' | 'advisor';
-
-export interface MemoryItem {
-  id: string;
-  text: string;
-  category: MemoryCategory;
-  source: MemorySource;
-  updatedAt: string;
-}
+export type MemorySource = 'generated' | 'user';
 
 export interface CoachMemory {
-  items: MemoryItem[];
+  /** The "what I know about you" text, written to the person in second person. */
+  text: string;
+  /** 'generated' until the user edits it, then 'user'. */
+  source: MemorySource;
   loaded: boolean;
+  generating: boolean;
   saveFailed: boolean;
-  addItem: (text: string, category: MemoryCategory) => void;
-  updateItem: (id: string, text: string) => void;
-  removeItem: (id: string) => void;
-  clearAll: () => void;
+  /** The questionnaire was retaken after the user edited the text: offer to update it. */
+  refreshSuggested: boolean;
+  saveText: (text: string) => void;
+  appendSentence: (text: string) => void;
+  regenerate: () => Promise<void>;
+  dismissRefresh: () => void;
+  clear: () => void;
 }
 
-export const MAX_ITEMS = 30;
-export const MAX_TEXT = 200;
-
-// Hebrew labels, used when the list is handed to the advisor.
-const CATEGORY_HE: Record<MemoryCategory, string> = {
-  work: 'מי אתה בעבודה',
-  values: 'מה חשוב לך',
-  patterns: 'דפוסים שזוהו',
-  focus: 'על מה עובדים עכשיו'
-};
-
-/** The list as plain lines for the advisor's prompt. */
-export const memoryToPromptLines = (items: MemoryItem[]): string[] =>
-  items.map(i => `${CATEGORY_HE[i.category]}: ${i.text}`);
+export const MAX_TEXT = 2500;
 
 const GOAL_LABELS: Record<string, { he: string; en: string }> = {
   self_learn: { he: 'ללמוד על עצמי ועל סגנון התקשורת שלי', en: 'to learn about myself and my communication style' },
@@ -47,145 +33,89 @@ const GOAL_LABELS: Record<string, { he: string; en: string }> = {
   influence: { he: 'להבין כיצד להשפיע טוב יותר על אחרים', en: 'to understand how to influence others better' }
 };
 
-// Bump when the seeded wording changes, so existing accounts get the new lines.
-const SEED_VERSION = 2;
-
 /**
- * Plain-language lines about the person, built from the questionnaire (opening questions +
- * the profile). They are an initial hypothesis, marked as coming from the questionnaire, and
- * replaced when it is retaken. Each line is one short sentence, worded without gendered forms.
+ * The plain facts behind the first draft: the opening questions (role, goal) and what the
+ * profile suggests. These are only the raw material — the paragraph the user reads is written
+ * from them by the advisor, and the user can change it.
  */
-export const buildSeedItems = (scores: Scores, bg: BackgroundData | null | undefined, lang: 'he' | 'en'): MemoryItem[] => {
+export const buildFactLines = (scores: Scores, bg: BackgroundData | null | undefined, lang: 'he' | 'en'): string[] => {
   const he = lang === 'he';
-  const now = new Date().toISOString();
-  const items: MemoryItem[] = [];
-  const add = (id: string, category: MemoryCategory, text: string) =>
-    items.push({ id, text: text.slice(0, MAX_TEXT), category, source: 'questionnaire', updatedAt: now });
+  const lines: string[] = [];
 
-  const f = getProfileFacts(scores, lang);
+  if (bg?.isManager === 'yes') lines.push(he ? 'בתפקיד ניהולי' : 'In a management role');
+  else if (bg?.isManager === 'no') lines.push(he ? 'לא בתפקיד ניהולי' : 'Not in a management role');
 
-  // Who you are at work
-  if (bg?.isManager === 'yes') {
-    add('q-role', 'work', he
-      ? 'בתפקיד ניהולי: הסגנון שלך משפיע ישירות על האופן שבו הצוות חווה אותך'
-      : 'In a management role: your style directly shapes how your team experiences you');
-  } else if (bg?.isManager === 'no') {
-    add('q-role', 'work', he
-      ? 'בתפקיד לא ניהולי: הסגנון שלך נראה בעיקר מול עמיתים ומול הממונים עליך'
-      : 'In a non-management role: your style shows mostly with peers and with the people you report to');
-  }
-
-  if (f) {
-    if (f.shape === 'strong') {
-      add('q-across', 'work', he
-        ? `מי שעובד איתך פוגש נטייה אחת בולטת: ${f.dom.adjective}. זה הופך אותך לעקבי ולקל לזיהוי`
-        : `People working with you meet one prominent tendency: ${f.dom.adjective}. It makes you consistent and easy to read`);
-    } else if (f.shape === 'twoStyles') {
-      add('q-across', 'work', he
-        ? `יש לך שני סגנונות כמעט שווים, ${f.dom.adjective} ו${f.sec.adjective}, ואחרים לא תמיד יודעים איזה מהם יופיע`
-        : `You have two almost equal styles, ${f.dom.adjective} and ${f.sec.adjective}, and others don't always know which will show up`);
-    } else if (f.shape === 'balanced') {
-      add('q-across', 'work', he
-        ? 'ארבע האנרגיות נוכחות אצלך בעוצמה דומה, ולכן יש לך גמישות לעבור בין סגנונות לפי הסיטואציה'
-        : 'All four energies are present at similar strength, so you can move between styles depending on the situation');
-    } else {
-      add('q-across', 'work', he
-        ? `מי שעובד איתך פוגש קודם כל את הצד ${f.dom.adjective}, ולצידו את הצד ${f.sec.adjective}`
-        : `People working with you meet the ${f.dom.adjective} side first, and the ${f.sec.adjective} side beside it`);
-    }
-  }
-
-  // What matters to you
   if (bg?.goal) {
     const label = GOAL_LABELS[bg.goal];
-    add('q-goal', 'values', he
-      ? `מטרה שציינת בשאלון: ${label ? label.he : bg.goal}`
+    lines.push(he
+      ? `מטרה שציין בשאלון: ${label ? label.he : bg.goal}`
       : `Goal stated in the questionnaire: ${label ? label.en : bg.goal}`);
   }
 
+  const f = getProfileFacts(scores, lang);
   if (f) {
-    const needs = f.shape === 'twoStyles'
-      ? (he ? `${f.dom.notes.needs}, ובמקביל ${f.sec.notes.needs}` : `${f.dom.notes.needs}, and at the same time ${f.sec.notes.needs}`)
-      : f.dom.notes.needs;
-    add('q-needs', 'values', he ? `כדי להיות במיטבך חשוב לך: ${needs}` : `To be at your best you need: ${needs}`);
-    add('q-speak', 'values', he ? `מה שעובד איתך בשיחה: ${f.dom.notes.speak}` : `What works when talking with you: ${f.dom.notes.speak}`);
-
-    // Patterns
-    const strengths = f.dom.strengths.slice(0, 3);
-    add('q-strength', 'patterns', he
-      ? `חוזקות טבעיות: ${strengths[0]}, ${strengths[1]} ו${strengths[2]}`
-      : `Natural strengths: ${strengths[0]}, ${strengths[1]} and ${strengths[2]}`);
-
-    if (f.shape === 'balanced') {
-      add('q-pressure', 'patterns', he
-        ? 'בלי נטייה מובילה, בלחץ יכול להיות קשה להחליט איזה סגנון מתאים לרגע'
-        : 'With no leading tendency, under pressure it can be hard to decide which style fits the moment');
+    if (f.shape === 'strong') {
+      lines.push(he ? `נטייה אחת בולטת בבירור: ${f.dom.adjective}` : `One clearly prominent tendency: ${f.dom.adjective}`);
+    } else if (f.shape === 'twoStyles') {
+      lines.push(he ? `שני סגנונות כמעט שווים: ${f.dom.adjective} ו${f.sec.adjective}` : `Two almost equal styles: ${f.dom.adjective} and ${f.sec.adjective}`);
+    } else if (f.shape === 'balanced') {
+      lines.push(he ? 'פרופיל מאוזן: אין סגנון שמוביל בבירור, והגמישות היא יתרון' : 'A balanced profile: no style clearly leads, and flexibility is an advantage');
     } else {
-      add('q-pressure', 'patterns', he
-        ? `בלחץ, הסגנון שלך עלול להיראות כך: ${f.dom.notes.pressure}`
-        : `Under pressure, your style can look like this: ${f.dom.notes.pressure}`);
+      lines.push(he ? `נטייה ברורה: ${f.dom.adjective}, ולצידה ${f.sec.adjective}` : `A clear tendency: ${f.dom.adjective}, with ${f.sec.adjective} beside it`);
     }
-
+    lines.push(he ? `מה שהוא צריך מאחרים: ${f.dom.notes.needs}` : `What they need from others: ${f.dom.notes.needs}`);
     if (f.shape === 'twoStyles') {
-      add('q-tension', 'patterns', he
-        ? `מתח פנימי אפשרי בין הצד ${f.dom.adjective} לצד ${f.sec.adjective}, שעלול להיראות כחוסר עקביות מול אחרים`
-        : `A possible inner tension between the ${f.dom.adjective} side and the ${f.sec.adjective} side, which can look like inconsistency to others`);
-    } else if (f.shape === 'strong' || f.shape === 'moderate') {
-      add('q-tension', 'patterns', he
-        ? `הצד האחר של החוזקה שלך: ${f.dom.weaknesses[0]}; ${f.dom.weaknesses[1]}`
-        : `The other side of your strength: ${f.dom.weaknesses[0]}; ${f.dom.weaknesses[1]}`);
+      lines.push(he ? `ובמקביל, הצד השני שלו צריך: ${f.sec.notes.needs}` : `And at the same time, the other side needs: ${f.sec.notes.needs}`);
     }
-
-    add('q-effort', 'patterns', f.shape === 'balanced'
-      ? (he ? `אזור פיתוח קל, פחות אוטומטי אצלך: ${f.weak.strengths[0]}; ${f.weak.strengths[1]}` : `A mild development area, less automatic for you: ${f.weak.strengths[0]}; ${f.weak.strengths[1]}`)
-      : (he ? `מה שדורש ממך מאמץ מודע: ${f.weak.strengths[0]}; ${f.weak.strengths[1]}` : `What takes conscious effort: ${f.weak.strengths[0]}; ${f.weak.strengths[1]}`));
-
-    // What to work on
-    add('q-focus1', 'focus', he ? `כיוון פיתוח ראשון: ${f.dom.recommendation_focus}` : `First development direction: ${f.dom.recommendation_focus}`);
-    add('q-focus2', 'focus', he
-      ? `ובהמשך: ${f.weak.recommendation_focus}, גם כשזה לא מרגיש טבעי`
-      : `Then: ${f.weak.recommendation_focus}, even when it doesn't feel natural`);
+    lines.push(he ? `מה שעובד בשיחה איתו: ${f.dom.notes.speak}` : `What works when talking with them: ${f.dom.notes.speak}`);
+    lines.push(he ? `חוזקות טבעיות: ${f.dom.strengths.slice(0, 3).join(', ')}` : `Natural strengths: ${f.dom.strengths.slice(0, 3).join(', ')}`);
+    if (f.shape !== 'balanced') {
+      lines.push(he ? `בלחץ זה עלול להיראות כך: ${f.dom.notes.pressure}` : `Under pressure it can look like: ${f.dom.notes.pressure}`);
+      lines.push(he ? `מה שדורש ממנו מאמץ מודע: ${f.weak.strengths.slice(0, 2).join('; ')}` : `What takes conscious effort: ${f.weak.strengths.slice(0, 2).join('; ')}`);
+    }
+    lines.push(he ? `כיוון פיתוח אפשרי: ${f.dom.recommendation_focus}` : `A possible development direction: ${f.dom.recommendation_focus}`);
   }
-  return items;
+  return lines;
 };
 
+// Bump when the way the text is produced changes, so the first drafts get rewritten.
+const SEED_VERSION = 4;
+
 const seedSignature = (scores: Scores, bg: BackgroundData | null | undefined, lang: string) =>
-  JSON.stringify([SEED_VERSION, scores?.a, scores?.b, scores?.c, scores?.d, bg?.isManager || '', bg?.goal || '', lang]);
+  JSON.stringify([SEED_VERSION, scores?.a, scores?.b, scores?.c, scores?.d, bg?.isManager || '', bg?.goal || '', bg?.gender || '', lang]);
 
 const getUid = (): string | null => (auth && auth.currentUser ? auth.currentUser.uid : null);
 
-const cleanItems = (raw: any): MemoryItem[] =>
-  (Array.isArray(raw) ? raw : [])
-    .filter(i => i && typeof i.text === 'string' && i.text.trim() && typeof i.id === 'string')
-    .map(i => ({
-      id: i.id,
-      text: String(i.text).slice(0, MAX_TEXT),
-      category: (['work', 'values', 'patterns', 'focus'].includes(i.category) ? i.category : 'patterns') as MemoryCategory,
-      source: (['questionnaire', 'user', 'advisor'].includes(i.source) ? i.source : 'user') as MemorySource,
-      updatedAt: typeof i.updatedAt === 'string' ? i.updatedAt : ''
-    }))
-    .slice(0, MAX_ITEMS);
-
 /**
- * "What I know about you": a short, plain list about the user that the advisor uses in the
- * conversations. It lives in the user's own account (users/{uid}/coach_profile/main), is
- * private (not even admins can read it) and the user can read, edit, delete and add to it.
- * The color model is only one of its sources.
+ * "What I know about you": a short, human paragraph about the user that the advisor uses in the
+ * conversations. It lives in the user's own account (users/{uid}/coach_profile/main), is private
+ * (not even admins can read it), and the user can read, edit, add to and delete it.
+ * The first draft is written from the questionnaire; the color model is only one of its sources.
  */
 export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en'): CoachMemory {
-  const [items, setItems] = useState<MemoryItem[]>([]);
+  const [text, setText] = useState('');
+  const [source, setSource] = useState<MemorySource>('generated');
   const [loaded, setLoaded] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
-  const sigRef = useRef('');
-  const itemsRef = useRef<MemoryItem[]>([]);
-  itemsRef.current = items;
+  const [refreshSuggested, setRefreshSuggested] = useState(false);
 
-  const persist = async (next: MemoryItem[], sig: string) => {
+  const sigRef = useRef('');
+  const textRef = useRef('');
+  const sourceRef = useRef<MemorySource>('generated');
+  const generatingRef = useRef(false);
+  const scoresRef = useRef(scores);
+  const bgRef = useRef(backgroundData);
+  scoresRef.current = scores;
+  bgRef.current = backgroundData;
+
+  const persist = async (t: string, src: MemorySource, sig: string) => {
     const uid = getUid();
     if (!uid || !db) return;
     try {
       await setDoc(doc(db, 'users', uid, 'coach_profile', 'main'), {
-        items: next,
+        text: t,
+        source: src,
         seedSig: sig,
         updatedAt: new Date().toISOString()
       });
@@ -196,75 +126,116 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
     }
   };
 
-  const apply = (next: MemoryItem[]) => {
-    setItems(next);
-    itemsRef.current = next;
-    persist(next, sigRef.current);
+  const apply = (t: string, src: MemorySource, sig: string, save = true) => {
+    setText(t);
+    textRef.current = t;
+    setSource(src);
+    sourceRef.current = src;
+    if (save) persist(t, src, sig);
   };
 
-  // Load once; seed from the questionnaire, and refresh those lines if the questionnaire changed.
+  // Write a fresh draft from the questionnaire. If the AI isn't available, show a plain fallback
+  // for now but don't save it, so the next visit tries again.
+  const generate = async (userNotes: string[]) => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
+    setGenerating(true);
+    const facts = buildFactLines(scoresRef.current, bgRef.current, lang);
+    if (facts.length === 0) {
+      generatingRef.current = false;
+      setGenerating(false);
+      return;
+    }
+    try {
+      const written = await generateKnownAboutUser(facts, bgRef.current?.gender || '', userNotes, lang);
+      apply(written.slice(0, MAX_TEXT), 'generated', sigRef.current);
+      setRefreshSuggested(false);
+    } catch (err) {
+      console.warn('Could not write the advisor profile text:', err);
+      const fallback = [...userNotes, ...facts.slice(0, 6)].join('. ') + '.';
+      apply(fallback, 'generated', sigRef.current, false);
+    } finally {
+      generatingRef.current = false;
+      setGenerating(false);
+    }
+  };
+
   useEffect(() => {
     const sig = seedSignature(scores, backgroundData, lang);
     sigRef.current = sig;
     const uid = getUid();
     let cancelled = false;
     (async () => {
-      let current: MemoryItem[] = [];
+      let hasText = false;
+      let existingText = '';
+      let existingSource: MemorySource = 'generated';
       let storedSig = '';
-      let existed = false;
+      let oldUserNotes: string[] = [];
       if (uid && db) {
         try {
           const snap = await getDoc(doc(db, 'users', uid, 'coach_profile', 'main'));
           if (snap.exists()) {
-            existed = true;
             const data = snap.data() as any;
-            current = cleanItems(data.items);
-            storedSig = typeof data.seedSig === 'string' ? data.seedSig : '';
+            if (typeof data.text === 'string') {
+              hasText = true;
+              existingText = data.text;
+              existingSource = data.source === 'user' ? 'user' : 'generated';
+              storedSig = typeof data.seedSig === 'string' ? data.seedSig : '';
+            } else if (Array.isArray(data.items)) {
+              // An earlier version kept a list; carry over only what the user wrote themselves.
+              oldUserNotes = data.items
+                .filter((i: any) => i && i.source === 'user' && typeof i.text === 'string' && i.text.trim())
+                .map((i: any) => String(i.text));
+            }
           }
         } catch (err) {
           console.error('Error loading advisor profile:', err);
         }
       }
       if (cancelled) return;
-      if (!existed || storedSig !== sig) {
-        const kept = current.filter(i => i.source !== 'questionnaire');
-        current = [...buildSeedItems(scores, backgroundData, lang), ...kept].slice(0, MAX_ITEMS);
-        setItems(current);
-        itemsRef.current = current;
-        persist(current, sig);
+      if (hasText) {
+        apply(existingText, existingSource, sig, false);
+        if (storedSig !== sig && existingText.trim()) {
+          if (existingSource === 'generated') await generate([]);
+          else setRefreshSuggested(true);
+        }
       } else {
-        setItems(current);
-        itemsRef.current = current;
+        await generate(oldUserNotes);
       }
-      setLoaded(true);
+      if (!cancelled) setLoaded(true);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scores?.a, scores?.b, scores?.c, scores?.d, backgroundData?.isManager, backgroundData?.goal, lang]);
+  }, [scores?.a, scores?.b, scores?.c, scores?.d, backgroundData?.isManager, backgroundData?.goal, backgroundData?.gender, lang]);
 
-  const addItem = (text: string, category: MemoryCategory) => {
-    const t = text.trim().slice(0, MAX_TEXT);
-    if (!t || itemsRef.current.length >= MAX_ITEMS) return;
-    const item: MemoryItem = {
-      id: `u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      text: t,
-      category,
-      source: 'user',
-      updatedAt: new Date().toISOString()
-    };
-    apply([...itemsRef.current, item]);
+  // Anything the user writes or edits becomes theirs and is never overwritten silently.
+  const saveText = (t: string) => {
+    apply(t.trim().slice(0, MAX_TEXT), 'user', sigRef.current);
+    setRefreshSuggested(false);
   };
 
-  // An item the user edits becomes theirs and is no longer replaced when the questionnaire is retaken.
-  const updateItem = (id: string, text: string) => {
-    const t = text.trim().slice(0, MAX_TEXT);
-    if (!t) return;
-    apply(itemsRef.current.map(i => (i.id === id ? { ...i, text: t, source: 'user' as MemorySource, updatedAt: new Date().toISOString() } : i)));
+  const appendSentence = (t: string) => {
+    const add = t.trim();
+    if (!add) return;
+    const base = textRef.current.trim();
+    saveText(base ? `${base}\n\n${add}` : add);
   };
 
-  const removeItem = (id: string) => apply(itemsRef.current.filter(i => i.id !== id));
+  // Rewrite from the questionnaire. If the user had edited the text, their words are carried in.
+  const regenerate = async () => {
+    await generate(sourceRef.current === 'user' && textRef.current.trim() ? [textRef.current.trim()] : []);
+  };
 
-  const clearAll = () => apply([]);
+  const dismissRefresh = () => {
+    setRefreshSuggested(false);
+    // remember that we asked for this questionnaire, so we don't ask again until it changes
+    persist(textRef.current, sourceRef.current, sigRef.current);
+  };
 
-  return { items, loaded, saveFailed, addItem, updateItem, removeItem, clearAll };
+  const clear = () => {
+    apply('', 'user', sigRef.current);
+    setRefreshSuggested(false);
+  };
+
+  return { text, source, loaded, generating, saveFailed, refreshSuggested, saveText, appendSentence, regenerate, dismissRefresh, clear };
 }

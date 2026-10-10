@@ -440,6 +440,54 @@ ${RESPONSE_STYLE_GUIDELINES}${getLangInstruction(lang)}`;
 };
 
 /**
+ * Writes the "what I know about you" paragraph: a short, human description of the person,
+ * built from the questionnaire facts (and anything the user wrote before). It is shown to the
+ * user, who can edit it. A first hypothesis, so it is worded with care — never as a diagnosis.
+ */
+export const generateKnownAboutUser = async (factLines: string[], gender: string, userNotes: string[], lang: 'he' | 'en' = 'he'): Promise<string> => {
+  const genderNote = gender === 'female'
+    ? 'פנה בלשון נקבה'
+    : gender === 'male'
+    ? 'פנה בלשון זכר'
+    : 'נסח בצורה ניטרלית ככל האפשר, בלי לשון זכר או נקבה';
+
+  const systemInstruction = `אתה Kilon, יועץ אישי וארגוני מבית Kilon Consulting. כתוב את מה ש"אתה יודע" על האדם שמולך בתחילת הדרך, על בסיס הנתונים שיינתנו לך.
+
+הכללים:
+- כתוב שתיים עד שלוש פסקאות קצרות, בסך הכל כ-110 עד 150 מילים, בגוף שני, אל האדם עצמו. ${genderNote}.
+- טון חם, ישיר ואנושי, כמו מי שהכיר אותו קצת. לא כמו דוח, לא כמו רשימה.
+- בלי רשימות, בלי כותרות, בלי תבניות כמו "חוזקות: ..." ובלי להקריא את הנתונים כמו שהם. חבר אותם לתמונה אחת ואורגנית: איך הוא נוטה לפעול, מה חשוב לו, איפה זה עוזר לו ואיפה זה מקשה, ומה אפשר לבחון יחד.
+- זו השערה ראשונית מהשאלון, ולכן נסח בזהירות ("נראה ש...", "יכול להיות ש..."), לא כעובדה ולא כאבחנה.
+- שפת תכונות והתנהגויות. בלי שמות צבעים, ובלי אחוזים או מספרים.
+- אם ידוע תפקיד או מטרה, שלב אותם באופן טבעי.
+- אל תמציא עובדות שאינן בנתונים.
+- סיים במשפט קצר אחד שמזמין אותו לתקן אותך אם משהו לא מדויק.
+- החזר טקסט בלבד: בלי כותרת ובלי Markdown.${getLangInstruction(lang)}`;
+
+  const notesBlock = userNotes.length > 0
+    ? `
+
+דברים שהמשתמש כתב על עצמו (שלב אותם, הם קודמים לנתונים מהשאלון):
+${userNotes.map(l => '- ' + l).join('\n')}`
+    : '';
+  const userContent = `נתונים מהשאלון:
+${factLines.map(l => '- ' + l).join('\n')}${notesBlock}`;
+
+  const response = await callGeminiApi('generateContent', {
+    model: "gemini-3.8-flash",
+    contents: userContent,
+    config: {
+      systemInstruction,
+      safetySettings: SAFETY_SETTINGS
+    }
+  });
+  const data = await response.json();
+  const text = (data?.text || '').trim();
+  if (!text) throw new Error('empty');
+  return text;
+};
+
+/**
  * Turns the chat history + the new user message into the `contents` array Gemini expects.
  * Keeps the last 20 messages, drops empty ones, makes sure it starts with a user turn,
  * and merges consecutive turns of the same role (Gemini expects them to alternate).
@@ -489,21 +537,23 @@ ${buildColorProfile(previousScores)}
 `;
 }
 
-export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he', history?: SimulationMessage[], previousScores?: Scores | null, mode?: 'feedback' | 'consult' | null, knownAboutUser?: string[]): Promise<string> => {
+export const getAiCoachAdviceStream = async (scores: Scores, userInput: string, onChunk: (chunk: string) => void, backgroundData?: BackgroundData | null, lang: 'he' | 'en' = 'he', history?: SimulationMessage[], previousScores?: Scores | null, mode?: 'feedback' | 'consult' | null, knownAboutUser?: string): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
   const orgContext = buildOrgContext();
   const profileChangeNote = previousScores ? buildProfileChangeNote(previousScores) : '';
 
   // What the user can see on their "what I know about you" card (and edit). Their own words win.
-  const knownBlock = knownAboutUser && knownAboutUser.length > 0
+  const knownBlock = knownAboutUser && knownAboutUser.trim()
     ? `
 
-מה אתה יודע על המשתמש (הרשימה הזו גלויה לו, והוא יכול לתקן אותה, למחוק ממנה ולהוסיף לה):
-${knownAboutUser.map(l => '- ' + l).join('\n')}
+מה אתה יודע על המשתמש (הטקסט הזה גלוי לו, והוא יכול לקרוא אותו, לערוך אותו ולמחוק אותו; הוא מנוסח אליו בגוף שני):
+---
+${knownAboutUser.trim()}
+---
 - זו הידיעה החיה שלך עליו, והפרופיל הצבעוני הוא רק כלי עזר אחד לצידה. אם יש סתירה ביניהם, הידיעה הזו קודמת.
-- השתמש בה באופן טבעי ומדויק, בלי להקריא את הרשימה. הפריטים מנוסחים אליו בגוף שני.
-- אם משהו שהוא אומר סותר פריט, בדוק איתו בעדינות במקום להניח. אל תניח שהרשימה שלמה.`
+- השתמש בה באופן טבעי ומדויק, בלי להקריא אותה. חלק ממנה הוא השערה ראשונית מהשאלון.
+- אם משהו שהוא אומר סותר את הטקסט, בדוק איתו בעדינות במקום להניח. אל תניח שהטקסט שלם.`
     : '';
 
   // The user may have chosen how this conversation should run; otherwise the advisor decides.

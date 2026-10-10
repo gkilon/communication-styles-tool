@@ -7,7 +7,6 @@ import { useT } from '../i18n/useT';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { Message, CoachArchive, CoachMode } from './useCoachArchive';
 import type { CoachMemory } from './useCoachMemory';
-import { memoryToPromptLines } from './useCoachMemory';
 import { CoachMemoryPanel } from './CoachMemoryPanel';
 
 interface AiCoachProps {
@@ -67,6 +66,7 @@ const HEADER_TEXT = {
     memoryTitle: 'מה אני יודע עליך',
     memoryOpen: 'קרא וערוך',
     memoryEmpty: 'עדיין אין כאן כלום',
+    memoryWriting: 'כותב את מה שהבנתי עליך...',
     feedbackTitle: 'Kilon, תן לי פידבק',
     feedbackSub: 'שאלה על עצמי, ותשובה מפורטת',
     consultTitle: 'אני רוצה להתייעץ',
@@ -90,6 +90,7 @@ const HEADER_TEXT = {
     memoryTitle: 'What I know about you',
     memoryOpen: 'Read and edit',
     memoryEmpty: 'Nothing here yet',
+    memoryWriting: 'Writing what I understood about you...',
     feedbackTitle: 'Kilon, give me feedback',
     feedbackSub: 'A question about myself, and a detailed answer',
     consultTitle: 'I want to consult',
@@ -305,7 +306,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
     try {
       await getAiCoachAdviceStream(scores, text, (chunk) => {
         updateLastAi(m => ({ ...m, text: chunk }));
-      }, backgroundData, lang, history, profileChange ? profileChange.previous : null, activeMode, memoryToPromptLines(memory.items));
+      }, backgroundData, lang, history, profileChange ? profileChange.previous : null, activeMode, memory.text);
       if (profileChange) archive.clearProfileChange();
     } catch (error: any) {
       console.error("AI Coach interaction failed:", error);
@@ -375,14 +376,12 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
           className={`mt-3 w-full ${dir === 'rtl' ? 'text-right' : 'text-left'} bg-gray-800/70 hover:bg-gray-800 border border-gray-700 hover:border-cyan-700/60 rounded-xl p-3 transition-all`}
         >
           <div className="text-sm font-bold text-white">🧠 {ht.memoryTitle}</div>
-          {memory.items.length === 0 ? (
+          {memory.generating ? (
+            <div className="text-xs text-cyan-300 mt-1 animate-pulse">{ht.memoryWriting}</div>
+          ) : !memory.text.trim() ? (
             <div className="text-xs text-gray-500 mt-1">{ht.memoryEmpty}</div>
           ) : (
-            <ul className="mt-1.5 space-y-1">
-              {memory.items.slice(0, 3).map(i => (
-                <li key={i.id} className="text-xs text-gray-400 truncate">• {i.text}</li>
-              ))}
-            </ul>
+            <p className="text-xs text-gray-400 mt-1.5 leading-relaxed line-clamp-3">{memory.text}</p>
           )}
           <div className="text-xs font-bold text-cyan-400 mt-2">{ht.memoryOpen} ←</div>
         </button>
