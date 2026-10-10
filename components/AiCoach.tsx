@@ -67,6 +67,7 @@ const HEADER_TEXT = {
     memoryOpen: 'קרא וערוך',
     memoryEmpty: 'עדיין אין כאן כלום',
     memoryWriting: 'כותב את מה שהבנתי עליך...',
+    memoryUpdated: '✨ עודכן',
     feedbackTitle: 'Kilon, תן לי פידבק',
     feedbackSub: 'שאלה על עצמי, ותשובה מפורטת',
     consultTitle: 'אני רוצה להתייעץ',
@@ -91,6 +92,7 @@ const HEADER_TEXT = {
     memoryOpen: 'Read and edit',
     memoryEmpty: 'Nothing here yet',
     memoryWriting: 'Writing what I understood about you...',
+    memoryUpdated: '✨ Updated',
     feedbackTitle: 'Kilon, give me feedback',
     feedbackSub: 'A question about myself, and a detailed answer',
     consultTitle: 'I want to consult',
@@ -176,6 +178,37 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
   const audioChunksRef = useRef<Blob[]>([]);
 
   const ht = HEADER_TEXT[lang === 'en' ? 'en' : 'he'];
+  // Learning: refine "what I know about you" every few messages and when leaving a conversation.
+  // Only what happens in this session counts: a saved conversation that was just opened starts
+  // from its current length, so old conversations aren't re-read every time.
+  const learnedRef = useRef<Record<string, number>>({});
+  const convKey = (conversation.find(m => m.sender === 'user')?.text || '').slice(0, 80);
+  const userCount = conversation.filter(m => m.sender === 'user' && m.text.trim()).length;
+
+  useEffect(() => {
+    if (convKey && learnedRef.current[convKey] === undefined) {
+      learnedRef.current[convKey] = isLoading ? Math.max(0, userCount - 1) : userCount;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convKey]);
+
+  useEffect(() => {
+    if (isLoading || !memory.loaded || memory.generating || memory.learning || !convKey) return;
+    if (userCount - (learnedRef.current[convKey] ?? userCount) >= 4) {
+      learnedRef.current[convKey] = userCount;
+      memory.learnFrom(conversation);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, userCount, memory.loaded]);
+
+  const leaveConversation = () => {
+    if (!convKey || isLoading || !memory.loaded) return;
+    if (userCount - (learnedRef.current[convKey] ?? userCount) >= 2) {
+      learnedRef.current[convKey] = userCount;
+      memory.learnFrom(conversation);
+    }
+  };
+
   const feedbackStarters = lang === 'en' ? FEEDBACK_STARTERS_EN : FEEDBACK_STARTERS_HE;
   const consultStarters = lang === 'en' ? CONSULT_STARTERS_EN : CONSULT_STARTERS_HE;
 
@@ -339,7 +372,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
         className={`flex items-center gap-1 rounded-xl px-2 py-0.5 ${c.id === archive.activeId ? 'bg-cyan-900/30 border border-cyan-700/60' : 'border border-transparent hover:bg-gray-800/70'}`}
       >
         <button
-          onClick={() => { archive.openChat(c.id); setShowArchive(false); }}
+          onClick={() => { leaveConversation(); archive.openChat(c.id); setShowArchive(false); }}
           disabled={isLoading}
           className={`flex-1 min-w-0 ${dir === 'rtl' ? 'text-right' : 'text-left'} py-2 disabled:opacity-50`}
         >
@@ -364,7 +397,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
       {/* Side panel (desktop): the conversation history, like a chat app's sidebar */}
       <aside className="hidden md:flex md:flex-col w-64 shrink-0 self-start bg-gray-900/60 border border-gray-700 rounded-2xl p-3 md:max-h-[820px]">
         <button
-          onClick={() => archive.newChat()}
+          onClick={() => { leaveConversation(); archive.newChat(); }}
           disabled={isLoading || conversation.length === 0}
           className="w-full text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 px-3 py-2.5 rounded-xl border border-cyan-700/60 transition-all disabled:opacity-40"
         >
@@ -372,10 +405,13 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
         </button>
 
         <button
-          onClick={() => setShowMemory(true)}
+          onClick={() => { setShowMemory(true); memory.markSeen(); }}
           className={`mt-3 w-full ${dir === 'rtl' ? 'text-right' : 'text-left'} bg-gray-800/70 hover:bg-gray-800 border border-gray-700 hover:border-cyan-700/60 rounded-xl p-3 transition-all`}
         >
-          <div className="text-sm font-bold text-white">🧠 {ht.memoryTitle}</div>
+          <div className="text-sm font-bold text-white flex items-center gap-2">
+            🧠 {ht.memoryTitle}
+            {memory.hasUnseenUpdate && <span className="text-[11px] font-bold text-cyan-300 bg-cyan-900/40 border border-cyan-700/60 rounded-full px-2 py-0.5">{ht.memoryUpdated}</span>}
+          </div>
           {memory.generating ? (
             <div className="text-xs text-cyan-300 mt-1 animate-pulse">{ht.memoryWriting}</div>
           ) : !memory.text.trim() ? (
@@ -403,7 +439,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <button
-          onClick={() => setShowMemory(true)}
+          onClick={() => { setShowMemory(true); memory.markSeen(); }}
           className="md:hidden text-sm font-bold bg-gray-800/80 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-xl border border-gray-700 transition-all"
         >
           🧠 {ht.memoryTitle}
@@ -421,7 +457,7 @@ export const AiCoach: React.FC<AiCoachProps> = ({ scores, backgroundData, conver
         )}
         {conversation.length > 0 && (
           <button
-            onClick={() => { archive.newChat(); setShowArchive(false); }}
+            onClick={() => { leaveConversation(); archive.newChat(); setShowArchive(false); }}
             disabled={isLoading}
             className="md:hidden text-sm font-bold bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 px-3 py-2 rounded-xl border border-cyan-700/60 transition-all disabled:opacity-40"
           >

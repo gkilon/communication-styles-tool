@@ -9,6 +9,7 @@ const TEXT: Record<Lang, {
   refresh: string; refreshConfirm: string; remove: string; removeConfirm: string; close: string;
   saveFailed: string; addLabel: string; addPlaceholder: string; add: string;
   refreshBanner: string; refreshYes: string; refreshNo: string; edited: string; draft: string;
+  learned: string; updatedTitle: string; undo: string; gotIt: string; learningNow: string;
 }> = {
   he: {
     title: 'מה אני יודע עליך',
@@ -31,7 +32,12 @@ const TEXT: Record<Lang, {
     refreshYes: 'עדכן',
     refreshNo: 'השאר כמו שהוא',
     edited: 'ערכת את הטקסט הזה',
-    draft: 'טיוטה ראשונה שלי מהשאלון'
+    draft: 'טיוטה ראשונה שלי מהשאלון',
+    learned: 'עודכן אחרי שיחות',
+    updatedTitle: 'עדכנתי אחרי השיחה האחרונה',
+    undo: 'בטל את העדכון',
+    gotIt: 'הבנתי',
+    learningNow: 'מעדכן לפי השיחה...'
   },
   en: {
     title: 'What I know about you',
@@ -54,7 +60,12 @@ const TEXT: Record<Lang, {
     refreshYes: 'Update',
     refreshNo: 'Keep it as it is',
     edited: 'You edited this text',
-    draft: 'My first draft from the questionnaire'
+    draft: 'My first draft from the questionnaire',
+    learned: 'Updated after conversations',
+    updatedTitle: 'What I updated after the last conversation',
+    undo: 'Undo the update',
+    gotIt: 'Got it',
+    learningNow: 'Updating from the conversation...'
   }
 };
 
@@ -94,6 +105,23 @@ export const CoachMemoryPanel: React.FC<Props> = ({ memory, lang, dir, onClose }
         <p className="text-sm text-gray-400 mb-5 leading-relaxed">{tx.sub}</p>
 
         {memory.saveFailed && <p className="text-xs text-red-400 mb-3">⚠️ {tx.saveFailed}</p>}
+
+        {memory.learning && <p className="text-xs text-cyan-300 animate-pulse mb-3">⏳ {tx.learningNow}</p>}
+
+        {memory.lastChange && (
+          <div className="mb-4 bg-cyan-900/20 border border-cyan-700/50 rounded-xl p-3">
+            <div className="text-sm font-bold text-cyan-200 mb-1">✨ {tx.updatedTitle}</div>
+            <ul className="text-sm text-gray-200 space-y-1 list-disc ps-5">
+              {memory.lastChange.summary.map((line, i) => <li key={i}>{line}</li>)}
+            </ul>
+            <div className="flex gap-2 mt-3">
+              {memory.canUndo && (
+                <button onClick={memory.undoLastChange} className="text-xs font-bold bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-1.5 rounded-lg">{tx.undo}</button>
+              )}
+              <button onClick={memory.dismissChange} className="text-xs font-bold bg-cyan-700 hover:bg-cyan-600 text-white px-3 py-1.5 rounded-lg">{tx.gotIt}</button>
+            </div>
+          </div>
+        )}
 
         {memory.refreshSuggested && (
           <div className="mb-4 bg-amber-900/20 border border-amber-600/40 rounded-xl p-3">
@@ -144,7 +172,7 @@ export const CoachMemoryPanel: React.FC<Props> = ({ memory, lang, dir, onClose }
                 <p key={i} className="text-[15px] text-gray-100 leading-relaxed">{p}</p>
               ))}
             </div>
-            <div className="mt-2 text-[11px] text-gray-500">{memory.source === 'user' ? tx.edited : tx.draft}</div>
+            <div className="mt-2 text-[11px] text-gray-500">{memory.source === 'user' ? tx.edited : memory.source === 'learned' ? tx.learned : tx.draft}</div>
 
             <div className="flex flex-wrap gap-2 mt-4">
               <button onClick={startEdit} className="text-sm font-bold bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-2 rounded-xl">✏️ {tx.edit}</button>

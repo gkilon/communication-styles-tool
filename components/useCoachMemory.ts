@@ -3,20 +3,34 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import type { Scores, BackgroundData } from '../types';
 import { getProfileFacts } from '../services/analysisService';
-import { generateKnownAboutUser } from '../services/geminiService';
+import { generateKnownAboutUser, updateKnownAboutUser } from '../services/geminiService';
 
-export type MemorySource = 'generated' | 'user';
+// generated = my first draft from the questionnaire; user = the person edited it; learned = refined after conversations
+export type MemorySource = 'generated' | 'user' | 'learned';
+
+export interface MemoryChange { summary: string[]; at: string; }
 
 export interface CoachMemory {
   /** The "what I know about you" text, written to the person in second person. */
   text: string;
-  /** 'generated' until the user edits it, then 'user'. */
+  /** 'generated' until the user edits it or a conversation refines it. */
   source: MemorySource;
   loaded: boolean;
   generating: boolean;
   saveFailed: boolean;
   /** The questionnaire was retaken after the user edited the text: offer to update it. */
   refreshSuggested: boolean;
+  /** What the advisor changed after the latest conversation (null if nothing, or dismissed). */
+  lastChange: MemoryChange | null;
+  /** The text as it was before that change, so the person can take the update back. */
+  canUndo: boolean;
+  learning: boolean;
+  /** An update happened that the person hasn't looked at yet. */
+  hasUnseenUpdate: boolean;
+  learnFrom: (messages: { sender: 'user' | 'ai'; text: string; isError?: boolean }[]) => Promise<void>;
+  undoLastChange: () => void;
+  dismissChange: () => void;
+  markSeen: () => void;
   saveText: (text: string) => void;
   appendSentence: (text: string) => void;
   regenerate: () => Promise<void>;
@@ -99,6 +113,13 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
   const [generating, setGenerating] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [refreshSuggested, setRefreshSuggested] = useState(false);
+  const [lastChange, setLastChange] = useState<MemoryChange | null>(null);
+  const [previousText, setPreviousText] = useState<string | null>(null);
+  const [learning, setLearning] = useState(false);
+  const [hasUnseenUpdate, setHasUnseenUpdate] = useState(false);
+  const learningRef = useRef(false);
+  const lastChangeRef = useRef<MemoryChange | null>(null);
+  const previousTextRef = useRef<string | null>(null);
 
   const sigRef = useRef('');
   const textRef = useRef('');
@@ -117,7 +138,9 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
         text: t,
         source: src,
         seedSig: sig,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        ...(previousTextRef.current !== null ? { previousText: previousTextRef.current } : {}),
+        ...(lastChangeRef.current ? { lastChange: lastChangeRef.current } : {})
       });
       setSaveFailed(false);
     } catch (err) {
@@ -179,8 +202,13 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
             if (typeof data.text === 'string') {
               hasText = true;
               existingText = data.text;
-              existingSource = data.source === 'user' ? 'user' : 'generated';
+              existingSource = data.source === 'user' ? 'user' : data.source === 'learned' ? 'learned' : 'generated';
               storedSig = typeof data.seedSig === 'string' ? data.seedSig : '';
+              if (typeof data.previousText === 'string') { previousTextRef.current = data.previousText; setPreviousText(data.previousText); }
+              if (data.lastChange && Array.isArray(data.lastChange.summary)) {
+                lastChangeRef.current = { summary: data.lastChange.summary.map(String).slice(0, 3), at: String(data.lastChange.at || '') };
+                setLastChange(lastChangeRef.current);
+              }
             } else if (Array.isArray(data.items)) {
               // An earlier version kept a list; carry over only what the user wrote themselves.
               oldUserNotes = data.items
@@ -197,7 +225,7 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
         apply(existingText, existingSource, sig, false);
         if (storedSig !== sig && existingText.trim()) {
           if (existingSource === 'generated') await generate([]);
-          else setRefreshSuggested(true);
+          else setRefreshSuggested(true);  // edited or refined by conversations: ask, never overwrite
         }
       } else {
         await generate(oldUserNotes);
@@ -210,6 +238,10 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
 
   // Anything the user writes or edits becomes theirs and is never overwritten silently.
   const saveText = (t: string) => {
+    previousTextRef.current = null;
+    setPreviousText(null);
+    lastChangeRef.current = null;
+    setLastChange(null);
     apply(t.trim().slice(0, MAX_TEXT), 'user', sigRef.current);
     setRefreshSuggested(false);
   };
@@ -221,10 +253,64 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
     saveText(base ? `${base}\n\n${add}` : add);
   };
 
-  // Rewrite from the questionnaire. If the user had edited the text, their words are carried in.
+  // Rewrite from the questionnaire. If the text had been edited or refined, those words are carried in.
   const regenerate = async () => {
-    await generate(sourceRef.current === 'user' && textRef.current.trim() ? [textRef.current.trim()] : []);
+    await generate(sourceRef.current !== 'generated' && textRef.current.trim() ? [textRef.current.trim()] : []);
   };
+
+  // After a conversation: refine the text with what was learned (if anything), and show what changed.
+  const learnFrom = async (messages: { sender: 'user' | 'ai'; text: string; isError?: boolean }[]) => {
+    if (learningRef.current || generatingRef.current) return;
+    const current = textRef.current.trim();
+    if (!current) return; // the person cleared it: don't write anything back
+    const excerpt = messages
+      .filter(m => !m.isError && m.text && m.text.trim())
+      .slice(-16)
+      .map(m => `${m.sender === 'user' ? (lang === 'he' ? 'המשתמש' : 'User') : 'Kilon'}: ${m.text.trim()}`)
+      .join('\n\n')
+      .slice(-6000);
+    if (!excerpt) return;
+    learningRef.current = true;
+    setLearning(true);
+    try {
+      const result = await updateKnownAboutUser(current, excerpt, bgRef.current?.gender || '', lang);
+      if (result.changed) {
+        previousTextRef.current = current;
+        setPreviousText(current);
+        const change: MemoryChange = { summary: result.summary, at: new Date().toISOString() };
+        lastChangeRef.current = change;
+        setLastChange(change);
+        setHasUnseenUpdate(true);
+        apply(result.text.slice(0, MAX_TEXT), 'learned', sigRef.current);
+      }
+    } catch (err) {
+      console.warn('Could not refine the advisor profile text:', err);
+    } finally {
+      learningRef.current = false;
+      setLearning(false);
+    }
+  };
+
+  // Take the latest update back.
+  const undoLastChange = () => {
+    if (previousTextRef.current === null) return;
+    const back = previousTextRef.current;
+    previousTextRef.current = null;
+    setPreviousText(null);
+    lastChangeRef.current = null;
+    setLastChange(null);
+    setHasUnseenUpdate(false);
+    apply(back, sourceRef.current === 'generated' ? 'generated' : 'user', sigRef.current);
+  };
+
+  const dismissChange = () => {
+    lastChangeRef.current = null;
+    setLastChange(null);
+    setHasUnseenUpdate(false);
+    persist(textRef.current, sourceRef.current, sigRef.current);
+  };
+
+  const markSeen = () => setHasUnseenUpdate(false);
 
   const dismissRefresh = () => {
     setRefreshSuggested(false);
@@ -233,9 +319,19 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
   };
 
   const clear = () => {
+    previousTextRef.current = null;
+    setPreviousText(null);
+    lastChangeRef.current = null;
+    setLastChange(null);
+    setHasUnseenUpdate(false);
     apply('', 'user', sigRef.current);
     setRefreshSuggested(false);
   };
 
-  return { text, source, loaded, generating, saveFailed, refreshSuggested, saveText, appendSentence, regenerate, dismissRefresh, clear };
+  return {
+    text, source, loaded, generating, saveFailed, refreshSuggested,
+    lastChange, canUndo: previousText !== null, learning, hasUnseenUpdate,
+    learnFrom, undoLastChange, dismissChange, markSeen,
+    saveText, appendSentence, regenerate, dismissRefresh, clear
+  };
 }

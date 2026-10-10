@@ -488,6 +488,64 @@ ${factLines.map(l => '- ' + l).join('\n')}${notesBlock}`;
 };
 
 /**
+ * After a conversation: refine the "what I know about you" paragraph with what was learned.
+ * Conservative by design — it keeps the existing wording (especially what the user wrote),
+ * adds only what the person said or clearly showed about their work, communication, needs and
+ * patterns, never sensitive categories, and returns changed=false when nothing new was learned.
+ */
+export const updateKnownAboutUser = async (currentText: string, conversationText: string, gender: string, lang: 'he' | 'en' = 'he'): Promise<{ changed: boolean; text: string; summary: string[] }> => {
+  const genderNote = gender === 'female'
+    ? 'פנה בלשון נקבה'
+    : gender === 'male'
+    ? 'פנה בלשון זכר'
+    : 'נסח בצורה ניטרלית ככל האפשר, בלי לשון זכר או נקבה';
+
+  const systemInstruction = `אתה Kilon, יועץ אישי וארגוני. יש לך תיאור קצר של אדם בשם "מה אני יודע עליך". האדם רואה אותו ויכול לערוך אותו. קראת עכשיו קטע משיחה איתו. עדכן את התיאור רק אם למדת משהו חדש או מדויק יותר עליו.
+
+כללים:
+- שמור על אותו טון ועל אורך דומה (עד כ-170 מילים), שתיים עד שלוש פסקאות בגוף שני, בלי רשימות ובלי כותרות. ${genderNote}.
+- שמור את הניסוחים הקיימים, במיוחד משפטים שהמשתמש כתב בעצמו. שנה משפט רק אם השיחה סותרת אותו או מדייקת אותו. אל תמחק דבר שהמשתמש כתב.
+- הוסף רק מה שהמשתמש אמר בעצמו או שעלה בבירור מהשיחה, על העבודה, התקשורת, הצרכים והדפוסים שלו. נסח בזהירות, כהשערה ("נראה ש...").
+- אל תוסיף: מידע על בריאות, משפחה, דת, פוליטיקה, זהות מינית, כספים או עניינים משפטיים, אבחנות, ושמות או פרטים מזהים של אנשים אחרים (מותר לכתוב "המנהל שלך" או "קולגה").
+- שיחה אחת היא עדות חלשה. אל תהפוך משהו חולף לתכונה קבועה.
+- אם לא למדת משהו חדש וממשי, החזר changed=false.
+
+החזר JSON בלבד, בלי הסברים ובלי גדרות קוד, בפורמט הזה:
+{"changed": true או false, "text": "הטקסט המעודכן המלא", "summary": ["עד שלוש שורות קצרות, בגוף שני, על מה עדכנת"]}
+כשchanged הוא false, text יכיל את הטקסט הקיים כמו שהוא וsummary יהיה ריק.${getLangInstruction(lang)}`;
+
+  const userContent = `התיאור הנוכחי:
+---
+${currentText}
+---
+
+קטע מהשיחה:
+${conversationText}`;
+
+  const response = await callGeminiApi('generateContent', {
+    model: "gemini-3.8-flash",
+    contents: userContent,
+    config: {
+      systemInstruction,
+      safetySettings: SAFETY_SETTINGS
+    }
+  });
+  const data = await response.json();
+  const raw = String(data?.text || '');
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('no json');
+  const parsed = JSON.parse(raw.slice(start, end + 1));
+  const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
+  const summary = Array.isArray(parsed.summary)
+    ? parsed.summary.filter((x: any) => typeof x === 'string' && x.trim()).map((x: string) => x.trim()).slice(0, 3)
+    : [];
+  // Safety: never accept a result that is empty or has shrunk a lot (a sign of a bad answer).
+  const ok = parsed.changed === true && text.length > 0 && text.length >= currentText.length * 0.6 && summary.length > 0;
+  return { changed: ok, text: ok ? text : currentText, summary: ok ? summary : [] };
+};
+
+/**
  * Turns the chat history + the new user message into the `contents` array Gemini expects.
  * Keeps the last 20 messages, drops empty ones, makes sure it starts with a user turn,
  * and merges consecutive turns of the same role (Gemini expects them to alternate).
