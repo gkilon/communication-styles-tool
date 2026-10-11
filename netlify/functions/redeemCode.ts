@@ -1,4 +1,10 @@
-import { initFirebaseAdmin, getTrustedClientIp, rateLimitHit, getVerifiedToken, admin } from "../lib/serverCommon";
+import { initFirebaseAdmin, getTrustedClientIp, rateLimitHit, rateLimitPeek, getVerifiedToken, admin } from "../lib/serverCommon";
+
+// Same idea as validate-code: only WRONG codes use up the budget — per address (shared with
+// validate-code, so the two endpoints can't be used to double it) and per account.
+const FAIL_MAX = 30;
+const FAIL_MAX_PER_ACCOUNT = 15;
+const FAIL_WINDOW_MS = 10 * 60 * 1000;
 
 const json = (body: any, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -16,8 +22,14 @@ export default async (req: Request, context?: any) => {
     if (!decoded) return json({ ok: false, error: "נדרשת התחברות" }, 401);
 
     const ip = getTrustedClientIp(req, context);
-    if (await rateLimitHit(db, "redeem", ip, 40, 60 * 1000)) {
+    if (await rateLimitHit(db, "redeem", ip, 120, 60 * 1000)) {
       return json({ ok: false, error: "יותר מדי ניסיונות. נסה שוב בעוד דקה." }, 429);
+    }
+    if (
+      (await rateLimitPeek(db, "codefail", ip, FAIL_MAX, FAIL_WINDOW_MS)) ||
+      (await rateLimitPeek(db, "codefail_uid", decoded.uid, FAIL_MAX_PER_ACCOUNT, FAIL_WINDOW_MS))
+    ) {
+      return json({ ok: false, error: "יותר מדי ניסיונות שגויים. נסה שוב בעוד כמה דקות." }, 429);
     }
 
     const { code: rawCode } = await req.json();
@@ -38,7 +50,11 @@ export default async (req: Request, context?: any) => {
       if (snap.exists && (snap.data() as any).active !== false) valid = true;
     }
 
-    if (!valid) return json({ ok: false, error: "קוד גישה שגוי או לא פעיל" }, 403);
+    if (!valid) {
+      await rateLimitHit(db, "codefail", ip, FAIL_MAX, FAIL_WINDOW_MS);
+      await rateLimitHit(db, "codefail_uid", decoded.uid, FAIL_MAX_PER_ACCOUNT, FAIL_WINDOW_MS);
+      return json({ ok: false, error: "קוד גישה שגוי או לא פעיל" }, 403);
+    }
 
     const user = await admin.auth().getUser(decoded.uid);
     await admin.auth().setCustomUserClaims(decoded.uid, {

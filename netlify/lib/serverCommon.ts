@@ -65,6 +65,29 @@ export async function rateLimitHit(
   }
 }
 
+// Looks at a fixed-window counter WITHOUT adding to it. True if the caller has already used up
+// `max` hits in the current window. Used with rateLimitHit to throttle only FAILED attempts:
+// check first, and record a hit only when the attempt fails. Fails open, like rateLimitHit.
+export async function rateLimitPeek(
+  db: admin.firestore.Firestore,
+  bucket: string,
+  key: string,
+  max: number,
+  windowMs: number
+): Promise<boolean> {
+  const safeId = `${bucket}_${key}`.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 200);
+  try {
+    const snap = await db.collection("rate_limits").doc(safeId).get();
+    if (!snap.exists) return false;
+    const d: any = snap.data();
+    if (Date.now() - (d.windowStart || 0) > windowMs) return false;
+    return (d.count || 0) >= max;
+  } catch (e) {
+    console.warn("Rate limiter peek error (failing open):", e);
+    return false;
+  }
+}
+
 // Verifies the Firebase ID token from the Authorization header.
 // Returns the decoded token (uid + custom claims) or null.
 export async function getVerifiedToken(req: Request): Promise<admin.auth.DecodedIdToken | null> {

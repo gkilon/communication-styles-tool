@@ -1,4 +1,9 @@
-import { initFirebaseAdmin, getTrustedClientIp, rateLimitHit } from "../lib/serverCommon";
+import { initFirebaseAdmin, getTrustedClientIp, rateLimitHit, rateLimitPeek } from "../lib/serverCommon";
+
+// Brute-force protection counts only FAILED guesses: a correct code never uses up the budget, so a
+// whole workshop on one network is not throttled, while a script guessing codes is stopped fast.
+const FAIL_MAX = 30;
+const FAIL_WINDOW_MS = 10 * 60 * 1000;
 
 interface AccessValidationResult {
   valid: boolean;
@@ -46,9 +51,15 @@ export default async (req: Request, context?: any) => {
     // Rate limit on the REAL client IP (from Netlify itself, not the spoofable
     // X-Forwarded-For header), stored in Firestore so it holds across instances.
     const ip = getTrustedClientIp(req, context);
-    if (await rateLimitHit(db, "validate", ip, 60, 60 * 1000)) {
+    // 1) a loose cap on raw request volume (stops hammering)
+    if (await rateLimitHit(db, "validate", ip, 120, 60 * 1000)) {
       return json({ valid: false, type: 'invalid', message: 'יותר מדי ניסיונות. נסה שוב בעוד דקה.' }, 429);
     }
+    // 2) the real brute-force limit: too many wrong guesses from this address recently
+    if (await rateLimitPeek(db, "codefail", ip, FAIL_MAX, FAIL_WINDOW_MS)) {
+      return json({ valid: false, type: 'invalid', message: 'יותר מדי ניסיונות שגויים. נסה שוב בעוד כמה דקות.' }, 429);
+    }
+    const recordFailure = () => rateLimitHit(db, "codefail", ip, FAIL_MAX, FAIL_WINDOW_MS);
 
     const { code: rawCode } = await req.json();
     const code = (typeof rawCode === "string" ? rawCode : "").trim();
@@ -72,6 +83,7 @@ export default async (req: Request, context?: any) => {
     if (snap.exists) {
       const data = snap.data() as any;
       if (data.active === false) {
+        await recordFailure();
         return json({ valid: false, type: 'invalid', message: 'קוד הגישה פג תוקף או אינו פעיל' });
       }
       const teamName = data.teamName || 'General';
@@ -112,6 +124,7 @@ export default async (req: Request, context?: any) => {
       return json(result);
     }
 
+    await recordFailure();
     return json({ valid: false, type: 'invalid', message: 'קוד גישה שגוי. אנא ודא שהזנת את הקוד במדויק.' });
   } catch (error) {
     console.error("validateCode function error:", error);
