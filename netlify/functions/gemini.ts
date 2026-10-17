@@ -38,168 +38,96 @@ function initFirebaseAdmin(): admin.firestore.Firestore | null {
 }
 
 // ----------------------------------------------------
-// 2. In-Memory Fallback Rate Limiter (if no Service Account
-//    or if Firestore fails)
+// 3. Atomic Firestore quotas (per-user + global daily cap)
 // ----------------------------------------------------
-interface FallbackRecord {
-  minuteTimestamps: number[];
-  dailyTimestamps: number[];
-}
-const fallbackMap = new Map<string, FallbackRecord>();
-const FALLBACK_MAX_PER_MINUTE = 10;
-const FALLBACK_MAX_PER_DAY = 50;
-
-function checkFallbackLimit(key: string): { allowed: boolean; retryAfter?: number; errorMsg?: string } {
-  const now = Date.now();
-  const oneMinuteAgo = now - 60 * 1000;
-  const oneDayAgo = now - 24 * 60 * 60 * 1000;
-
-  let record = fallbackMap.get(key);
-  if (!record) {
-    record = { minuteTimestamps: [], dailyTimestamps: [] };
-    fallbackMap.set(key, record);
-  }
-
-  record.minuteTimestamps = record.minuteTimestamps.filter(t => t > oneMinuteAgo);
-  record.dailyTimestamps = record.dailyTimestamps.filter(t => t > oneDayAgo);
-
-  if (record.minuteTimestamps.length >= FALLBACK_MAX_PER_MINUTE) {
-    const retryAfter = Math.ceil((record.minuteTimestamps[0] + 60 * 1000 - now) / 1000);
-    return {
-      allowed: false,
-      retryAfter: Math.max(retryAfter, 1),
-      errorMsg: `הגעת למגבלת הקריאות לדקה (${FALLBACK_MAX_PER_MINUTE} קריאות). אנא המתן ${Math.max(retryAfter, 1)} שניות ונסה שוב.`
-    };
-  }
-
-  if (record.dailyTimestamps.length >= FALLBACK_MAX_PER_DAY) {
-    return {
-      allowed: false,
-      errorMsg: `הגעת למכסת הקריאות היומית המקסימלית (${FALLBACK_MAX_PER_DAY} קריאות). המכסה תתאפס מחר.`
-    };
-  }
-
-  record.minuteTimestamps.push(now);
-  record.dailyTimestamps.push(now);
-  return { allowed: true };
-}
-
-// ----------------------------------------------------
-// 3. Firestore Quota Check (Minute + Daily limits per user)
-// ----------------------------------------------------
-const DEFAULT_DAILY_LIMIT = 50; // מכסת ברירת מחדל יומית למשתמש רגיל
-const MAX_REQUESTS_PER_MINUTE = 10; // מתחת ל-15 של גוגל
+const DEFAULT_DAILY_LIMIT = 50;
+const MAX_REQUESTS_PER_MINUTE = 10;
+const GLOBAL_DAILY_LIMIT = 1000;
 
 async function checkAndIncrementQuota(
   db: admin.firestore.Firestore,
-  identifier: string,
-  isUserId: boolean
-): Promise<{ allowed: boolean; retryAfter?: number; errorMsg?: string }> {
+  uid: string,
+  isAdmin: boolean
+): Promise<{ allowed: boolean; retryAfter?: number; errorMsg?: string; statusCode?: number }> {
+  if (isAdmin) return { allowed: true };
+
   const now = Date.now();
   const oneMinuteAgo = now - 60 * 1000;
-  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
-  const safeIdentifier = identifier.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 200);
-  const docRef = isUserId 
-    ? db.collection("usage_limits").doc(safeIdentifier)
-    : db.collection("usage_limits").doc(`anon_${safeIdentifier}`);
+  const todayStr = new Date().toISOString().split("T")[0];
+  const safeUid = uid.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 200);
+  const userRef = db.collection("usage_limits").doc(safeUid);
+  const globalRef = db.collection("app_usage").doc(`global_${todayStr}`);
 
   try {
-    const docSnap = await docRef.get();
-    let data = docSnap.exists ? docSnap.data() || {} : {};
+    return await db.runTransaction(async (tx) => {
+      // Read all documents before writing so concurrent requests cannot race past the limits.
+      const userSnap = await tx.get(userRef);
+      const globalSnap = await tx.get(globalRef);
+      const data = userSnap.exists ? userSnap.data() || {} : {};
 
-    // Bypass limits for super admins
-    if (data.role === 'admin' || data.unlimited === true) {
-      return { allowed: true };
-    }
+      const dailyCount = data.lastDate === todayStr && typeof data.dailyCount === "number"
+        ? data.dailyCount
+        : 0;
+      const minuteTimestamps: number[] = Array.isArray(data.minuteTimestamps)
+        ? data.minuteTimestamps.filter((t: unknown): t is number => typeof t === "number" && Number.isFinite(t) && t > oneMinuteAgo)
+        : [];
 
-    // Users who already used the AI have the old default (30) stored in their doc,
-    // so the default acts as a floor: nobody gets less than DEFAULT_DAILY_LIMIT.
-    const dailyLimit = typeof data.dailyLimit === 'number' ? Math.max(data.dailyLimit, DEFAULT_DAILY_LIMIT) : DEFAULT_DAILY_LIMIT;
-    let dailyCount = data.lastDate === todayStr ? (data.dailyCount || 0) : 0;
-    let minuteTimestamps: number[] = Array.isArray(data.minuteTimestamps) ? data.minuteTimestamps : [];
-
-    // Filter old timestamps
-    minuteTimestamps = minuteTimestamps.filter((t: number) => t > oneMinuteAgo);
-
-    // Check minute rate limit
-    if (minuteTimestamps.length >= MAX_REQUESTS_PER_MINUTE) {
-      const oldest = minuteTimestamps[0];
-      const retryAfter = Math.ceil((oldest + 60 * 1000 - now) / 1000);
-      return {
-        allowed: false,
-        retryAfter: Math.max(retryAfter, 1),
-        errorMsg: `הגעת למגבלת הקריאות לדקה (${MAX_REQUESTS_PER_MINUTE} קריאות). אנא המתן ${Math.max(retryAfter, 1)} שניות ונסה שוב.`
-      };
-    }
-
-    // Check daily quota limit
-    if (dailyCount >= dailyLimit) {
-      return {
-        allowed: false,
-        errorMsg: `הגעת למכסת הקריאות היומית שלך (${dailyCount}/${dailyLimit} קריאות). המכסה תתאפס בחצות.`
-      };
-    }
-
-    // Update quota in Firestore
-    minuteTimestamps.push(now);
-    dailyCount += 1;
-
-    await docRef.set({
-      dailyCount,
-      dailyLimit,
-      lastDate: todayStr,
-      minuteTimestamps,
-      lastRequestAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-
-    return { allowed: true };
-
-  } catch (dbError) {
-    // Firestore failed: use the rough in-memory limiter instead of allowing everything.
-    console.error("Firestore quota check error, using in-memory fallback limiter:", dbError);
-    return checkFallbackLimit(identifier);
-  }
-}
-
-// ----------------------------------------------------
-// 3b. Global daily cap for the whole app (safety net)
-// ----------------------------------------------------
-const GLOBAL_DAILY_LIMIT = 1000; // סך כל קריאות ה-AI ביום, לכל המשתמשים ביחד
-
-async function checkGlobalDailyCap(
-  db: admin.firestore.Firestore
-): Promise<{ allowed: boolean; errorMsg?: string }> {
-  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  const ref = db.collection("app_usage").doc(`global_${todayStr}`);
-
-  try {
-    const allowed = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const count = snap.exists ? ((snap.data() as any)?.count || 0) : 0;
-      if (count >= GLOBAL_DAILY_LIMIT) {
-        return false;
+      if (minuteTimestamps.length >= MAX_REQUESTS_PER_MINUTE) {
+        const retryAfter = Math.max(
+          Math.ceil((minuteTimestamps[0] + 60 * 1000 - now) / 1000),
+          1
+        );
+        return {
+          allowed: false,
+          retryAfter,
+          errorMsg: `הגעת למגבלת הקריאות לדקה (${MAX_REQUESTS_PER_MINUTE} קריאות). אנא המתן ${retryAfter} שניות ונסה שוב.`
+        };
       }
-      tx.set(ref, {
-        count: count + 1,
+
+      if (dailyCount >= DEFAULT_DAILY_LIMIT) {
+        return {
+          allowed: false,
+          errorMsg: `הגעת למכסת הקריאות היומית שלך (${dailyCount}/${DEFAULT_DAILY_LIMIT} קריאות). המכסה תתאפס בחצות.`
+        };
+      }
+
+      const globalCount = globalSnap.exists && typeof globalSnap.data()?.count === "number"
+        ? globalSnap.data()!.count
+        : 0;
+      if (globalCount >= GLOBAL_DAILY_LIMIT) {
+        return {
+          allowed: false,
+          errorMsg: "שירות ה-AI הגיע למכסה היומית הכללית שלו. הוא יחזור לעבוד מחר. אפשר להמשיך להשתמש בשאר חלקי האתר.",
+          statusCode: 429
+        };
+      }
+
+      minuteTimestamps.push(now);
+      tx.set(userRef, {
+        dailyCount: dailyCount + 1,
+        dailyLimit: DEFAULT_DAILY_LIMIT,
+        lastDate: todayStr,
+        minuteTimestamps,
+        lastRequestAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      tx.set(globalRef, {
+        count: globalCount + 1,
         date: todayStr,
         updatedAt: new Date().toISOString()
       }, { merge: true });
-      return true;
-    });
 
-    if (!allowed) {
-      return {
-        allowed: false,
-        errorMsg: "שירות ה-AI הגיע למכסה היומית הכללית שלו. הוא יחזור לעבוד מחר. אפשר להמשיך להשתמש בשאר חלקי האתר."
-      };
-    }
-    return { allowed: true };
-  } catch (e) {
-    // If only the global counter fails, don't block everyone; per-user limits still apply.
-    console.error("Global cap check failed, allowing request:", e);
-    return { allowed: true };
+      return { allowed: true };
+    });
+  } catch (dbError) {
+    // Fail closed: a broken quota store must never silently disable the protection.
+    console.error("Atomic Firestore quota check failed; rejecting AI request:", dbError);
+    return {
+      allowed: false,
+      statusCode: 503,
+      errorMsg: "לא ניתן כרגע לבדוק את מכסת השימוש בשירות ה-AI. אנא נסה שוב בעוד זמן קצר."
+    };
   }
 }
 
@@ -286,7 +214,69 @@ async function executeWithRetry<T>(fn: () => Promise<T>, retries = 3, initialDel
 // ----------------------------------------------------
 export default async (req: Request, context?: any) => {
   try {
-    const { action, payload } = await req.json();
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "שיטת בקשה לא נתמכת." }), {
+        status: 405,
+        headers: { "Content-Type": "application/json", "Allow": "POST" }
+      });
+    }
+
+    const MAX_REQUEST_BODY_BYTES = 300_000;
+    const contentLength = Number(req.headers.get("content-length") || 0);
+    if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BODY_BYTES) {
+      return new Response(JSON.stringify({ error: "הבקשה גדולה מדי." }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    // Read in bounded chunks so a request without Content-Length cannot grow without limit.
+    const reader = req.body?.getReader();
+    if (!reader) {
+      return new Response(JSON.stringify({ error: "גוף הבקשה חסר." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_REQUEST_BODY_BYTES) {
+        await reader.cancel();
+        return new Response(JSON.stringify({ error: "הבקשה גדולה מדי." }), {
+          status: 413,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      chunks.push(value);
+    }
+    const bodyBytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bodyBytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    let parsedBody: any;
+    try {
+      parsedBody = JSON.parse(new TextDecoder().decode(bodyBytes));
+    } catch {
+      return new Response(JSON.stringify({ error: "מבנה הבקשה אינו תקין." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    const { action, payload } = parsedBody || {};
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return new Response(JSON.stringify({ error: "מבנה הבקשה אינו תקין." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
     const clientIp = getClientIp(req, context);
 
     const adminDb = initFirebaseAdmin();
@@ -331,20 +321,10 @@ export default async (req: Request, context?: any) => {
         headers: { "Content-Type": "application/json" }
       });
     }
-    if (payload?.config && typeof payload.config.maxOutputTokens === "number" &&
-        payload.config.maxOutputTokens > MAX_OUTPUT_TOKENS) {
-      payload.config.maxOutputTokens = MAX_OUTPUT_TOKENS;
-    }
+    let limitCheck: { allowed: boolean; retryAfter?: number; errorMsg?: string; statusCode?: number };
 
-    let limitCheck: { allowed: boolean; retryAfter?: number; errorMsg?: string };
-
-    if (adminDb) {
-      const identifier = verifiedUid || clientIp;
-      limitCheck = await checkAndIncrementQuota(adminDb, identifier, !!verifiedUid);
-
-    } else {
-      limitCheck = checkFallbackLimit(verifiedUid || clientIp);
-    }
+    const adminUser = await isAdminUser(adminDb, verifiedUid);
+    limitCheck = await checkAndIncrementQuota(adminDb, verifiedUid, adminUser);
 
     if (!limitCheck.allowed) {
       return new Response(JSON.stringify({ 
@@ -352,27 +332,12 @@ export default async (req: Request, context?: any) => {
         rateLimited: true,
         retryAfter: limitCheck.retryAfter
       }), { 
-        status: 429,
+        status: limitCheck.statusCode || 429,
         headers: { 
           "Content-Type": "application/json",
-          "Retry-After": String(limitCheck.retryAfter || 5)
+          ...(limitCheck.retryAfter ? { "Retry-After": String(limitCheck.retryAfter) } : {})
         }
       });
-    }
-
-    // Global daily cap for the whole app (admins bypass)
-    if (!(await isAdminUser(adminDb, verifiedUid))) {
-      const globalCheck = await checkGlobalDailyCap(adminDb);
-      if (!globalCheck.allowed) {
-        return new Response(JSON.stringify({
-          error: globalCheck.errorMsg || "הגענו למכסה היומית הכללית.",
-          rateLimited: true,
-          globalLimited: true
-        }), {
-          status: 429,
-          headers: { "Content-Type": "application/json" }
-        });
-      }
     }
 
     // API Key Validation
@@ -402,9 +367,16 @@ export default async (req: Request, context?: any) => {
       cleanConfig.thinkingConfig = cleanThinking;
     }
 
+    const requestedOutputTokens =
+      typeof cleanConfig.maxOutputTokens === "number" && Number.isFinite(cleanConfig.maxOutputTokens)
+        ? Math.floor(cleanConfig.maxOutputTokens)
+        : 4096;
+    const boundedOutputTokens = Math.max(1, Math.min(requestedOutputTokens, MAX_OUTPUT_TOKENS));
+
     const requestConfig = {
       thinkingConfig: { thinkingLevel: "MEDIUM" },
-      ...cleanConfig
+      ...cleanConfig,
+      maxOutputTokens: boundedOutputTokens
     };
 
     // Streaming actions with Retry wrapper
