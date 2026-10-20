@@ -1,5 +1,3 @@
-import { QUESTION_PAIRS_I18N } from '../constants/questionnaireData';
-
 export type QuestionnaireAnswers = Record<string, number>;
 
 type InsightGroup = {
@@ -111,24 +109,3 @@ export function deriveAnswerInsights(answers: QuestionnaireAnswers | null | unde
   return output.sort((a, b) => b.strength - a.strength).slice(0, 3);
 }
 
-export function getAnsweredItemSummary(answers: QuestionnaireAnswers | null | undefined, lang: 'he' | 'en' = 'he'): string[] {
-  if (!answers) return [];
-  const he = lang === 'he';
-  return QUESTION_PAIRS_I18N
-    .filter(q => {
-      const v = answers[q.id];
-      return typeof v === 'number' && v >= 1 && v <= 6;
-    })
-    .map(q => {
-      const v = answers[q.id];
-      const chosen = v <= 3 ? 0 : 1;
-      const pair = he ? q.pair.he : q.pair.en;
-      const strength = Math.abs(3.5 - v);
-      const preference = strength < 0.75
-        ? (he ? 'נטייה מתונה' : 'moderate lean')
-        : (he ? 'נטייה' : 'lean');
-      return he
-        ? `${q.id}: ${pair[chosen]} (${preference})`
-        : `${q.id}: ${pair[chosen]} (${preference})`;
-    });
-}
