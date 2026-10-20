@@ -371,7 +371,7 @@ export const getIntegratedInsights = async (scores: Scores, backgroundData: Back
   const orgContext = buildOrgContext();
   const answerPatterns = deriveAnswerInsights(answers, lang);
   const answerContext = answerPatterns.length
-    ? `\\n[ANSWER-SPECIFIC COMMUNICATION PATTERNS]\\n${answerPatterns.map(p => '- ' + p.text).join('\\n')}\\nThese are tentative interpretations of the user's selected answers. Use them to qualify broad color stereotypes; do not present contradictory generic weaknesses as certain.`
+    ? `\n[ANSWER-SPECIFIC COMMUNICATION PATTERNS]\n${answerPatterns.map(p => '- ' + p.text).join('\n')}\nThese are tentative interpretations of the user's selected answers. Use them to qualify broad color stereotypes; do not present contradictory generic weaknesses as certain.`
     : '';
 
   const systemInstruction = `אתה יועץ תקשורת וארגוני בכיר מבית Kilon Consulting.
