@@ -102,8 +102,8 @@ export const buildFactLines = (scores: Scores, bg: BackgroundData | null | undef
 // Bump when the way the text is produced changes, so the first drafts get rewritten.
 const SEED_VERSION = 4;
 
-const seedSignature = (scores: Scores, bg: BackgroundData | null | undefined, lang: string) =>
-  JSON.stringify([SEED_VERSION, scores?.a, scores?.b, scores?.c, scores?.d, bg?.isManager || '', bg?.goal || '', bg?.gender || '', lang]);
+const seedSignature = (scores: Scores, bg: BackgroundData | null | undefined, lang: string, answers?: QuestionnaireAnswers) =>
+  JSON.stringify([SEED_VERSION, scores?.a, scores?.b, scores?.c, scores?.d, bg?.isManager || '', bg?.goal || '', bg?.gender || '', lang, answers || {}]);
 
 const getUid = (): string | null => (auth && auth.currentUser ? auth.currentUser.uid : null);
 
@@ -194,7 +194,7 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
   };
 
   useEffect(() => {
-    const sig = seedSignature(scores, backgroundData, lang);
+    const sig = seedSignature(scores, backgroundData, lang, answers);
     sigRef.current = sig;
     const uid = getUid();
     let cancelled = false;
