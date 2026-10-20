@@ -349,6 +349,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
               {step === 'results' && scores && (
                 <ResultsScreen
                   scores={scores}
+                  answers={answers}
                   backgroundData={backgroundData}
                   onReset={handleReset}
                   onEdit={handleEditAnswers}
