@@ -57,8 +57,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   const { lang, dir } = useLanguage();
 
   const profileAnalysis = useMemo(
-    () => generateProfileAnalysis(scores, lang, backgroundData),
-    [scores, lang, backgroundData]
+    () => generateProfileAnalysis(scores, lang, backgroundData, answers),
+    [scores, lang, backgroundData, answers]
   );
   const answerInsights = useMemo(
     () => deriveAnswerInsights(answers, lang === 'en' ? 'en' : 'he'),
