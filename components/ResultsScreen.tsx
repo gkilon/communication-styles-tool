@@ -18,6 +18,7 @@ import { ModelPrimer } from './ModelPrimer';
 
 import { useCoachArchive } from './useCoachArchive';
 import { useCoachMemory } from './useCoachMemory';
+import { deriveAnswerInsights, type QuestionnaireAnswers } from '../services/answerInsights';
 
 import type { Message as CoachMessage, CoachMode } from './useCoachArchive';
 
@@ -35,6 +36,7 @@ declare global {
 
 interface ResultsScreenProps {
   scores: Scores;
+  answers?: QuestionnaireAnswers;
   backgroundData?: BackgroundData | null;
   onReset: () => void;
   onEdit: () => void;
@@ -45,6 +47,7 @@ type TabId = 'profile' | 'coach';
 
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   scores,
+  answers,
   backgroundData,
   onReset,
   onEdit,
@@ -56,6 +59,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   const profileAnalysis = useMemo(
     () => generateProfileAnalysis(scores, lang, backgroundData),
     [scores, lang, backgroundData]
+  );
+  const answerInsights = useMemo(
+    () => deriveAnswerInsights(answers, lang === 'en' ? 'en' : 'he'),
+    [answers, lang]
   );
 
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -120,7 +127,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   // How the conversation runs: feedback (question about myself) or consult (guided conversation)
   const [coachMode, setCoachMode] = useState<CoachMode | null>(null);
 
-  const coachMemory = useCoachMemory(scores, backgroundData, lang === 'en' ? 'en' : 'he');
+  const coachMemory = useCoachMemory(scores, backgroundData, lang === 'en' ? 'en' : 'he', answers);
 
   const coachArchive = useCoachArchive(
     coachConversation,
@@ -449,6 +456,28 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                     insightLoading={insightsLoading}
                     insightError={insightsError}
                   />
+
+                  {answerInsights.length > 0 && (
+                    <section className="mt-6 p-5 sm:p-6 rounded-2xl border border-cyan-500/20 bg-slate-900/40">
+                      <h3 className="text-lg font-bold text-white mb-2">
+                        {lang === 'he' ? 'מה עולה מהתשובות שלך' : 'What stands out in your answers'}
+                      </h3>
+                      <p className="text-sm text-gray-400 mb-4">
+                        {lang === 'he'
+                          ? 'מעבר לתמהיל הצבעים, כמה נטיות שעולות מהבחירות הספציפיות שלך. אלה כיוונים למחשבה, לא תוויות קבועות.'
+                          : 'Beyond your color mix, these are patterns suggested by your specific choices. They are prompts for reflection, not fixed labels.'}
+                      </p>
+                      <ul className="space-y-3">
+                        {answerInsights.map(insight => (
+                          <li key={insight.id} className="text-gray-200 leading-relaxed flex gap-3">
+                            <span className="text-cyan-400 mt-1" aria-hidden="true">•</span>
+                            <span>{insight.text}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
 
                 </div>
 
