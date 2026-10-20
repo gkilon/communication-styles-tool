@@ -28,12 +28,12 @@ const GROUPS: InsightGroup[] = [
     he: {
       low: 'בתשובות שלך עולה נטייה לעמוד על שלך ולהביע עמדה גם כשיש חיכוך.',
       high: 'בתשובות שלך עולה נטייה לשמור על הרמוניה, להתגמש ולהתאים את עצמך לעמדות ולצרכים של אחרים.',
-      mixed: 'בתשובות שלך יש מתח בין עמידה על העמדה שלך לבין גמישות ושמירה על הרמוניה. ייתכן שהתגובה שלך תלויה בנושא או באדם שמולך.'
+      mixed: 'ניכרת אצלך נטייה לעמוד על שלך, לצד בחירות שמצביעות גם על גמישות או רצון לשמור על היחסים. זה לא בהכרח אומר שאתה גם וגם; ייתכן שאתה ברור בעמדתך, אך בוחר מתי וכיצד להתעקש.'
     },
     en: {
       low: 'Your answers suggest a tendency to stand your ground and express your position even when there is friction.',
       high: 'Your answers suggest a tendency to preserve harmony, adapt, and accommodate other people’s positions and needs.',
-      mixed: 'Your answers show tension between standing your ground and adapting to preserve harmony. Your response may depend on the issue or person involved.'
+      mixed: 'You show a lean toward standing your ground, alongside choices that suggest flexibility or a wish to preserve relationships. This does not simply mean you are both; you may be clear about your position while choosing when and how to insist on it.'
     },
     items: ['ab10','ab13','ab15','cd4','cd5','cd14'].map(id => ({ id }))
   },
@@ -98,8 +98,8 @@ export function deriveAnswerInsights(answers: QuestionnaireAnswers | null | unde
 
     let text: string | null = null;
     if (hasBoth) text = (he ? group.he : group.en).mixed;
-    else if (mean <= 2.35 && lowCount >= 2) text = (he ? group.he : group.en).low;
-    else if (mean >= 4.65 && highCount >= 2) text = (he ? group.he : group.en).high;
+    else if (mean <= 2.8 && lowCount >= 2) text = (he ? group.he : group.en).low;
+    else if (mean >= 4.2 && highCount >= 2) text = (he ? group.he : group.en).high;
 
     if (text) {
       const strength = hasBoth ? 0.5 : Math.abs(mean - 3.5);
