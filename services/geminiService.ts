@@ -1,4 +1,5 @@
 import { Scores, UserProfile, BackgroundData } from '../types';
+import { deriveAnswerInsights, type QuestionnaireAnswers } from './answerInsights';
 import { auth } from '../firebaseConfig';
 
 export interface SimulationMessage {
@@ -364,14 +365,19 @@ function buildBackgroundContext(bg?: BackgroundData | null): string {
  * actual context (injected from the session by callGeminiApi) — meant to be appended directly
  * onto the deterministic "general analysis" paragraph, not shown as its own section.
  */
-export const getIntegratedInsights = async (scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en' = 'he'): Promise<string> => {
+export const getIntegratedInsights = async (scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en' = 'he', answers?: QuestionnaireAnswers): Promise<string> => {
   const colorProfile = buildColorProfile(scores);
   const bgContext = buildBackgroundContext(backgroundData);
   const orgContext = buildOrgContext();
+  const answerPatterns = deriveAnswerInsights(answers, lang);
+  const answerContext = answerPatterns.length
+    ? `\\n[ANSWER-SPECIFIC COMMUNICATION PATTERNS]\\n${answerPatterns.map(p => '- ' + p.text).join('\\n')}\\nThese are tentative interpretations of the user's selected answers. Use them to qualify broad color stereotypes; do not present contradictory generic weaknesses as certain.`
+    : '';
 
   const systemInstruction = `אתה יועץ תקשורת וארגוני בכיר מבית Kilon Consulting.
 
 ${colorProfile}
+${answerContext}
 ${bgContext}
 ${orgContext}
 
