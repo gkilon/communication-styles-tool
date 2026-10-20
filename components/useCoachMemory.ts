@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import type { Scores, BackgroundData } from '../types';
+import { deriveAnswerInsights, type QuestionnaireAnswers } from '../services/answerInsights';
 import { getProfileFacts } from '../services/analysisService';
 import { generateKnownAboutUser, updateKnownAboutUser } from '../services/geminiService';
 
@@ -52,7 +53,7 @@ const GOAL_LABELS: Record<string, { he: string; en: string }> = {
  * profile suggests. These are only the raw material — the paragraph the user reads is written
  * from them by the advisor, and the user can change it.
  */
-export const buildFactLines = (scores: Scores, bg: BackgroundData | null | undefined, lang: 'he' | 'en'): string[] => {
+export const buildFactLines = (scores: Scores, bg: BackgroundData | null | undefined, lang: 'he' | 'en', answers?: QuestionnaireAnswers): string[] => {
   const he = lang === 'he';
   const lines: string[] = [];
 
@@ -64,6 +65,12 @@ export const buildFactLines = (scores: Scores, bg: BackgroundData | null | undef
     lines.push(he
       ? `מטרה שציין בשאלון: ${label ? label.he : bg.goal}`
       : `Goal stated in the questionnaire: ${label ? label.en : bg.goal}`);
+  }
+
+  const answerInsights = deriveAnswerInsights(answers, lang);
+  if (answerInsights.length) {
+    lines.push(he ? 'דפוסים שעולים מהתשובות הספציפיות (כהשערות, לא כעובדות מוחלטות):' : 'Patterns suggested by specific answers (hypotheses, not absolute facts):');
+    answerInsights.forEach(insight => lines.push(insight.text));
   }
 
   const f = getProfileFacts(scores, lang);
@@ -106,7 +113,7 @@ const getUid = (): string | null => (auth && auth.currentUser ? auth.currentUser
  * (not even admins can read it), and the user can read, edit, add to and delete it.
  * The first draft is written from the questionnaire; the color model is only one of its sources.
  */
-export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en'): CoachMemory {
+export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | null | undefined, lang: 'he' | 'en', answers?: QuestionnaireAnswers): CoachMemory {
   const [text, setText] = useState('');
   const [source, setSource] = useState<MemorySource>('generated');
   const [loaded, setLoaded] = useState(false);
@@ -127,8 +134,11 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
   const generatingRef = useRef(false);
   const scoresRef = useRef(scores);
   const bgRef = useRef(backgroundData);
+  const answersRef = useRef(answers);
   scoresRef.current = scores;
   bgRef.current = backgroundData;
+  answersRef.current = answers;
+  const answersSignature = JSON.stringify(answers || {});
 
   const persist = async (t: string, src: MemorySource, sig: string) => {
     const uid = getUid();
@@ -163,7 +173,7 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
     if (generatingRef.current) return;
     generatingRef.current = true;
     setGenerating(true);
-    const facts = buildFactLines(scoresRef.current, bgRef.current, lang);
+    const facts = buildFactLines(scoresRef.current, bgRef.current, lang, answersRef.current);
     if (facts.length === 0) {
       generatingRef.current = false;
       setGenerating(false);
@@ -234,7 +244,7 @@ export function useCoachMemory(scores: Scores, backgroundData: BackgroundData | 
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scores?.a, scores?.b, scores?.c, scores?.d, backgroundData?.isManager, backgroundData?.goal, backgroundData?.gender, lang]);
+  }, [scores?.a, scores?.b, scores?.c, scores?.d, backgroundData?.isManager, backgroundData?.goal, backgroundData?.gender, lang, answersSignature]);
 
   // Anything the user writes or edits becomes theirs and is never overwritten silently.
   const saveText = (t: string) => {
