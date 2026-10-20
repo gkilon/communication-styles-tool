@@ -73,6 +73,7 @@ export interface AnswerInsight {
   id: string;
   text: string;
   strength: number;
+  direction: 'first' | 'second' | 'mixed';
 }
 
 export function deriveAnswerInsights(answers: QuestionnaireAnswers | null | undefined, lang: 'he' | 'en' = 'he'): AnswerInsight[] {
@@ -102,7 +103,7 @@ export function deriveAnswerInsights(answers: QuestionnaireAnswers | null | unde
 
     if (text) {
       const strength = hasBoth ? 0.5 : Math.abs(mean - 3.5);
-      output.push({ id: group.id, text, strength });
+      output.push({ id: group.id, text, strength, direction: hasBoth ? 'mixed' : mean <= 3.5 ? 'first' : 'second' });
     }
   }
 
