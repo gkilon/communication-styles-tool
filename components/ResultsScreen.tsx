@@ -155,7 +155,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     setInsightsLoading(true);
     setInsightsError(false);
 
-    getIntegratedInsights(scores, backgroundData, lang)
+    getIntegratedInsights(scores, backgroundData, lang, answers)
       .then(text => {
         if (!cancelled) setInsightsText(text);
       })
@@ -169,7 +169,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [scores, backgroundData, hasOrgContext, lang]);
+  }, [scores, backgroundData, answers, hasOrgContext, lang]);
 
   const TABS: { id: TabId; label: string; emoji: string }[] = [
     { id: 'profile', label: t('resultsChrome', 'tabProfile'), emoji: '🗺️' },
