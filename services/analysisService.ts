@@ -1,4 +1,5 @@
 import { Scores, BackgroundData } from '../types';
+import { deriveAnswerInsights, type QuestionnaireAnswers } from './answerInsights';
 
 interface Analysis {
   general: string;
@@ -291,7 +292,7 @@ export const getProfileFacts = (scores: Scores, lang: Lang = 'he'): ProfileFacts
   };
 };
 
-export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backgroundData?: BackgroundData | null): Analysis => {
+export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backgroundData?: BackgroundData | null, answers?: QuestionnaireAnswers): Analysis => {
   const { a, b, c, d } = scores;
   const T = colorData[lang];
 
@@ -316,6 +317,22 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
   const dominantData = T[dominant];
   const secondaryData = T[secondary];
   const weakestData = T[weakest];
+  const answerPatterns = deriveAnswerInsights(answers, lang);
+  const structureDirection = answerPatterns.find(p => p.id === 'structure')?.direction;
+  const assertivenessDirection = answerPatterns.find(p => p.id === 'assertiveness')?.direction;
+  // Avoid presenting a color-model stereotype as a personal weakness when the person's own answers point the other way.
+  const dominantWeaknesses = [...dominantData.weaknesses];
+  if (dominant === 'yellow' && structureDirection === 'first') {
+    dominantWeaknesses.splice(0, dominantWeaknesses.length, ...dominantWeaknesses.filter(w => !/פרטים וסדר|חוסר תכנון/.test(w)));
+  }
+  if (dominant === 'blue' && structureDirection === 'second') {
+    dominantWeaknesses.splice(0, dominantWeaknesses.length, ...dominantWeaknesses.filter(w => !/גמישות ובאילתור/.test(w)));
+  }
+  if (dominant === 'green' && assertivenessDirection === 'first') {
+    dominantWeaknesses.splice(0, dominantWeaknesses.length, ...dominantWeaknesses.filter(w => !/הימנעות מקונפליקטים ועימותים/.test(w)));
+  }
+  const primaryWeakness = dominantWeaknesses[0] || (lang === 'he' ? 'האתגר תלוי בסיטואציה' : 'The challenge depends on the situation');
+  const secondaryWeakness = dominantWeaknesses[1] || primaryWeakness;
 
   const secondaryPercentage = Math.round((colorScores[secondary] / totalScore) * 100);
   const pairKey = comboKey(dominant, secondary);
@@ -417,11 +434,11 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
       : `Because there is no dominant tendency, the challenge for you is less a distinct "shadow side" and more the lack of a clear default: it can be hard to decide which style fits a given moment, and others may see you as less consistent or less "sharp." If there is a direction for development, it is the tendency to be ${weakestData.adjective}, but the gap between it and your other styles is small.`;
   } else if (shape === 'twoStyles') {
     weaknesses = he
-      ? `הקושי אצלך הוא פחות בצל של סגנון אחד, ויותר במתח הפנימי בין שני הסגנונות. ברגע אחד אתה ${dominantData.adjective}, וברגע אחר ${secondaryData.adjective}, ולפעמים אחרים לא יודעים למה לצפות ממך. הצל של כל צד: ${dominantData.weaknesses[0]} מצד אחד, ו${secondaryData.weaknesses[0]} מצד שני. ` + weakestSentence
+      ? `הקושי אצלך הוא פחות בצל של סגנון אחד, ויותר במתח הפנימי בין שני הסגנונות. ברגע אחד אתה ${dominantData.adjective}, וברגע אחר ${secondaryData.adjective}, ולפעמים אחרים לא יודעים למה לצפות ממך. הצל של כל צד: ${primaryWeakness} מצד אחד, ו${secondaryData.weaknesses[0]} מצד שני. ` + weakestSentence
       : `The challenge for you is less the shadow of a single style and more the inner tension between two styles. One moment you're ${dominantData.adjective}, the next ${secondaryData.adjective}, and others may not know what to expect from you. The shadow of each side: ${dominantData.weaknesses[0]} on one hand, and ${secondaryData.weaknesses[0]} on the other. ` + weakestSentence;
   } else if (shape === 'strong') {
     weaknesses = he
-      ? `הנטייה שלך להיות ${dominantData.adjective} כל כך בולטת, שה'צד הצל' שלה מופיע מהר ובעוצמה, במיוחד בלחץ: ${dominantData.weaknesses[0]} ו${dominantData.weaknesses[1]}. זה לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
+      ? `הנטייה שלך להיות ${dominantData.adjective} כל כך בולטת, שה'צד הצל' שלה מופיע מהר ובעוצמה, במיוחד בלחץ: ${dominantData.weaknesses[0]} ו${secondaryWeakness}. זה לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
       : `Your tendency to be ${dominantData.adjective} is so prominent that its "shadow side" shows up quickly and strongly, especially under pressure: ${dominantData.weaknesses[0]} and ${dominantData.weaknesses[1]}. This isn't a failure, but an automatic pattern running under the radar. `;
     weaknesses += he
       ? `חשוב להכיר בכך שהחוזקה הגדולה ביותר, כשהיא מופעלת בעוצמה יתרה, היא גם נקודת הפגיעות. `
