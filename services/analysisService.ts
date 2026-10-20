@@ -435,11 +435,11 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
   } else if (shape === 'twoStyles') {
     weaknesses = he
       ? `הקושי אצלך הוא פחות בצל של סגנון אחד, ויותר במתח הפנימי בין שני הסגנונות. ברגע אחד אתה ${dominantData.adjective}, וברגע אחר ${secondaryData.adjective}, ולפעמים אחרים לא יודעים למה לצפות ממך. הצל של כל צד: ${primaryWeakness} מצד אחד, ו${secondaryData.weaknesses[0]} מצד שני. ` + weakestSentence
-      : `The challenge for you is less the shadow of a single style and more the inner tension between two styles. One moment you're ${dominantData.adjective}, the next ${secondaryData.adjective}, and others may not know what to expect from you. The shadow of each side: ${dominantData.weaknesses[0]} on one hand, and ${secondaryData.weaknesses[0]} on the other. ` + weakestSentence;
+      : `The challenge for you is less the shadow of a single style and more the inner tension between two styles. One moment you're ${dominantData.adjective}, the next ${secondaryData.adjective}, and others may not know what to expect from you. The shadow of each side: ${primaryWeakness} on one hand, and ${secondaryData.weaknesses[0]} on the other. ` + weakestSentence;
   } else if (shape === 'strong') {
     weaknesses = he
-      ? `הנטייה שלך להיות ${dominantData.adjective} כל כך בולטת, שה'צד הצל' שלה מופיע מהר ובעוצמה, במיוחד בלחץ: ${dominantData.weaknesses[0]} ו${secondaryWeakness}. זה לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
-      : `Your tendency to be ${dominantData.adjective} is so prominent that its "shadow side" shows up quickly and strongly, especially under pressure: ${dominantData.weaknesses[0]} and ${dominantData.weaknesses[1]}. This isn't a failure, but an automatic pattern running under the radar. `;
+      ? `הנטייה שלך להיות ${dominantData.adjective} כל כך בולטת, שה'צד הצל' שלה מופיע מהר ובעוצמה, במיוחד בלחץ: ${primaryWeakness} ו${secondaryWeakness}. זה לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
+      : `Your tendency to be ${dominantData.adjective} is so prominent that its "shadow side" shows up quickly and strongly, especially under pressure: ${primaryWeakness} and ${secondaryWeakness}. This isn't a failure, but an automatic pattern running under the radar. `;
     weaknesses += he
       ? `חשוב להכיר בכך שהחוזקה הגדולה ביותר, כשהיא מופעלת בעוצמה יתרה, היא גם נקודת הפגיעות. `
       : `It's worth recognizing that your greatest strength, when overused, is also your point of vulnerability. `;
@@ -451,8 +451,8 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
     weaknesses += weakestSentence;
   } else {
     weaknesses = he
-      ? `כל סגנון חזק מגיע עם 'צד צל'. הנטייה שלך להיות ${dominantData.adjective} עלולה להוביל ל${dominantData.weaknesses[0]} ול${dominantData.weaknesses[1]} — לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
-      : `Every strong style comes with a "shadow side." Your tendency to be ${dominantData.adjective} can lead to ${dominantData.weaknesses[0]} and ${dominantData.weaknesses[1]} — not a failure, but an automatic pattern running under the radar. `;
+      ? `כל סגנון חזק מגיע עם 'צד צל'. הנטייה שלך להיות ${dominantData.adjective} עלולה להוביל ל${primaryWeakness} ול${secondaryWeakness} — לא כישלון, אלא דפוס אוטומטי שפועל מתחת לרדאר. `
+      : `Every strong style comes with a "shadow side." Your tendency to be ${dominantData.adjective} can lead to ${primaryWeakness} and ${secondaryWeakness} — not a failure, but an automatic pattern running under the radar. `;
     weaknesses += he
       ? `חשוב להכיר בכך שהחוזקה הגדולה ביותר, כשהיא מופעלת בעוצמה יתרה, היא גם נקודת הפגיעות. `
       : `It's worth recognizing that your greatest strength, when overused, is also your point of vulnerability. `;
@@ -522,8 +522,8 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
       : `Notice when each side is triggered and choose deliberately, and practice ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`;
   } else {
     quickWeakness = he
-      ? `${dominantData.weaknesses[0]}, ו${weakestData.strengths[0]} לא מגיע אליך באופן טבעי`
-      : `${dominantData.weaknesses[0]}, and ${weakestData.strengths[0]} doesn't come naturally to you`;
+      ? `${primaryWeakness}, ו${weakestData.strengths[0]} לא מגיע אליך באופן טבעי`
+      : `${primaryWeakness}, and ${weakestData.strengths[0]} doesn't come naturally to you`;
     quickRecommendation = he
       ? `${dominantData.recommendation_focus}, ולתרגל ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`
       : `${dominantData.recommendation_focus}, and practice ${weakestData.recommendation_focus.charAt(0).toLowerCase()}${weakestData.recommendation_focus.slice(1)}`;
