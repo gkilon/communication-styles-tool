@@ -94,7 +94,7 @@ export function deriveAnswerInsights(answers: QuestionnaireAnswers | null | unde
     const lowCount = values.filter(v => v <= 2).length;
     const highCount = values.filter(v => v >= 5).length;
     const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
-    const hasBoth = lowCount >= 2 && highCount >= 2;
+    const hasBoth = values.length <= 3 ? lowCount >= 1 && highCount >= 1 : lowCount >= 2 && highCount >= 2;
 
     let text: string | null = null;
     if (hasBoth) text = (he ? group.he : group.en).mixed;
