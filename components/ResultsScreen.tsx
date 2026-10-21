@@ -479,8 +479,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                           <span className="text-white font-semibold">{lang === 'he' ? 'מיקוד באנשים' : 'People focus'} <span className="text-gray-400 font-normal">{peoplePct}%</span></span>
                         </div>
                         <div className="h-2.5 rounded-full overflow-hidden bg-slate-700 flex" dir="rtl">
-                          <div className="h-full bg-emerald-500" style={{ width: `${taskPct}%` }} />
-                          <div className="h-full bg-blue-500" style={{ width: `${peoplePct}%` }} />
+                          <div className="h-full bg-blue-500" style={{ width: `${taskPct}%` }} />
+                          <div className="h-full bg-emerald-500" style={{ width: `${peoplePct}%` }} />
                         </div>
                       </div>
                       <div>
@@ -489,8 +489,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                           <span className="text-white font-semibold">{lang === 'he' ? 'שקט / מופנם' : 'Quiet / inward'} <span className="text-gray-400 font-normal">{inwardPct}%</span></span>
                         </div>
                         <div className="h-2.5 rounded-full overflow-hidden bg-slate-700 flex" dir="rtl">
-                          <div className="h-full bg-cyan-500" style={{ width: `${inwardPct}%` }} />
                           <div className="h-full bg-rose-500" style={{ width: `${outwardPct}%` }} />
+                          <div className="h-full bg-cyan-500" style={{ width: `${inwardPct}%` }} />
                         </div>
                       </div>
                     </div>
