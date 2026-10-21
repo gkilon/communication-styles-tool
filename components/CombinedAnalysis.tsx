@@ -32,8 +32,8 @@ export const CombinedAnalysis: React.FC<CombinedAnalysisProps> = ({
   if (!analysis) return null;
 
   return (
-    <div className="h-full flex flex-col space-y-6" dir={dir}>
-      <div className="space-y-6 text-gray-300 leading-relaxed overflow-y-auto pr-1 custom-scrollbar">
+    <div className="flex flex-col space-y-6" dir={dir}>
+      <div className="space-y-6 text-gray-300 leading-relaxed pr-1 custom-scrollbar">
 
         <div className="group transition-all duration-300">
           <h4 className="text-lg font-black text-white mb-2 flex items-center gap-2 group-hover:text-cyan-400">
