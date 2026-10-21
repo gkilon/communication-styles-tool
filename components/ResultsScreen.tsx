@@ -529,8 +529,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                       </h3>
                       <p className="text-sm text-gray-400 mb-4">
                         {lang === 'he'
-                          ? 'מעבר לתמהיל הצבעים, כמה נטיות שעולות מהבחירות הספציפיות שלך. אלה כיוונים למחשבה, לא תוויות קבועות.'
-                          : 'Beyond your color mix, these are patterns suggested by your specific choices. They are prompts for reflection, not fixed labels.'}
+                          ? 'כאן מסתכלים על הבחירות הספציפיות שלך: אילו נטיות בולטות, ואילו פחות באות לידי ביטוי בתשובות. אלה לא ממוצעי צבעים ולא תוויות קבועות, אלא קריאה של דפוסי המענה עצמם.'
+                          : 'This section looks at your specific choices: which tendencies stand out and which are less represented in your answers. These are patterns in your responses, not color averages or fixed labels.'}
                       </p>
                       <ul className="space-y-3">
                         {answerInsights.map(insight => (
