@@ -97,13 +97,14 @@ export function deriveAnswerInsights(answers: QuestionnaireAnswers | null | unde
     const hasBoth = values.length <= 3 ? lowCount >= 1 && highCount >= 1 : lowCount >= 2 && highCount >= 2;
 
     let text: string | null = null;
-    if (hasBoth) text = (he ? group.he : group.en).mixed;
-    else if (mean <= 2.8 && lowCount >= 2) text = (he ? group.he : group.en).low;
+    if (mean <= 2.8 && lowCount >= 2) text = (he ? group.he : group.en).low;
     else if (mean >= 4.2 && highCount >= 2) text = (he ? group.he : group.en).high;
+    else if (hasBoth) text = (he ? group.he : group.en).mixed;
 
     if (text) {
-      const strength = hasBoth ? 0.5 : Math.abs(mean - 3.5);
-      output.push({ id: group.id, text, strength, direction: hasBoth ? 'mixed' : mean <= 3.5 ? 'first' : 'second' });
+      const direction: AnswerInsight['direction'] = mean <= 2.8 && lowCount >= 2 ? 'first' : mean >= 4.2 && highCount >= 2 ? 'second' : 'mixed';
+      const strength = Math.abs(mean - 3.5) + Math.max(lowCount, highCount) * 0.08;
+      output.push({ id: group.id, text, strength, direction });
     }
   }
 
