@@ -334,7 +334,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
             {/* PDF Wrapper */}
             <div
               ref={resultsRef}
-              className={`bg-glass-dark backdrop-blur-2xl p-6 sm:p-10 rounded-[2rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-glass-border overflow-hidden ${
+              className={`bg-glass-dark backdrop-blur-2xl p-6 sm:p-10 rounded-[2rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-glass-border overflow-visible ${
                 dir === 'rtl' ? 'text-right' : 'text-left'
               } relative`}
             >
@@ -478,9 +478,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                           <span className="text-white font-semibold">{lang === 'he' ? 'מיקוד במשימה' : 'Task focus'} <span className="text-gray-400 font-normal">{taskPct}%</span></span>
                           <span className="text-white font-semibold">{lang === 'he' ? 'מיקוד באנשים' : 'People focus'} <span className="text-gray-400 font-normal">{peoplePct}%</span></span>
                         </div>
-                        <div className="h-2.5 rounded-full overflow-hidden bg-slate-700 flex" dir="ltr">
-                          <div className="h-full bg-blue-500" style={{ width: `${taskPct}%` }} />
-                          <div className="h-full bg-emerald-500" style={{ width: `${peoplePct}%` }} />
+                        <div className="h-2.5 rounded-full overflow-hidden bg-slate-700 flex" dir="rtl">
+                          <div className="h-full bg-emerald-500" style={{ width: `${taskPct}%` }} />
+                          <div className="h-full bg-blue-500" style={{ width: `${peoplePct}%` }} />
                         </div>
                       </div>
                       <div>
@@ -488,9 +488,9 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                           <span className="text-white font-semibold">{lang === 'he' ? 'מוחצן' : 'Outward'} <span className="text-gray-400 font-normal">{outwardPct}%</span></span>
                           <span className="text-white font-semibold">{lang === 'he' ? 'שקט / מופנם' : 'Quiet / inward'} <span className="text-gray-400 font-normal">{inwardPct}%</span></span>
                         </div>
-                        <div className="h-2.5 rounded-full overflow-hidden bg-slate-700 flex" dir="ltr">
-                          <div className="h-full bg-rose-500" style={{ width: `${outwardPct}%` }} />
+                        <div className="h-2.5 rounded-full overflow-hidden bg-slate-700 flex" dir="rtl">
                           <div className="h-full bg-cyan-500" style={{ width: `${inwardPct}%` }} />
+                          <div className="h-full bg-rose-500" style={{ width: `${outwardPct}%` }} />
                         </div>
                       </div>
                     </div>
