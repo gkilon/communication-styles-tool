@@ -441,6 +441,71 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
               {/* Short, collapsible primer on the model (based on the lecture) */}
               <ModelPrimer />
 
+              {/* The two underlying dimensions explain why adjacent colors can be similarly strong. */}
+              {(() => {
+                const taskTotal = Math.max(0, scores.c) + Math.max(0, scores.d);
+                const socialTotal = Math.max(0, scores.a) + Math.max(0, scores.b);
+                const taskPct = taskTotal > 0 ? Math.round((Math.max(0, scores.c) / taskTotal) * 100) : 50;
+                const peoplePct = 100 - taskPct;
+                const outwardPct = socialTotal > 0 ? Math.round((Math.max(0, scores.a) / socialTotal) * 100) : 50;
+                const inwardPct = 100 - outwardPct;
+                const colorScores = {
+                  red: Math.max(0, scores.a) + Math.max(0, scores.c),
+                  yellow: Math.max(0, scores.a) + Math.max(0, scores.d),
+                  green: Math.max(0, scores.b) + Math.max(0, scores.d),
+                  blue: Math.max(0, scores.b) + Math.max(0, scores.c)
+                };
+                const ranked = Object.entries(colorScores).sort((x, y) => y[1] - x[1]);
+                const topPair = ranked.slice(0, 2).map(([color]) => color).sort().join('-');
+                const pairText: Record<string, { he: string; en: string }> = {
+                  'blue-red': { he: 'מיקוד במשימה: תוצאות והחלטיות לצד ניתוח, דיוק וסטנדרטים.', en: 'Task focus: results and decisiveness alongside analysis, precision, and standards.' },
+                  'red-yellow': { he: 'מוחצנות ודומיננטיות: יוזמה והשפעה לצד אנרגיה חברתית והתלהבות.', en: 'Outward influence: initiative and decisiveness alongside social energy and enthusiasm.' },
+                  'green-yellow': { he: 'מיקוד באנשים וביחסים: חיבור והשפעה חברתית לצד הקשבה, סבלנות ושיתוף פעולה.', en: 'People and relationships: social connection and influence alongside listening, patience, and collaboration.' },
+                  'blue-green': { he: 'סגנון שקט ומופנם יותר: חשיבה והקפדה לצד הקשבה, סבלנות והתחשבות.', en: 'A quieter, more inward style: careful thinking alongside listening, patience, and consideration.' }
+                };
+                const pair = pairText[topPair];
+                return (
+                  <section className="mb-8 rounded-2xl border border-cyan-500/25 bg-slate-900/60 p-5 sm:p-6 relative z-10" dir={dir}>
+                    <h3 className="text-lg font-black text-white mb-1">
+                      {lang === 'he' ? 'הצירים שמעצבים את סגנון התקשורת שלך' : 'The dimensions shaping your communication style'}
+                    </h3>
+                    <p className="text-sm text-gray-400 mb-5">
+                      {lang === 'he' ? 'שני הצירים עוזרים להבין את משמעות תמהיל הצבעים — לא רק איזה צבע קיבל את הציון הגבוה ביותר.' : 'The two dimensions help explain the meaning of your color mix — not just which color scored highest.'}
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div>
+                        <div className="flex justify-between gap-3 text-sm mb-2">
+                          <span className="text-white font-semibold">{lang === 'he' ? 'מיקוד במשימה' : 'Task focus'} <span className="text-gray-400 font-normal">{taskPct}%</span></span>
+                          <span className="text-white font-semibold">{lang === 'he' ? 'מיקוד באנשים' : 'People focus'} <span className="text-gray-400 font-normal">{peoplePct}%</span></span>
+                        </div>
+                        <div className="h-2.5 rounded-full overflow-hidden bg-slate-700 flex" dir="ltr">
+                          <div className="h-full bg-blue-500" style={{ width: `${taskPct}%` }} />
+                          <div className="h-full bg-emerald-500" style={{ width: `${peoplePct}%` }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between gap-3 text-sm mb-2">
+                          <span className="text-white font-semibold">{lang === 'he' ? 'מוחצן' : 'Outward'} <span className="text-gray-400 font-normal">{outwardPct}%</span></span>
+                          <span className="text-white font-semibold">{lang === 'he' ? 'שקט / מופנם' : 'Quiet / inward'} <span className="text-gray-400 font-normal">{inwardPct}%</span></span>
+                        </div>
+                        <div className="h-2.5 rounded-full overflow-hidden bg-slate-700 flex" dir="ltr">
+                          <div className="h-full bg-rose-500" style={{ width: `${outwardPct}%` }} />
+                          <div className="h-full bg-cyan-500" style={{ width: `${inwardPct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                    {pair && (
+                      <div className="mt-5 rounded-xl border border-cyan-500/20 bg-cyan-950/30 p-4">
+                        <div className="text-xs uppercase tracking-wide text-cyan-300 font-bold mb-1">
+                          {lang === 'he' ? 'המשמעות של צמד הצבעים המוביל' : 'What your leading color pair suggests'}
+                        </div>
+                        <p className="text-gray-100 leading-relaxed">{lang === 'he' ? pair.he : pair.en}</p>
+                      </div>
+                    )}
+                  </section>
+                );
+              })()}
+
               <div className="flex flex-col lg:flex-row gap-8 mb-8 items-stretch relative z-10">
 
                 <div className="flex-none lg:w-[40%] bg-glass-light p-6 rounded-[2rem] border border-glass-border shadow-inner backdrop-blur-sm">
