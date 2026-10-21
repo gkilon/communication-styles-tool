@@ -211,7 +211,7 @@ export type ProfileShape = 'balanced' | 'twoStyles' | 'strong' | 'moderate';
 
 /** How strongly one style leads. One rule, shared by the report text and the advisor's picture of the user. */
 export function profileShape(domShare: number, gapToSecond: number, spread: number): ProfileShape {
-  return spread < 12 ? 'balanced' :
+  return spread < 8 ? 'balanced' :
     gapToSecond < 6 ? 'twoStyles' :
     (domShare >= 40 || gapToSecond >= 12) ? 'strong' : 'moderate';
 }
@@ -371,8 +371,8 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
     if (combo) general += (he ? ' השילוב ביניהם: ' : ' The combination of the two: ') + combo[lang];
   } else if (shape === 'balanced') {
     general = he
-      ? `הפרופיל שלך מאוזן יחסית: ארבע האנרגיות נוכחות אצלך בעוצמות קרובות, ואף סגנון אינו מוביל בבירור. יש נטייה קלה להיות ${dominantData.adjective} (${dominantData.name}), אבל היא לא מה שמגדיר אותך. זה נותן לך גמישות: אתה מסוגל לעבור בין סגנונות לפי הסיטואציה ולהתחבר לסוגים שונים של אנשים.`
-      : `Your profile is relatively balanced: all four energies are present at similar strength, and no style clearly leads. There is a slight lean toward being ${dominantData.adjective} (${dominantData.name}), but it isn't what defines you. This gives you flexibility: you can move between styles depending on the situation and connect with very different kinds of people.`;
+      ? `הפרופיל שלך מאוזן יחסית: ארבע האנרגיות נוכחות אצלך בעוצמות קרובות, ואף סגנון אינו מוביל בבירור. יש נטייה קלה להיות ${dominantData.adjective} (${dominantData.name}), גם אם היא אינה קיצונית. אין להסיק מכך שכל הסגנונות שווים אצלך או שאתה בהכרח עובר ביניהם בקלות.`
+      : `Your profile is relatively balanced: all four energies are present at similar strength, and no style clearly leads. There is a slight lean toward being ${dominantData.adjective} (${dominantData.name}), even if it is not extreme. That does not mean all styles are equally strong or that you necessarily switch between them easily.`;
   } else {
     general = he
       ? `הפרופיל שלך מראה נטייה ברורה להיות ${dominantData.adjective} (במודל המקצועי: סגנון ${dominantData.name} דומיננטי). המשמעות היא ש${dominantData.general} המפה המשולבת שלך מגלה כיצד הנטיות הללו מתבטאות בפועל בצמתי ההתנהגות השונים.`
