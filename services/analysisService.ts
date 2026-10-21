@@ -113,27 +113,27 @@ const EDGE_CASE: Record<Lang, Analysis> = {
 const COMBO_GENERAL: Record<string, { he: string; en: string }> = {
   'red-yellow': {
     he: "אדום וצהוב יחד מצביעים על סגנון מוחצן ודומיננטי: נוכחות, יוזמה ויכולת להשפיע ולהניע אחרים. האדום מוסיף החלטיות ומיקוד בתוצאה; הצהוב מוסיף אנרגיה חברתית, התלהבות ויכולת לרתום אנשים.",
-    en: "You're a charismatic leader who moves people both by setting clear goals and by creating enthusiasm and shared vision. The energy you project pulls others into action, while you still keep everyone focused and on course."
+    en: "Red and yellow together suggest an outward, influential style: presence, initiative, and the ability to move others. Red adds decisiveness and focus on outcomes; yellow adds social energy, enthusiasm, and the ability to engage people."
   },
   'red-blue': {
     he: "אדום וכחול יחד מצביעים על אוריינטציה חזקה למשימה: תוצאות, יעילות והחלטיות לצד ניתוח, תכנון, דיוק וסטנדרטים. האדום דוחף להחלטה ולביצוע; הכחול בודק את הדרך ואת האיכות. זהו מיקוד במשימה, לא בהכרח חוסר עניין באנשים.",
     en: "Red and blue together suggest a strong task orientation: results, efficiency, and decisiveness alongside analysis, planning, precision, and standards. Red drives decisions and action; blue checks the method and quality. This is task focus, not necessarily a lack of interest in people."
   },
   'red-green': {
-    he: "אתה מנהיג מכיל — כזה שמשיג תוצאות מבלי לרמוס אנשים. המפה שלך חושפת שילוב ייחודי של עוצמה ורגישות, שיכול להיות מנוף עצום בניהול צוותים.",
-    en: "You're an inclusive leader — one who gets results without steamrolling people. Your map reveals a unique combination of drive and sensitivity that can be a huge asset in leading teams."
+    he: "אדום וירוק הם כיוונים מנוגדים במודל. אם הציונים שלהם נראים דומים, לא נכון לפרש זאת כשילוב של שתי תכונות חזקות: צריך לבדוק את ציוני שני הצירים ואת התשובות עצמן, ולתאר היכן נוצר הפער בין כיוון המשימה לכיוון היחסים.",
+    en: "Red and green are opposing directions in this model. If their scores appear similar, do not automatically interpret this as a blend of two strong traits: inspect the two axis scores and the answers, and describe the tension between task focus and relationship focus."
   },
   'yellow-green': {
     he: "צהוב וירוק יחד מצביעים על דגש חזק על אנשים ויחסים. הצהוב מביא נוכחות, אנרגיה והשפעה חברתית; הירוק מוסיף הקשבה, סבלנות, אמון ושיתוף פעולה. הקשר עם אנשים הוא חלק מרכזי מהדרך שבה אתה פועל.",
-    en: "You're the social glue in any environment — someone who sets the tone, strengthens relationships, and drives collaboration. Your map shows that your emotional intelligence is a genuine source of power."
+    en: "Yellow and green together suggest a strong people-and-relationships orientation. Yellow brings presence, energy, and social influence; green adds listening, patience, trust, and collaboration."
   },
   'yellow-blue': {
-    he: "אתה פותר בעיות יצירתי עם ראש אנליטי — שני נדירים שבדרך כלל לא נמצאים יחד. המפה שלך מראה שאתה יכול לחשוב מחוץ לקופסה וגם לבדוק את הרעיון לפני שמוציאים אותו לפועל.",
-    en: "You're a creative problem-solver with an analytical mind — two traits that rarely come together. Your map shows you can think outside the box and also pressure-test the idea before putting it into action."
+    he: "צהוב וכחול הם כיוונים מנוגדים במודל. אם הציונים שלהם נראים דומים, לא נכון להסיק אוטומטית על שילוב של יצירתיות ואנליטיות; צריך לבדוק את ציוני שני הצירים ואת התשובות ולנסח את המתח ביניהם.",
+    en: "Yellow and blue are opposing directions in this model. If their scores appear similar, do not automatically infer a blend of creativity and analysis; inspect the axis scores and answers, then describe the tension between those directions."
   },
   'blue-green': {
     he: "כחול וירוק יחד מצביעים על סגנון מופנם ושקט יותר, שנוטה להקשיב ולעבד לפני תגובה. הכחול מוסיף ניתוח, דיוק וירידה לפרטים; הירוק מוסיף סבלנות, התחשבות ותמיכה.",
-    en: "You're a reliable, devoted team player who pairs thoroughness and a drive for quality with patience and a genuine desire to support others. Your map points to a steady anchor in any work environment."
+    en: "Blue and green together suggest a quieter, more inward style, inclined to listen and think before responding. Blue adds analysis, precision, and attention to detail; green adds patience, consideration, and support."
   }
 };
 
