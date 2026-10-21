@@ -390,6 +390,21 @@ export const generateProfileAnalysis = (scores: Scores, lang: Lang = 'he', backg
     }
   }
 
+  // When the top two adjacent colors are close, surface their shared axis even if the overall
+  // profile is broadly balanced. Opposing diagonal pairs should not be framed as one blended style.
+  const adjacentPairs = new Set(['red-yellow', 'yellow-green', 'green-blue', 'blue-red']);
+  if (
+    adjacentPairs.has(pairKey) &&
+    gapToSecond <= 8 &&
+    share(dominant) >= 20 &&
+    share(secondary) >= 20
+  ) {
+    const combo = COMBO_GENERAL[pairKey];
+    if (combo && !general.includes(combo[lang])) {
+      general += (he ? ' מאפיין בולט של צמד הצבעים המוביל: ' : ' A key feature of the leading color pair: ') + combo[lang];
+    }
+  }
+
   // Goal/role-tailored addendum — deterministic (no AI call), so this always reflects the
   // background-question answers instantly and reliably, regardless of AI service load/quota.
   const goalAddendum = buildGoalFocusedAddendum(
