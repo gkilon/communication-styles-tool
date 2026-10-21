@@ -93,16 +93,20 @@ export function deriveAnswerInsights(answers: QuestionnaireAnswers | null | unde
     if (values.length < 3) continue;
     const lowCount = values.filter(v => v <= 2).length;
     const highCount = values.filter(v => v >= 5).length;
+    const firstCount = values.filter(v => v <= 3).length;
+    const secondCount = values.filter(v => v >= 4).length;
     const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
     const hasBoth = values.length <= 3 ? lowCount >= 1 && highCount >= 1 : lowCount >= 2 && highCount >= 2;
 
     let text: string | null = null;
-    if (mean <= 2.8 && lowCount >= 2) text = (he ? group.he : group.en).low;
-    else if (mean >= 4.2 && highCount >= 2) text = (he ? group.he : group.en).high;
+    const leansFirst = mean <= 3.35 && firstCount > secondCount;
+    const leansSecond = mean >= 3.65 && secondCount > firstCount;
+    if (leansFirst) text = (he ? group.he : group.en).low;
+    else if (leansSecond) text = (he ? group.he : group.en).high;
     else if (hasBoth) text = (he ? group.he : group.en).mixed;
 
     if (text) {
-      const direction: AnswerInsight['direction'] = mean <= 2.8 && lowCount >= 2 ? 'first' : mean >= 4.2 && highCount >= 2 ? 'second' : 'mixed';
+      const direction: AnswerInsight['direction'] = leansFirst ? 'first' : leansSecond ? 'second' : 'mixed';
       const strength = Math.abs(mean - 3.5) + Math.max(lowCount, highCount) * 0.08;
       output.push({ id: group.id, text, strength, direction });
     }
