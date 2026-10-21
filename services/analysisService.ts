@@ -112,19 +112,19 @@ const EDGE_CASE: Record<Lang, Analysis> = {
 // Combined-pair descriptions, keyed by an order-independent pair key (e.g. "red-yellow")
 const COMBO_GENERAL: Record<string, { he: string; en: string }> = {
   'red-yellow': {
-    he: "אתה מנהיג כריזמטי שיודע להניע אנשים הן דרך הצבת יעדים ברורים והן דרך יצירת התלהבות וחזון משותף. האנרגיה שאתה משדר מושכת אחרים לפעולה, ובה בעת אתה מסוגל לשמור על כיוון ומיקוד.",
+    he: "אדום וצהוב יחד מצביעים על סגנון מוחצן ודומיננטי: נוכחות, יוזמה ויכולת להשפיע ולהניע אחרים. האדום מוסיף החלטיות ומיקוד בתוצאה; הצהוב מוסיף אנרגיה חברתית, התלהבות ויכולת לרתום אנשים.",
     en: "You're a charismatic leader who moves people both by setting clear goals and by creating enthusiasm and shared vision. The energy you project pulls others into action, while you still keep everyone focused and on course."
   },
   'red-blue': {
-    he: "אתה מנהל אסטרטגי ויעיל, המשלב נחישות ואוריינטציה לתוצאות עם תכנון מדוקדק ורציונלי. המפה שלך מצביעה על יכולת נדירה להיות גם רוח הגב וגם השכל המנחה.",
-    en: "You're a strategic, effective manager who pairs determination and results-orientation with careful, rational planning. Your map points to a rare ability to be both the driving force and the guiding mind."
+    he: "אדום וכחול יחד מצביעים על אוריינטציה חזקה למשימה: תוצאות, יעילות והחלטיות לצד ניתוח, תכנון, דיוק וסטנדרטים. האדום דוחף להחלטה ולביצוע; הכחול בודק את הדרך ואת האיכות. זהו מיקוד במשימה, לא בהכרח חוסר עניין באנשים.",
+    en: "Red and blue together suggest a strong task orientation: results, efficiency, and decisiveness alongside analysis, planning, precision, and standards. Red drives decisions and action; blue checks the method and quality. This is task focus, not necessarily a lack of interest in people."
   },
   'red-green': {
     he: "אתה מנהיג מכיל — כזה שמשיג תוצאות מבלי לרמוס אנשים. המפה שלך חושפת שילוב ייחודי של עוצמה ורגישות, שיכול להיות מנוף עצום בניהול צוותים.",
     en: "You're an inclusive leader — one who gets results without steamrolling people. Your map reveals a unique combination of drive and sensitivity that can be a huge asset in leading teams."
   },
   'yellow-green': {
-    he: "אתה ה'דבק' החברתי בכל סביבה — אדם שיוצר אווירה, מחזק קשרים ומניע שיתוף פעולה. המפה שלך מגלה שהאינטליגנציה הרגשית שלך היא כלי עצמה.",
+    he: "צהוב וירוק יחד מצביעים על דגש חזק על אנשים ויחסים. הצהוב מביא נוכחות, אנרגיה והשפעה חברתית; הירוק מוסיף הקשבה, סבלנות, אמון ושיתוף פעולה. הקשר עם אנשים הוא חלק מרכזי מהדרך שבה אתה פועל.",
     en: "You're the social glue in any environment — someone who sets the tone, strengthens relationships, and drives collaboration. Your map shows that your emotional intelligence is a genuine source of power."
   },
   'yellow-blue': {
@@ -132,7 +132,7 @@ const COMBO_GENERAL: Record<string, { he: string; en: string }> = {
     en: "You're a creative problem-solver with an analytical mind — two traits that rarely come together. Your map shows you can think outside the box and also pressure-test the idea before putting it into action."
   },
   'blue-green': {
-    he: "אתה איש צוות אמין ומסור, המשלב בין יסודיות ושאיפה לאיכות לבין סבלנות ורצון אמיתי לתמוך באחרים. המפה שלך מצביעה על עוגן יציב בכל סביבת עבודה.",
+    he: "כחול וירוק יחד מצביעים על סגנון מופנם ושקט יותר, שנוטה להקשיב ולעבד לפני תגובה. הכחול מוסיף ניתוח, דיוק וירידה לפרטים; הירוק מוסיף סבלנות, התחשבות ותמיכה.",
     en: "You're a reliable, devoted team player who pairs thoroughness and a drive for quality with patience and a genuine desire to support others. Your map points to a steady anchor in any work environment."
   }
 };
