@@ -7,6 +7,7 @@ import {
   getTeams,
   updateUserTeam,
   deleteUserProfile,
+  updateUserDisplayName,
   getAccessCodes,
   createAccessCode,
   updateOrganizationDetails,
@@ -20,7 +21,7 @@ import {
 import { UserProfile, Team, Organization, Scores } from '../types';
 import { ArrowLeftIcon } from './icons/Icons';
 import { TeamAiCoach } from './TeamAiCoach';
-import { KeyRound, Copy, Check, Plus, Building2, BookOpen, Upload, Sparkles, Save, FileText, Trash2, Users, Settings as SettingsIcon } from 'lucide-react';
+import { KeyRound, Copy, Check, Plus, Building2, BookOpen, Upload, Sparkles, Save, FileText, Trash2, Users, Settings as SettingsIcon, Pencil, X, ArrowUpDown } from 'lucide-react';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -48,6 +49,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
 
   const [loading, setLoading] = useState(true);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editingDisplayName, setEditingDisplayName] = useState('');
+  const [participantSearch, setParticipantSearch] = useState('');
+  const [newestFirst, setNewestFirst] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Participants tab filters
@@ -339,6 +344,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     }
   };
 
+  const handleStartEditUser = (user: UserProfile) => {
+    setEditingUserId(user.uid);
+    setEditingDisplayName(user.displayName || '');
+  };
+
+  const handleSaveUserName = async (userId: string) => {
+    const cleanName = editingDisplayName.trim();
+    if (!cleanName) { alert('יש להזין שם משתמש'); return; }
+    setUpdatingUserId(userId);
+    try {
+      await updateUserDisplayName(userId, cleanName);
+      setUsers(prev => prev.map(u => u.uid === userId ? { ...u, displayName: cleanName } : u));
+      setEditingUserId(null);
+      setEditingDisplayName('');
+    } catch (e: any) {
+      alert('שגיאה בעדכון שם המשתמש: ' + (e.message || 'נסה שוב'));
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
   const handleDeleteUser = async (userId: string, displayName: string) => {
     if (!window.confirm(`האם למחוק לצמיתות את "${displayName || 'המשתמש'}"? הפעולה לא ניתנת לביטול (התוצאות והשיוך לצוות יימחקו).`)) return;
     setUpdatingUserId(userId);
@@ -381,12 +407,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
   const teamsInCodeOrg = newCodeOrgId ? teams.filter(t => t.organizationId === newCodeOrgId) : [];
 
   const filteredUsers = users.filter(u => {
-    if (filterTeam) return u.team === filterTeam;
+    if (filterTeam && u.team !== filterTeam) return false;
     if (filterOrgId) {
       const orgTeamNames = teams.filter(t => t.organizationId === filterOrgId).map(t => t.name);
-      return orgTeamNames.includes(u.team);
+      if (!orgTeamNames.includes(u.team)) return false;
     }
+    const q = participantSearch.trim().toLocaleLowerCase();
+    if (q && !(u.displayName || '').toLocaleLowerCase().includes(q) && !(u.email || '').toLocaleLowerCase().includes(q)) return false;
     return true;
+  });
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    const ta = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+    const tb = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+    return newestFirst ? tb - ta : ta - tb;
   });
 
   const toggleCombinedTeam = (teamName: string) => {
@@ -752,6 +785,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                 )}
               </div>
 
+              <div className="px-6 pt-5 flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
+                <input
+                  value={participantSearch}
+                  onChange={e => setParticipantSearch(e.target.value)}
+                  placeholder="חיפוש לפי שם או דוא״ל..."
+                  className="w-full sm:max-w-xs bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                />
+                <button
+                  onClick={() => setNewestFirst(v => !v)}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-gray-900 border border-gray-700 text-cyan-300 hover:border-cyan-500 text-sm font-bold"
+                >
+                  <ArrowUpDown className="w-4 h-4" />
+                  {newestFirst ? 'החדשים ביותר קודם' : 'הוותיקים ביותר קודם'}
+                </button>
+              </div>
               <div className="p-0">
                 {loading ? (
                   <div className="text-center py-20 text-gray-500 animate-pulse font-bold text-xl">טוען נתונים...</div>
@@ -764,20 +812,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                         <tr>
                           <th className="py-4 px-6">שם המשתתף</th>
                           <th className="py-4 px-6">צוות נוכחי</th>
+                          <th className="py-4 px-6">תאריך מילוי</th>
                           <th className="py-4 px-6">סטטוס שאלון</th>
                           <th className="py-4 px-6">תוצאה דומיננטית</th>
                           <th className="py-4 px-6"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700/50">
-                        {filteredUsers.length === 0 ? (
-                          <tr><td colSpan={5} className="text-center py-12 text-gray-500 font-medium">לא נמצאו משתמשים התואמים לסינון</td></tr>
+                        {sortedUsers.length === 0 ? (
+                          <tr><td colSpan={6} className="text-center py-12 text-gray-500 font-medium">לא נמצאו משתמשים התואמים לסינון</td></tr>
                         ) : (
-                          filteredUsers.map((user) => (
+                          sortedUsers.map((user) => (
                             <tr key={user.uid} className="hover:bg-gray-700/30 transition-colors group">
-                              <td className="py-4 px-6">
-                                <div className="font-bold text-white group-hover:text-cyan-300 transition-colors">{user.displayName || 'משתמש ללא שם'}</div>
-                                <div className="text-[10px] text-gray-500 dir-ltr text-right">{user.email}</div>
+                              <td className="py-4 px-6 min-w-[210px]">
+                                {editingUserId === user.uid ? (
+                                  <div className="flex items-center gap-2">
+                                    <input autoFocus value={editingDisplayName} onChange={e => setEditingDisplayName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveUserName(user.uid); if (e.key === 'Escape') setEditingUserId(null); }} className="w-full min-w-0 bg-gray-900 border border-cyan-600 rounded-lg px-2 py-1.5 text-sm text-white outline-none" />
+                                    <button onClick={() => handleSaveUserName(user.uid)} disabled={updatingUserId === user.uid} title="שמור שם" className="text-green-400 hover:text-green-300 disabled:opacity-40"><Check className="w-4 h-4" /></button>
+                                    <button onClick={() => setEditingUserId(null)} title="ביטול" className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <div className="min-w-0"><div className="font-bold text-white group-hover:text-cyan-300 transition-colors">{user.displayName || 'משתמש ללא שם'}</div><div className="text-[10px] text-gray-500 dir-ltr text-right">{user.email}</div></div>
+                                    <button onClick={() => handleStartEditUser(user)} title="ערוך שם" className="shrink-0 p-1 text-gray-500 hover:text-cyan-300 rounded"><Pencil className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                )}
                               </td>
                               <td className="py-4 px-6">
                                 <div className="flex items-center gap-2">
@@ -796,6 +855,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                                   {updatingUserId === user.uid && <span className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></span>}
                                 </div>
                               </td>
+                              <td className="py-4 px-6 text-xs text-gray-300 whitespace-nowrap">{user.completedAt ? new Date(user.completedAt).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : <span className="text-gray-600">—</span>}</td>
                               <td className="py-4 px-6">
                                 {user.scores
                                   ? <span className="text-green-400 text-[10px] bg-green-900/20 px-2 py-1 rounded-full border border-green-800/50 font-bold uppercase tracking-tight">בוצע</span>
