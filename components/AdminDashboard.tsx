@@ -543,8 +543,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
             return (
               <div
                 key={user.uid}
-                className={\`absolute w-5 h-5 rounded-full border-2 \${borderColor} shadow-lg transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer \${dotColor} hover:scale-150 transition-all z-10\`}
-                style={{ left: \`\${x}%\`, top: \`\${y}%\` }}
+                className={`absolute w-5 h-5 rounded-full border-2 ${borderColor} shadow-lg transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer ${dotColor} hover:scale-150 transition-all z-10`}
+                style={{ left: `${x}%`, top: `${y}%` }}
               >
                 <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs py-1 px-2 rounded whitespace-nowrap shadow-xl border border-gray-600 z-50">
                   {user.displayName}
