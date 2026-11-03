@@ -111,6 +111,10 @@ export const ensureUserProfile = async (params: {
 };
 
 // עדכון צוות של משתמש קיים
+export const updateUserDisplayName = async (uid: string, displayName: string): Promise<void> => {
+  await updateDoc(doc(db, 'users', uid), { displayName: displayName.trim() });
+};
+
 export const updateUserTeam = async (uid: string, newTeamName: string) => {
   const userRef = doc(db, "users", uid);
   try {
