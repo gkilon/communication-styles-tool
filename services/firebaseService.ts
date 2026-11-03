@@ -100,10 +100,12 @@ export const ensureUserProfile = async (params: {
     // Returning user — update basic info only, NEVER touch role again
     // (this is what protects a manually-granted admin flag from being
     // silently reset back to 'user' on the next login).
+    const existingData = existing.data() as any;
     const payload: any = {
-      email: params.email || '',
-      displayName: params.displayName
+      email: params.email || ''
     };
+    // Preserve an admin-corrected display name on future sign-ins.
+    if (!existingData.displayName) payload.displayName = params.displayName;
     if (params.teamName) payload.team = params.teamName;
     if (params.teamId) payload.teamId = params.teamId;
     await setDoc(userRef, payload, { merge: true });
