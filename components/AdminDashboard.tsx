@@ -471,8 +471,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
       const verticalTotal = (c + d) || 1;
       // Match ResultsChart: red/yellow on the right, blue/green on the left;
       // red/blue on top, yellow/green on the bottom.
-      const x = (b / horizontalTotal) * 100;
-      const y = (c / verticalTotal) * 100;
+      // A (red/yellow) grows to the right; D (yellow/green) grows downward.
+      // This places red top-right, yellow bottom-right, green bottom-left, blue top-left.
+      const x = (a / horizontalTotal) * 100;
+      const y = (d / verticalTotal) * 100;
       const distanceFromCenter = Math.min(1, Math.hypot((x - 50) / 50, (y - 50) / 50));
       return { user: u, x, y, distanceFromCenter, dominant: getDominantColorInfo(u.scores) };
     });
@@ -499,7 +501,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
         : 'רבים מהפרופילים נוטים לקצוות ומציגים סגנון מובהק';
     const averageX = profiles.reduce((sum, p) => sum + p.x, 0) / profiles.length;
     const averageY = profiles.reduce((sum, p) => sum + p.y, 0) / profiles.length;
-    const horizontalFocus = averageX > 57 ? 'נטייה יחסית לכחול ולירוק' : averageX < 43 ? 'נטייה יחסית לאדום ולצהוב' : 'איזון יחסי בין שני צדי המפה';
+    const horizontalFocus = averageX > 57 ? 'נטייה יחסית לאדום ולצהוב' : averageX < 43 ? 'נטייה יחסית לכחול ולירוק' : 'איזון יחסי בין שני צדי המפה';
     const verticalFocus = averageY < 43 ? 'נטייה יחסית לאדום ולכחול' : averageY > 57 ? 'נטייה יחסית לצהוב ולירוק' : 'איזון יחסי בין החלק העליון והתחתון';
     const dominantDescription = leadingColors.length
       ? leadingColors.map(c => colorMeta[c.color].strength).join('; ')
