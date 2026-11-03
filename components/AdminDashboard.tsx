@@ -499,7 +499,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
         : 'רבים מהפרופילים נוטים לקצוות ומציגים סגנון מובהק';
     const averageX = profiles.reduce((sum, p) => sum + p.x, 0) / profiles.length;
     const averageY = profiles.reduce((sum, p) => sum + p.y, 0) / profiles.length;
-    const horizontalFocus = averageX > 57 ? 'נטייה יחסית לאדום ולצהוב' : averageX < 43 ? 'נטייה יחסית לכחול ולירוק' : 'איזון יחסי בין שני צדי המפה';
+    const horizontalFocus = averageX > 57 ? 'נטייה יחסית לכחול ולירוק' : averageX < 43 ? 'נטייה יחסית לאדום ולצהוב' : 'איזון יחסי בין שני צדי המפה';
     const verticalFocus = averageY < 43 ? 'נטייה יחסית לאדום ולכחול' : averageY > 57 ? 'נטייה יחסית לצהוב ולירוק' : 'איזון יחסי בין החלק העליון והתחתון';
     const dominantDescription = leadingColors.length
       ? leadingColors.map(c => colorMeta[c.color].strength).join('; ')
