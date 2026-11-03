@@ -551,7 +551,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     return (
       <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8 animate-fade-in-up">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
-          <h3 className="text-xl font-bold text-cyan-300">מפה דינמית: {title}</h3>
+          <h3 className="text-xl font-bold text-gray-100">מפה דינמית: {title}</h3>
           <label className="inline-flex items-center gap-2 text-sm text-gray-200 cursor-pointer select-none">
             <input type="checkbox" checked={showParticipantNames} onChange={e => setShowParticipantNames(e.target.checked)} className="w-4 h-4 accent-cyan-500" />
             הצג שמות ליד הנקודות
@@ -590,7 +590,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
           </div>
 
           <section className="space-y-3">
-            <h4 className="text-xl font-bold text-cyan-300">תמונת מצב</h4>
+            <h4 className="text-xl font-bold text-gray-100">תמונת מצב</h4>
             <p className="text-sm leading-7 text-gray-200">{leadingText} במבט על מיקום הנקודות: {horizontalFocus}; {verticalFocus}. {centerLabel}</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {['אדום', 'צהוב', 'ירוק', 'כחול'].map(color => {
@@ -605,7 +605,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
           </section>
 
           <section className="space-y-2">
-            <h4 className="text-xl font-bold text-emerald-300">חוזקות צוותיות אפשריות</h4>
+            <h4 className="text-xl font-bold text-gray-100">חוזקות צוותיות אפשריות</h4>
             {strengths.length ? <ul className="list-disc pr-5 space-y-2 text-sm leading-6 text-gray-200">
               {strengths.map((s, index) => <li key={index}>{s.text}</li>)}
             </ul> : <p className="text-sm text-gray-300">לא בולט סגנון דומיננטי אחד בהרכב.</p>}
@@ -613,7 +613,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
           </section>
 
           <section className="space-y-3">
-            <h4 className="text-xl font-bold text-amber-300">מה עלול להיות חסר — ומה עשויות להיות ההשלכות?</h4>
+            <h4 className="text-xl font-bold text-gray-100">מה עלול להיות חסר — ומה עשויות להיות ההשלכות?</h4>
             {watchouts.map((item, index) => <div key={index} className="bg-gray-800 rounded-lg p-3 border border-gray-700 space-y-1">
               <div className="font-bold text-sm text-amber-200">{item.title}</div>
               <p className="text-sm text-gray-200">{item.text}</p>
@@ -623,13 +623,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
           </section>
 
           <section className="space-y-2">
-            <h4 className="text-xl font-bold text-cyan-300">גיוון מול מובהקות אישית</h4>
+            <h4 className="text-xl font-bold text-gray-100">גיוון מול מובהקות אישית</h4>
             <p className="text-sm leading-7 text-gray-200">{diversityText}</p>
             <p className="text-xs text-gray-400">ככל שנקודה קרובה יותר למרכז, הפרופיל מגוון יותר ומשלב בין סגנונות. ככל שהיא נוטה לקצה של אחד הרבעים, הסגנון המיוצג בו מובהק יותר.</p>
           </section>
 
           <section className="space-y-2 border-t border-gray-700 pt-4">
-            <h4 className="text-xl font-bold text-cyan-300">מפת חשיבה אסטרטגית — מה יעזור לנו לממש את מטרות השנה?</h4>
+            <h4 className="text-xl font-bold text-gray-100">מפת חשיבה אסטרטגית — מה יעזור לנו לממש את מטרות השנה?</h4>
             <p className="text-sm leading-7 text-gray-300">מומלץ להציב לצד המפה את 2–3 המטרות המרכזיות של הצוות לשנה הקרובה, ולבחון את ההרכב לאורן:</p>
             <ol className="list-decimal pr-5 space-y-3 text-sm leading-7 text-gray-200">
               <li><strong>מה נדרש מאיתנו כדי להצליח?</strong> אילו יכולות, דפוסי עבודה והתנהגויות יהיו קריטיים למימוש המטרות השנה — למשל קבלת החלטות מהירה, חדשנות, דיוק, שיתוף פעולה או הובלת שינוי?</li>
