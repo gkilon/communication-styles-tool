@@ -427,7 +427,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     setCombinedTeamNames(prev => prev.includes(teamName) ? prev.filter(n => n !== teamName) : [...prev, teamName]);
   };
 
-  const combinedUsers = users.filter(u => combinedTeamNames.includes(u.team));
+  const combinedUsers = users.filter(u => combinedTeamNames.includes(u.team) && !!u.scores);
 
   const toggleCustomUser = (uid: string) => {
     setCustomUserIds(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
