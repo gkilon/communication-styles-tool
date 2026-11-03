@@ -462,6 +462,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
   }
 
   const TeamMap: React.FC<{ mapUsers: UserProfile[]; title: string }> = ({ mapUsers, title }) => {
+    const reportRef = useRef<HTMLDivElement>(null);
+    const [exportingPdf, setExportingPdf] = useState(false);
     const validUsers = mapUsers.filter(u => u.scores);
     if (validUsers.length === 0) return null;
 
@@ -469,21 +471,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
       const { a, b, c, d } = u.scores!;
       const horizontalTotal = (a + b) || 1;
       const verticalTotal = (c + d) || 1;
-      // Match ResultsChart: red/yellow on the right, blue/green on the left;
-      // red/blue on top, yellow/green on the bottom.
-      // A (red/yellow) grows to the right; D (yellow/green) grows downward.
-      // This places red top-right, yellow bottom-right, green bottom-left, blue top-left.
       const x = (a / horizontalTotal) * 100;
       const y = (d / verticalTotal) * 100;
       const distanceFromCenter = Math.min(1, Math.hypot((x - 50) / 50, (y - 50) / 50));
       return { user: u, x, y, distanceFromCenter, dominant: getDominantColorInfo(u.scores) };
     });
 
-    const colorMeta: Record<string, { label: string; strength: string; watch: string; code: string }> = {
-      'אדום': { label: 'אדום', strength: 'החלטיות, מיקוד בתוצאות והנעת ביצוע', watch: 'לשלב את הדחיפה קדימה בהקשבה ובבחינת ההשפעה על אחרים', code: 'bg-rose-500' },
-      'צהוב': { label: 'צהוב', strength: 'אנרגיה, יצירת קשרים, השפעה והעלאת רעיונות', watch: 'לוודא שרעיונות והתלהבות מתורגמים לתכנון, מעקב וסגירת משימות', code: 'bg-yellow-400' },
-      'ירוק': { label: 'ירוק', strength: 'הקשבה, יציבות, שיתוף פעולה ובניית אמון', watch: 'לא להימנע מדיונים קשים או מהחלטות שנדרשות כדי להתקדם', code: 'bg-green-500' },
-      'כחול': { label: 'כחול', strength: 'ניתוח, דיוק, תכנון ושמירה על איכות', watch: 'להיזהר מעודף ניתוח ומעיכוב פעולה כשאין ודאות מלאה', code: 'bg-indigo-500' }
+    const colorMeta: Record<string, { strength: string; gap: string; implication: string; action: string; code: string }> = {
+      'אדום': { strength: 'הנעה לביצוע, החלטיות, מיקוד בתוצאות ויכולת לקדם החלטות.', gap: 'עשוי להיות פחות טבעי לצוות לייצר דחיפות, להציב גבולות, לתעדף ולסגור החלטות.', implication: 'נושאים עלולים להישאר בדיון זמן רב, או שלא יהיה ברור מי לוקח אחריות ומניע קדימה.', action: 'להגדיר בעלות ברורה על החלטות, אבני דרך, סדרי עדיפויות ומעקב ביצוע.', code: 'bg-rose-500' },
+      'צהוב': { strength: 'יצירת קשרים, תקשורת פתוחה, השפעה, אנרגיה והעלאת רעיונות.', gap: 'עשוי להיות פחות טבעי לצוות לייצר התלהבות, לרתום אחרים, לחשוב בקול רם ולפתוח אפשרויות.', implication: 'הצוות עלול להתכנס מהר מדי לפתרונות מוכרים, או להתקשות לרתום ממשקים ושותפים.', action: 'לפנות מקום לסיעור מוחות, לשיתוף בעלי עניין ולהצגת ההיגיון והערך של מהלכים.', code: 'bg-yellow-400' },
+      'ירוק': { strength: 'הקשבה, יציבות, סבלנות, התחשבות ובניית אמון ושיתוף פעולה.', gap: 'עשוי להיות פחות טבעי לצוות לעצור ולהקשיב, לזהות השפעה על אנשים ולבנות הסכמות.', implication: 'אנשים או ממשקים עלולים להרגיש שלא רואים אותם; מחלוקות עשויות להישאר מתחת לפני השטח.', action: 'לבדוק מי מושפע מהחלטה, להזמין קולות שונים ולתת מקום לשיחה על מתחים וצרכים.', code: 'bg-green-500' },
+      'כחול': { strength: 'חשיבה אנליטית, דיוק, תכנון, בדיקת עובדות, איכות וזיהוי סיכונים.', gap: 'עשוי להיות פחות טבעי לצוות להעמיק בפרטים, לבחון נתונים, לתכנן ולבדוק הנחות.', implication: 'הצוות עלול להתקדם על בסיס הנחות לא בדוקות, לפספס סיכונים או לגלות מאוחר מדי פערי איכות.', action: 'להגדיר נקודות בקרה, לבדוק נתונים והנחות, ולתת זמן לחשיבה ולתכנון לפני ביצוע.', code: 'bg-indigo-500' }
     };
 
     const colorCounts = ['אדום', 'צהוב', 'ירוק', 'כחול'].map(color => ({
@@ -492,98 +490,152 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     })).sort((a, b) => b.count - a.count);
     const represented = colorCounts.filter(c => c.count > 0);
     const leadingColors = represented.slice(0, 2);
-    const leastRepresented = [...colorCounts].sort((a, b) => a.count - b.count).slice(0, 2);
+    const missingColors = colorCounts.filter(c => c.count === 0);
+    const underrepresentedColors = colorCounts.filter(c => c.count > 0 && c.count / profiles.length < 0.15);
     const averageDistance = profiles.reduce((sum, p) => sum + p.distanceFromCenter, 0) / profiles.length;
     const centerLabel = averageDistance < 0.35
-      ? 'רבים מהפרופילים מגוונים יחסית ונמצאים קרוב למרכז'
+      ? 'בממוצע, הנקודות קרובות למרכז: רבים מהפרופילים משלבים כמה סגנונות.'
       : averageDistance < 0.65
-        ? 'יש שילוב בין פרופילים מגוונים לבין סגנונות מובהקים יותר'
-        : 'רבים מהפרופילים נוטים לקצוות ומציגים סגנון מובהק';
+        ? 'יש בצוות שילוב בין פרופילים מגוונים לבין פרופילים בעלי סגנון מובהק יותר.'
+        : 'בממוצע, הנקודות נוטות לקצוות: רבים מהפרופילים מציגים סגנון מובהק יותר.';
     const averageX = profiles.reduce((sum, p) => sum + p.x, 0) / profiles.length;
     const averageY = profiles.reduce((sum, p) => sum + p.y, 0) / profiles.length;
     const horizontalFocus = averageX > 57 ? 'נטייה יחסית לאדום ולצהוב' : averageX < 43 ? 'נטייה יחסית לכחול ולירוק' : 'איזון יחסי בין שני צדי המפה';
     const verticalFocus = averageY < 43 ? 'נטייה יחסית לאדום ולכחול' : averageY > 57 ? 'נטייה יחסית לצהוב ולירוק' : 'איזון יחסי בין החלק העליון והתחתון';
-    const dominantDescription = leadingColors.length
-      ? leadingColors.map(c => colorMeta[c.color].strength).join('; ')
-      : 'אין צבע מוביל ברור בהרכב';
-    const watchDescription = leastRepresented.filter(c => c.count < profiles.length / 2)
-      .map(c => colorMeta[c.color].watch);
+    const strengths = leadingColors.map(c => ({ color: c.color, text: colorMeta[c.color].strength }));
+    const gaps = missingColors.map(c => ({ color: c.color, ...colorMeta[c.color] }));
+    const lighterGaps = underrepresentedColors.map(c => ({ color: c.color, ...colorMeta[c.color] }));
     const diversityText = averageDistance < 0.35
-      ? 'הקרבה למרכז מצביעה על פרופילים שמשלבים כמה סגנונות. זו עשויה להיות גמישות תקשורתית, אך חשוב לבדוק אם במצבי לחץ אנשים יודעים גם לבחור סגנון פעולה ברור.'
+      ? 'הקרבה למרכז מצביעה על פרופילים שמשלבים כמה סגנונות. זה עשוי לאפשר גמישות והתאמה לאנשים ולמצבים שונים. כדאי לבדוק האם הגמישות אכן באה לידי ביטוי, או שלעתים קשה לצוות לבחור כיוון פעולה ברור.'
       : averageDistance < 0.65
-        ? 'המפה מציגה שונות: חלק מהאנשים משלבים כמה סגנונות ואחרים מביאים צבע מובהק יותר. השילוב עשוי להרחיב את מגוון דרכי הפעולה של הצוות, לצד צורך לתרגם את ההבדלים לשפה משותפת.'
-        : 'הנטייה לקצוות מצביעה על פרופילים בעלי סגנון מובהק. הדבר עשוי להביא עוצמה ובהירות, אך גם להגדיל פערים באופן שבו אנשים מתקשרים, מקבלים החלטות ומגדירים מה חשוב.';
-    const watchItems = watchDescription.length
-      ? watchDescription
-      : ['לשים לב שלא מפרשים את הצבעים הפחות בולטים כחוסר יכולת; ייתכן שהם פשוט פחות טבעיים לחלק מחברי הצוות.'];
+        ? 'יש שונות ברמת המובהקות של הסגנונות. פרופילים מגוונים יכולים לתווך בין גישות, בעוד פרופילים מובהקים עשויים להביא חדות ועוצמה. האתגר הוא להפוך את ההבדלים להשלמה ולא לחיכוך.'
+        : 'פרופילים שנוטים לקצוות עשויים להביא קול ברור, מומחיות וסגנון פעולה מובחן. לצד זאת, הפערים בדרך קבלת ההחלטות, בתקשורת ובקצב עלולים להיות מורגשים יותר ולדרוש תרגום הדדי.';
+    const primaryWatchouts = [
+      ...gaps.map(g => ({ title: 'סגנון ' + g.color + ' אינו מיוצג כצבע דומיננטי', text: g.gap, implication: g.implication, action: g.action })),
+      ...lighterGaps.map(g => ({ title: 'סגנון ' + g.color + ' מיוצג מעט', text: g.gap, implication: g.implication, action: g.action }))
+    ];
+    const watchouts = primaryWatchouts.length ? primaryWatchouts : [
+      { title: 'אין פער בולט בייצוג הצבעים', text: 'כל ארבעת הסגנונות מופיעים לפחות במידה מסוימת.', implication: 'ייצוג במפה אינו מבטיח שהצוות משתמש בסגנון בזמן הנכון או נותן לו מקום בדיון.', action: 'בדקו באילו מצבים כל סגנון בא לידי ביטוי, ובאילו מצבים הוא נעלם.' }
+    ];
+    const leadingText = leadingColors.length
+      ? 'הסגנונות הדומיננטיים ביותר לפי מספר המשתתפים הם ' + leadingColors.map(c => c.color + ' (' + c.count + ' מתוך ' + profiles.length + ')').join(' ו־') + '.'
+      : 'לא זוהה סגנון דומיננטי בהרכב.';
+
+    const handleExportPdf = async () => {
+      if (!reportRef.current || exportingPdf) return;
+      setExportingPdf(true);
+      try {
+        const html2canvas = (await import('html2canvas')).default;
+        const { jsPDF } = await import('jspdf');
+        const canvas = await html2canvas(reportRef.current, {
+          scale: 2, backgroundColor: '#111827', useCORS: true, logging: false,
+          windowWidth: Math.max(reportRef.current.scrollWidth, 900)
+        });
+        const imageData = canvas.toDataURL('image/jpeg', 0.94);
+        const pageWidth = 210;
+        const margin = 7;
+        const imageWidth = pageWidth - margin * 2;
+        const imageHeight = (canvas.height / canvas.width) * imageWidth;
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pageWidth, Math.max(280, imageHeight + margin * 2)] });
+        pdf.addImage(imageData, 'JPEG', margin, margin, imageWidth, imageHeight, undefined, 'FAST');
+        pdf.save('team-map-' + new Date().toISOString().slice(0, 10) + '.pdf');
+      } catch (err) {
+        console.error('PDF export failed:', err);
+        alert('לא הצלחנו ליצור את קובץ ה־PDF. נסה שוב או רענן את העמוד.');
+      } finally {
+        setExportingPdf(false);
+      }
+    };
 
     return (
       <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8 animate-fade-in-up">
-        <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <h3 className="text-xl font-bold text-cyan-300">מפה דינמית: {title}</h3>
-          <div className="text-xs sm:text-sm text-gray-400 flex flex-wrap gap-3">
-            <div className="flex items-center gap-1"><span className="w-3 h-3 bg-indigo-500 rounded-full"></span> כחול</div>
-            <div className="flex items-center gap-1"><span className="w-3 h-3 bg-rose-500 rounded-full"></span> אדום</div>
-            <div className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded-full"></span> ירוק</div>
-            <div className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400 rounded-full"></span> צהוב</div>
-          </div>
-        </div>
-        <div className="relative w-full max-w-lg mx-auto aspect-square bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl" dir="ltr">
-          <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-rose-900/10 border-b border-l border-gray-700/50"></div>
-          <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-indigo-900/10 border-b border-gray-700/50"></div>
-          <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-yellow-900/10 border-l border-gray-700/50"></div>
-          <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-green-900/10"></div>
-          <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-gray-500/60 transform -translate-x-1/2"></div>
-          <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-gray-500/60 transform -translate-y-1/2"></div>
-          <div className="absolute top-3 left-3 text-white font-bold text-xs z-20">כחול</div>
-          <div className="absolute top-3 right-3 text-white font-bold text-xs z-20">אדום</div>
-          <div className="absolute bottom-3 left-3 text-white font-bold text-xs z-20">ירוק</div>
-          <div className="absolute bottom-3 right-3 text-white font-bold text-xs z-20">צהוב</div>
-          {profiles.map(({ user, x, y, dominant }) => {
-            const dotColor = dominant ? dominant.code : 'bg-gray-400';
-            const borderColor = dominant ? dominant.border : 'border-white';
-            return (
-              <div
-                key={user.uid}
-                className={`absolute w-5 h-5 rounded-full border-2 ${borderColor} shadow-lg transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer ${dotColor} hover:scale-150 transition-all z-10`}
-                style={{ left: `${x}%`, top: `${y}%` }}
-              >
-                <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs py-1 px-2 rounded whitespace-nowrap shadow-xl border border-gray-600 z-50">
-                  {user.displayName}
-                </div>
-              </div>
-            );
-          })}
+          <button onClick={handleExportPdf} disabled={exportingPdf} className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-all">
+            <FileText className="w-4 h-4" />
+            {exportingPdf ? 'מכין PDF...' : 'הורדת מפה וניתוח כ־PDF'}
+          </button>
         </div>
 
-        <div className="mt-6 bg-gray-900/70 rounded-xl border border-cyan-900/60 p-5 space-y-4" dir="rtl">
-          <div>
-            <h4 className="text-lg font-bold text-cyan-300 mb-1">ניתוח כללי של המפה הצוותית</h4>
-            <p className="text-xs text-gray-400">מבוסס על מיקום הנקודות ועל הצבע הדומיננטי של כל פרופיל. זהו כיוון לקריאה ולשיחה, לא אבחון של יכולות או של ביצועי הצוות.</p>
+        <div ref={reportRef} className="bg-gray-900 text-white rounded-xl p-5 sm:p-7 space-y-5" dir="rtl">
+          <div className="flex justify-between items-start flex-wrap gap-3">
+            <div>
+              <h3 className="text-2xl font-bold text-cyan-300">מפת סגנונות התקשורת — {title}</h3>
+              <p className="text-sm text-gray-400 mt-1">{profiles.length} משתתפים | ניתוח הרכב צוותי</p>
+            </div>
+            <div className="text-xs text-gray-300 flex flex-wrap gap-3"><span>🔵 כחול</span><span>🔴 אדום</span><span>🟢 ירוק</span><span>🟡 צהוב</span></div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-cyan-300 text-sm font-bold mb-1">מה מאפיין את ההרכב?</div>
-              <p className="text-sm text-gray-200">{horizontalFocus}; {verticalFocus}. {centerLabel}.</p>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-cyan-300 text-sm font-bold mb-1">חוזקות אפשריות</div>
-              <p className="text-sm text-gray-200">{dominantDescription}.</p>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-amber-300 text-sm font-bold mb-1">נקודות שכדאי לשים לב אליהן</div>
-              <ul className="list-disc pr-5 space-y-1 text-sm text-gray-200">
-                {watchItems.map((item, index) => <li key={index}>{item}</li>)}
-              </ul>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-cyan-300 text-sm font-bold mb-1">מה מספר הפיזור?</div>
-              <p className="text-sm text-gray-200">{diversityText}</p>
-            </div>
+
+          <div className="relative w-full max-w-lg mx-auto aspect-square bg-gray-900 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl" dir="ltr">
+            <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-rose-900/30 border-b border-l border-gray-700/50"></div>
+            <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-indigo-900/30 border-b border-gray-700/50"></div>
+            <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-yellow-900/30 border-l border-gray-700/50"></div>
+            <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-green-900/30"></div>
+            <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-gray-500/70 transform -translate-x-1/2"></div>
+            <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-gray-500/70 transform -translate-y-1/2"></div>
+            <div className="absolute top-3 left-3 text-white font-bold text-xs z-20">כחול</div>
+            <div className="absolute top-3 right-3 text-white font-bold text-xs z-20">אדום</div>
+            <div className="absolute bottom-3 left-3 text-white font-bold text-xs z-20">ירוק</div>
+            <div className="absolute bottom-3 right-3 text-white font-bold text-xs z-20">צהוב</div>
+            {profiles.map(({ user, x, y, dominant }) => (
+              <div key={user.uid} className={'absolute w-5 h-5 rounded-full border-2 ' + (dominant ? dominant.border : 'border-white') + ' shadow-lg transform -translate-x-1/2 -translate-y-1/2 ' + (dominant ? dominant.code : 'bg-gray-400')} style={{ left: x + '%', top: y + '%' }}>
+                <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-950 text-white text-[10px] py-0.5 px-1.5 rounded whitespace-nowrap shadow-xl border border-gray-600">{user.displayName || 'משתתף'}</div>
+              </div>
+            ))}
           </div>
-          <div className="text-xs text-gray-400 border-t border-gray-700 pt-3">
-            <strong className="text-gray-300">איך קוראים את המרחק מהמרכז?</strong> ככל שנקודה קרובה יותר למרכז, הפרופיל משלב יותר בין הסגנונות. ככל שהיא מתרחקת מהמרכז ונוטה לאחד הרבעים, הסגנון שמייצג אותו צבע מובהק יותר. צבעים שמיוצגים פחות במפה אינם בהכרח חולשה — הם הזמנה לבדוק אם יש בצוות דרכים נוספות לחשוב, לתקשר ולפעול.
-          </div>
+
+          <section className="space-y-3">
+            <h4 className="text-xl font-bold text-cyan-300">תמונת מצב</h4>
+            <p className="text-sm leading-7 text-gray-200">{leadingText} במבט על מיקום הנקודות: {horizontalFocus}; {verticalFocus}. {centerLabel}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {['אדום', 'צהוב', 'ירוק', 'כחול'].map(color => {
+                const item = colorCounts.find(c => c.color === color)!;
+                return <div key={color} className="rounded-lg bg-gray-800 p-3 border border-gray-700">
+                  <div className="text-xs text-gray-400">{color}</div>
+                  <div className="text-xl font-bold text-white">{item.count} <span className="text-xs font-normal text-gray-400">({Math.round(item.count / profiles.length * 100)}%)</span></div>
+                  <div className="h-1.5 bg-gray-700 rounded-full mt-2 overflow-hidden"><div className={'h-full ' + colorMeta[color].code} style={{ width: (item.count / profiles.length * 100) + '%' }}></div></div>
+                </div>;
+              })}
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="text-xl font-bold text-emerald-300">חוזקות צוותיות אפשריות</h4>
+            {strengths.length ? <ul className="list-disc pr-5 space-y-2 text-sm leading-6 text-gray-200">
+              {strengths.map(s => <li key={s.color}><strong>{s.color}:</strong> {s.text}</li>)}
+            </ul> : <p className="text-sm text-gray-300">לא בולט סגנון דומיננטי אחד בהרכב.</p>}
+            <p className="text-xs text-gray-400">אלו משאבים שההרכב עשוי להביא איתו; הם אינם מבטיחים שכך הצוות פועל בפועל.</p>
+          </section>
+
+          <section className="space-y-3">
+            <h4 className="text-xl font-bold text-amber-300">מה עלול להיות חסר — ומה עשויות להיות ההשלכות?</h4>
+            {watchouts.map((item, index) => <div key={index} className="bg-gray-800 rounded-lg p-3 border border-gray-700 space-y-1">
+              <div className="font-bold text-sm text-amber-200">{item.title}</div>
+              <p className="text-sm text-gray-200">{item.text}</p>
+              <p className="text-sm text-gray-300"><strong>השלכה אפשרית:</strong> {item.implication}</p>
+              <p className="text-sm text-cyan-200"><strong>מה מנהל/ת או HR יכולים לעשות:</strong> {item.action}</p>
+            </div>)}
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="text-xl font-bold text-cyan-300">גיוון מול מובהקות אישית</h4>
+            <p className="text-sm leading-7 text-gray-200">{diversityText}</p>
+            <p className="text-xs text-gray-400">ככל שנקודה קרובה יותר למרכז, הפרופיל מגוון יותר ומשלב בין סגנונות. ככל שהיא נוטה לקצה של אחד הרבעים, הסגנון המיוצג בו מובהק יותר.</p>
+          </section>
+
+          <section className="space-y-2 border-t border-gray-700 pt-4">
+            <h4 className="text-xl font-bold text-cyan-300">שאלות למנהל/ת ול־HR</h4>
+            <ol className="list-decimal pr-5 space-y-2 text-sm leading-6 text-gray-200">
+              <li>איזה סגנון עוזר לנו במיוחד להשיג את התוצאות שלנו — ואיזה סגנון אנחנו נוטים לדלג עליו?</li>
+              <li>כשאנחנו בלחץ, איזה צבע או דרך פעולה משתלטים, ומה המחיר האפשרי של זה?</li>
+              <li>באילו ממשקים או החלטות אנחנו צריכים לייצר במכוון את הסגנון שפחות נוכח?</li>
+              <li>איך נוודא שכל ארבעת הסגנונות מקבלים מקום, גם אם לא כולם מיוצגים באותה מידה בהרכב?</li>
+            </ol>
+          </section>
+
+          <p className="text-xs text-gray-500 border-t border-gray-700 pt-3">
+            הניתוח הוא השערה לדיון המבוססת על מפת הסגנונות והצבע הדומיננטי של המשתתפים, ולא מדידה של יכולת, ביצועים או התאמה לתפקיד. צבע שפחות מיוצג אינו מעיד שאין לאנשים בצוות יכולת לפעול כך; הוא רק עשוי לדרוש יותר מודעות ומאמץ מכוון.
+          </p>
         </div>
         <TeamAiCoach users={mapUsers} teamName={title} />
       </div>
