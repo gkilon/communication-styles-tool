@@ -64,6 +64,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
   // the org/team quick-filter above.
   const [combinedTeamNames, setCombinedTeamNames] = useState<string[]>([]);
   const [showCombinedMap, setShowCombinedMap] = useState(false);
+  const [quickMapTeamId, setQuickMapTeamId] = useState('');
   // Fully custom map: hand-pick individual users, regardless of team/org —
   // including people with no team at all.
   const [customUserIds, setCustomUserIds] = useState<string[]>([]);
@@ -426,7 +427,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     setCombinedTeamNames(prev => prev.includes(teamName) ? prev.filter(n => n !== teamName) : [...prev, teamName]);
   };
 
-  const combinedUsers = users.filter(u => combinedTeamNames.includes(u.team));
+  const combinedUsers = users.filter(u => combinedTeamNames.includes(u.team) && !!u.scores);
 
   const toggleCustomUser = (uid: string) => {
     setCustomUserIds(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
@@ -438,6 +439,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
     if (!customUserSearch.trim()) return true;
     const q = customUserSearch.trim().toLowerCase();
     return (u.displayName || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+  }).sort((a, b) => {
+    const ta = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+    const tb = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+    return newestFirst ? tb - ta : ta - tb;
   });
 
   if (error === 'PERMISSION_DENIED') {
@@ -660,7 +665,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                   <button onClick={() => { setCombinedTeamNames([]); setShowCombinedMap(false); }} className="text-xs text-gray-400 hover:text-white underline">נקה בחירה</button>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mb-4">אתה בשליטה מלאה — אפשר לבחור כמה צוותים ביחד, גם משני ארגונים שונים, ולראות את כולם על אותה מפה.</p>
+              <p className="text-xs text-gray-400 mb-4">בחר צוות יחיד לבניית מפה מיידית, או שלב כמה צוותים ממספר ארגונים למפה אחת.</p>
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <select value={quickMapTeamId} onChange={e => { const team = teams.find(t => t.id === e.target.value); setQuickMapTeamId(e.target.value); if (team) { setCombinedTeamNames([team.name]); setShowCombinedMap(true); } else { setCombinedTeamNames([]); setShowCombinedMap(false); } }} className="flex-1 bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-3 text-sm">
+                  <option value="">-- בחר צוות לבניית מפה אוטומטית --</option>
+                  {teams.map(t => { const org = organizations.find(o => o.id === t.organizationId); const count = users.filter(u => u.team === t.name && u.scores).length; return <option key={t.id} value={t.id}>{t.name}{org ? ` · ${org.name}` : ''} ({count} בעלי אבחון)</option>; })}
+                </select>
+                <span className="text-xs text-gray-400 self-center">הבחירה תאתר אוטומטית את חברי הצוות שמילאו שאלון.</span>
+              </div>
               <div className="flex flex-wrap gap-2 mb-4">
                 {teams.map(t => {
                   const parentOrg = organizations.find(o => o.id === t.organizationId);
@@ -699,7 +711,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                   <button onClick={() => { setCustomUserIds([]); setShowCustomMap(false); }} className="text-xs text-gray-400 hover:text-white underline">נקה בחירה</button>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mb-4">שליטה מלאה ברמת המשתמש — סמן כל אחד בנפרד, כולל משתתפים שלא משויכים לשום צוות.</p>
+              <p className="text-xs text-gray-400 mb-4">שליטה מלאה ברמת המשתמש — סמן כל אחד בנפרד, כולל משתתפים שלא משויכים לשום צוות. אפשר לחפש, למיין ולערוך שמות גם כאן.</p>
 
               <input
                 type="text"
@@ -709,6 +721,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                 className="w-full bg-gray-900 text-white border border-gray-600 rounded-xl px-4 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
 
+              <div className="flex flex-col sm:flex-row gap-2 mb-3">
+                <div className="text-xs text-gray-400 self-center">{newestFirst ? 'מוצגים החדשים ביותר קודם' : 'מוצגים הוותיקים ביותר קודם'}</div>
+                <button onClick={() => setNewestFirst(v => !v)} className="sm:mr-auto inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-gray-900 border border-gray-700 text-cyan-300 text-xs font-bold"><ArrowUpDown className="w-3.5 h-3.5" />{newestFirst ? 'חדשים קודם' : 'ותיקים קודם'}</button>
+              </div>
               <div className="max-h-64 overflow-y-auto border border-gray-700 rounded-xl divide-y divide-gray-700/60 mb-4">
                 {customUserSearchResults.length === 0 ? (
                   <p className="text-gray-500 text-xs italic p-4">לא נמצאו משתתפים.</p>
@@ -718,10 +734,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
                     return (
                       <label key={u.uid} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${checked ? 'bg-cyan-900/20' : 'hover:bg-gray-700/30'}`}>
                         <input type="checkbox" checked={checked} onChange={() => toggleCustomUser(u.uid)} className="w-4 h-4 accent-cyan-500" />
-                        <div className="overflow-hidden">
-                          <div className="text-sm text-white font-medium truncate">{u.displayName || 'משתמש ללא שם'}</div>
-                          <div className="text-[11px] text-gray-500 truncate">{u.team || 'ללא צוות'}{u.scores ? '' : ' · טרם מילא שאלון'}</div>
+                        <div className="overflow-hidden flex-1 min-w-0">
+                          {editingUserId === u.uid ? <div className="flex items-center gap-2"><input value={editingDisplayName} onChange={e => setEditingDisplayName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveUserName(u.uid); if (e.key === 'Escape') setEditingUserId(null); }} className="min-w-0 flex-1 bg-gray-900 border border-cyan-600 rounded-lg px-2 py-1 text-sm text-white" /><button onClick={() => handleSaveUserName(u.uid)} disabled={updatingUserId === u.uid} className="text-green-400"><Check className="w-4 h-4" /></button><button onClick={() => setEditingUserId(null)} className="text-gray-400"><X className="w-4 h-4" /></button></div> : <><div className="text-sm text-white font-medium truncate">{u.displayName || 'משתמש ללא שם'}</div><div className="text-[11px] text-gray-500 truncate">{u.team || 'ללא צוות'}{u.scores ? ` · ${u.completedAt ? new Date(u.completedAt).toLocaleDateString('he-IL') : 'השלים שאלון'}` : ' · טרם מילא שאלון'}</div></>}
                         </div>
+                        {editingUserId !== u.uid && <button type="button" onClick={() => handleStartEditUser(u)} title="ערוך שם משתתף" className="p-1 text-gray-500 hover:text-cyan-300"><Pencil className="w-3.5 h-3.5" /></button>}
                       </label>
                     );
                   })
