@@ -464,6 +464,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
   const TeamMap: React.FC<{ mapUsers: UserProfile[]; title: string }> = ({ mapUsers, title }) => {
     const reportRef = useRef<HTMLDivElement>(null);
     const [exportingPdf, setExportingPdf] = useState(false);
+    const [showParticipantNames, setShowParticipantNames] = useState(true);
     const validUsers = mapUsers.filter(u => u.scores);
     if (validUsers.length === 0) return null;
 
@@ -500,26 +501,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
         : 'בממוצע, הנקודות נוטות לקצוות: רבים מהפרופילים מציגים סגנון מובהק יותר.';
     const averageX = profiles.reduce((sum, p) => sum + p.x, 0) / profiles.length;
     const averageY = profiles.reduce((sum, p) => sum + p.y, 0) / profiles.length;
-    const horizontalFocus = averageX > 57 ? 'נטייה יחסית לאדום ולצהוב' : averageX < 43 ? 'נטייה יחסית לכחול ולירוק' : 'איזון יחסי בין שני צדי המפה';
-    const verticalFocus = averageY < 43 ? 'נטייה יחסית לאדום ולכחול' : averageY > 57 ? 'נטייה יחסית לצהוב ולירוק' : 'איזון יחסי בין החלק העליון והתחתון';
-    const strengths = leadingColors.map(c => ({ color: c.color, text: colorMeta[c.color].strength }));
-    const gaps = missingColors.map(c => ({ color: c.color, ...colorMeta[c.color] }));
-    const lighterGaps = underrepresentedColors.map(c => ({ color: c.color, ...colorMeta[c.color] }));
+    const horizontalFocus = averageX > 57 ? 'נטייה יחסית ליוזמה, השפעה ונוכחות כלפי חוץ' : averageX < 43 ? 'נטייה יחסית לעיבוד שקט, התבוננות והעמקה' : 'איזון יחסי בין יוזמה ונוכחות כלפי חוץ לבין עיבוד והתבוננות';
+    const verticalFocus = averageY < 43 ? 'נטייה יחסית למשימה, תוצאות וחשיבה שיטתית' : averageY > 57 ? 'נטייה יחסית לאנשים, יחסים ושיתוף פעולה' : 'איזון יחסי בין מיקוד במשימה לבין מיקוד באנשים וביחסים';
+    const strengths = leadingColors.map(c => ({ text: colorMeta[c.color].strength }));
+    const gaps = missingColors.map(c => ({ ...colorMeta[c.color] }));
+    const lighterGaps = underrepresentedColors.map(c => ({ ...colorMeta[c.color] }));
     const diversityText = averageDistance < 0.35
       ? 'הקרבה למרכז מצביעה על פרופילים שמשלבים כמה סגנונות. זה עשוי לאפשר גמישות והתאמה לאנשים ולמצבים שונים. כדאי לבדוק האם הגמישות אכן באה לידי ביטוי, או שלעתים קשה לצוות לבחור כיוון פעולה ברור.'
       : averageDistance < 0.65
         ? 'יש שונות ברמת המובהקות של הסגנונות. פרופילים מגוונים יכולים לתווך בין גישות, בעוד פרופילים מובהקים עשויים להביא חדות ועוצמה. האתגר הוא להפוך את ההבדלים להשלמה ולא לחיכוך.'
         : 'פרופילים שנוטים לקצוות עשויים להביא קול ברור, מומחיות וסגנון פעולה מובחן. לצד זאת, הפערים בדרך קבלת ההחלטות, בתקשורת ובקצב עלולים להיות מורגשים יותר ולדרוש תרגום הדדי.';
     const primaryWatchouts = [
-      ...gaps.map(g => ({ title: 'סגנון ' + g.color + ' אינו מיוצג כצבע דומיננטי', text: g.gap, implication: g.implication, action: g.action })),
-      ...lighterGaps.map(g => ({ title: 'סגנון ' + g.color + ' מיוצג מעט', text: g.gap, implication: g.implication, action: g.action }))
+      ...gaps.map(g => ({ title: 'יכולת שעשויה להיות פחות זמינה לצוות', text: g.gap, implication: g.implication, action: g.action })),
+      ...lighterGaps.map(g => ({ title: 'יכולת שעשויה לדרוש מאמץ מודע יותר', text: g.gap, implication: g.implication, action: g.action }))
     ];
     const watchouts = primaryWatchouts.length ? primaryWatchouts : [
       { title: 'אין פער בולט בייצוג הצבעים', text: 'כל ארבעת הסגנונות מופיעים לפחות במידה מסוימת.', implication: 'ייצוג במפה אינו מבטיח שהצוות משתמש בסגנון בזמן הנכון או נותן לו מקום בדיון.', action: 'בדקו באילו מצבים כל סגנון בא לידי ביטוי, ובאילו מצבים הוא נעלם.' }
     ];
     const leadingText = leadingColors.length
-      ? 'הסגנונות הדומיננטיים ביותר לפי מספר המשתתפים הם ' + leadingColors.map(c => c.color + ' (' + c.count + ' מתוך ' + profiles.length + ')').join(' ו־') + '.'
-      : 'לא זוהה סגנון דומיננטי בהרכב.';
+      ? 'בולטות במיוחד בחלוקת הפרופילים היכולות המתוארות להלן. ההתפלגות המספרית מוצגת בנפרד במפה.'
+      : 'לא בולטת נטייה קבוצתית אחת בהרכב.';
 
     const handleExportPdf = async () => {
       if (!reportRef.current || exportingPdf) return;
@@ -551,6 +552,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
       <div className="bg-gray-800 p-6 rounded-lg shadow-xl border border-gray-700 mb-8 animate-fade-in-up">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <h3 className="text-xl font-bold text-cyan-300">מפה דינמית: {title}</h3>
+          <label className="inline-flex items-center gap-2 text-sm text-gray-200 cursor-pointer select-none">
+            <input type="checkbox" checked={showParticipantNames} onChange={e => setShowParticipantNames(e.target.checked)} className="w-4 h-4 accent-cyan-500" />
+            הצג שמות ליד הנקודות
+          </label>
           <button onClick={handleExportPdf} disabled={exportingPdf} className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-all">
             <FileText className="w-4 h-4" />
             {exportingPdf ? 'מכין PDF...' : 'הורדת מפה וניתוח כ־PDF'}
@@ -579,7 +584,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
             <div className="absolute bottom-3 right-3 text-white font-bold text-xs z-20">צהוב</div>
             {profiles.map(({ user, x, y, dominant }) => (
               <div key={user.uid} className={'absolute w-5 h-5 rounded-full border-2 ' + (dominant ? dominant.border : 'border-white') + ' shadow-lg transform -translate-x-1/2 -translate-y-1/2 ' + (dominant ? dominant.code : 'bg-gray-400')} style={{ left: x + '%', top: y + '%' }}>
-                <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-950 text-white text-[10px] py-0.5 px-1.5 rounded whitespace-nowrap shadow-xl border border-gray-600">{user.displayName || 'משתתף'}</div>
+                {showParticipantNames && <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 bg-gray-950 text-white text-[10px] py-0.5 px-1.5 rounded whitespace-nowrap shadow-xl border border-gray-600">{user.displayName || 'משתתף'}</div>}
               </div>
             ))}
           </div>
@@ -602,7 +607,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
           <section className="space-y-2">
             <h4 className="text-xl font-bold text-emerald-300">חוזקות צוותיות אפשריות</h4>
             {strengths.length ? <ul className="list-disc pr-5 space-y-2 text-sm leading-6 text-gray-200">
-              {strengths.map(s => <li key={s.color}><strong>{s.color}:</strong> {s.text}</li>)}
+              {strengths.map((s, index) => <li key={index}>{s.text}</li>)}
             </ul> : <p className="text-sm text-gray-300">לא בולט סגנון דומיננטי אחד בהרכב.</p>}
             <p className="text-xs text-gray-400">אלו משאבים שההרכב עשוי להביא איתו; הם אינם מבטיחים שכך הצוות פועל בפועל.</p>
           </section>
@@ -624,12 +629,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onPrevie
           </section>
 
           <section className="space-y-2 border-t border-gray-700 pt-4">
-            <h4 className="text-xl font-bold text-cyan-300">שאלות למנהל/ת ול־HR</h4>
-            <ol className="list-decimal pr-5 space-y-2 text-sm leading-6 text-gray-200">
-              <li>איזה סגנון עוזר לנו במיוחד להשיג את התוצאות שלנו — ואיזה סגנון אנחנו נוטים לדלג עליו?</li>
-              <li>כשאנחנו בלחץ, איזה צבע או דרך פעולה משתלטים, ומה המחיר האפשרי של זה?</li>
-              <li>באילו ממשקים או החלטות אנחנו צריכים לייצר במכוון את הסגנון שפחות נוכח?</li>
-              <li>איך נוודא שכל ארבעת הסגנונות מקבלים מקום, גם אם לא כולם מיוצגים באותה מידה בהרכב?</li>
+            <h4 className="text-xl font-bold text-cyan-300">מפת חשיבה אסטרטגית — מה יעזור לנו לממש את מטרות השנה?</h4>
+            <p className="text-sm leading-7 text-gray-300">מומלץ להציב לצד המפה את 2–3 המטרות המרכזיות של הצוות לשנה הקרובה, ולבחון את ההרכב לאורן:</p>
+            <ol className="list-decimal pr-5 space-y-3 text-sm leading-7 text-gray-200">
+              <li><strong>מה נדרש מאיתנו כדי להצליח?</strong> אילו יכולות, דפוסי עבודה והתנהגויות יהיו קריטיים למימוש המטרות השנה — למשל קבלת החלטות מהירה, חדשנות, דיוק, שיתוף פעולה או הובלת שינוי?</li>
+              <li><strong>על מה נוכל להישען?</strong> אילו מהיכולות האלה כבר קיימות אצלנו כחוזקה צוותית, ואיך נרתום אותן באופן מכוון לטובת המטרות?</li>
+              <li><strong>מה עלול לעכב אותנו?</strong> אילו יכולות פחות זמינות בהרכב, או דורשות מאמץ מודע יותר? באילו יעדים, ממשקים או שלבים בתהליך החוסר הזה עלול להיות משמעותי במיוחד?</li>
+              <li><strong>איך נשלים את הפער?</strong> מה נפתח בתוך הצוות, אילו שגרות או תפקידים נגדיר, ממי נבקש שותפות, ואיפה נכון להיעזר ביכולת חיצונית?</li>
+              <li><strong>מה נתחיל לעשות אחרת כבר ברבעון הקרוב?</strong> בחרו התנהגות או שגרת עבודה אחת שתגדיל את הסיכוי לממש את המטרות, הגדירו לה בעלים וסימן הצלחה.</li>
             </ol>
           </section>
 
