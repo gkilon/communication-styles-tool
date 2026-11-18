@@ -19,6 +19,7 @@ interface SimpleAppProps {
   user?: any;
   isPreviewingAsAdmin?: boolean;
   onReturnToAdmin?: () => void;
+  previewMode?: boolean;
 }
 
 const STORAGE_KEY_ANSWERS = 'comm_style_answers';
@@ -44,7 +45,7 @@ const computeScores = (answers: Record<string, number>): Scores => {
   return result;
 };
 
-const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPreviewingAsAdmin, onReturnToAdmin }) => {
+const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPreviewingAsAdmin, onReturnToAdmin, previewMode = false }) => {
   const { dir } = useLanguage();
   const { t } = useT();
 
@@ -52,6 +53,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
   // real Firebase account yet". A session can exist with no `user` in between the
   // code screen and the sign-up/sign-in screen.)
   const [session, setSession] = useState<UserSession | null>(() => {
+    if (previewMode) return ({ type: 'personal', accessCode: 'PREVIEW-ONLY', teamName: 'סביבת בדיקה' } as UserSession);
     const saved = localStorage.getItem(STORAGE_KEY_SESSION);
     return saved ? JSON.parse(saved) : null;
   });
@@ -301,13 +303,13 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
         </header>
 
         <main className="w-full flex justify-center">
-          {!session ? (
+          {!previewMode && !session ? (
             <PasswordScreen
               onAuthenticate={handleAuthenticate}
               onAdminLogin={onAdminLoginAttempt}
               hasDatabaseConnection={isFirebaseInitialized}
             />
-          ) : !user ? (
+          ) : !previewMode && !user ? (
             <AuthGate session={session} onDone={() => { /* onAuthStateChanged in App.tsx picks up the new user automatically */ }} />
           ) : !accountSynced ? (
             <div className="text-center text-gray-300 py-20">{t('common', 'loading')}</div>

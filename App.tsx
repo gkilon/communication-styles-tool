@@ -6,6 +6,7 @@ import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebas
 import { getUserProfile } from './services/firebaseService';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { PrivacyPolicy } from './components/PrivacyPolicy';
+import { IndependentColorPrototype } from './components/IndependentColorPrototype';
 
 type AppView = 'simple' | 'admin' | 'loading';
 
@@ -58,6 +59,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 export const App: React.FC = () => {
+  // Temporary full-tool preview is hard-locked to this exact Netlify deploy-preview hostname.
+  const isFullPreview = window.location.hostname === 'deploy-preview-5--hilarious-kashata-9aafa2.netlify.app'
+    && window.location.pathname.split('/').filter(Boolean).join('/') === 'prototype/full';
+
   const [view, setView] = useState<AppView>('loading');
   const [user, setUser] = useState<any>(null);
   // Whether an admin account clicked "בדוק כמשתמש" — shows the participant
@@ -65,6 +70,8 @@ export const App: React.FC = () => {
   const [previewAsUser, setPreviewAsUser] = useState(false);
 
   useEffect(() => {
+     const currentPath = window.location.pathname.split('/').filter(Boolean).join('/');
+     if (isFullPreview || currentPath === 'prototype/colors') return; // No Firebase Authentication in either isolated prototype.
      const timer = setTimeout(() => {
        if (view === 'loading') setView('simple');
      }, 3000);
@@ -101,7 +108,7 @@ export const App: React.FC = () => {
        if (unsubscribe) unsubscribe();
        clearTimeout(timer);
      };
-  }, []);
+  }, [isFullPreview]);
 
   const handleAdminLogin = async (email: string, pass: string) => {
       try {
@@ -123,8 +130,22 @@ export const App: React.FC = () => {
   // Participant-preview clicked "חזרה לניהול" — go back to the admin screen.
   const handleReturnToAdmin = () => setPreviewAsUser(false);
 
+  // Full questionnaire preview: local-only participant flow, hard-locked to this deploy preview.
+  if (isFullPreview) {
+    return (
+      <LanguageProvider>
+        <SimpleApp onAdminLoginAttempt={async () => {}} previewMode />
+      </LanguageProvider>
+    );
+  }
+
+  // Standalone experimental prototype — isolated from authentication and the live questionnaire.
+  if (window.location.pathname.split('/').filter(Boolean).join('/') === 'prototype/colors') {
+    return <IndependentColorPrototype />;
+  }
+
   // Standalone public page — no login needed to read the privacy policy.
-  if (window.location.pathname.replace(/\/+$/, '') === '/privacy') {
+  if (window.location.pathname.split('/').filter(Boolean).join('/') === 'privacy') {
     return <PrivacyPolicy />;
   }
 
