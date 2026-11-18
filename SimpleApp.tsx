@@ -44,7 +44,7 @@ const computeScores = (answers: Record<string, number>): Scores => {
   return result;
 };
 
-const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPreviewingAsAdmin, onReturnToAdmin }) => {
+const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPreviewingAsAdmin, onReturnToAdmin, previewMode = false }) => {
   const { dir } = useLanguage();
   const { t } = useT();
 
@@ -301,13 +301,13 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
         </header>
 
         <main className="w-full flex justify-center">
-          {!session ? (
+          {!previewMode && !session ? (
             <PasswordScreen
               onAuthenticate={handleAuthenticate}
               onAdminLogin={onAdminLoginAttempt}
               hasDatabaseConnection={isFirebaseInitialized}
             />
-          ) : !user ? (
+          ) : !previewMode && !user ? (
             <AuthGate session={session} onDone={() => { /* onAuthStateChanged in App.tsx picks up the new user automatically */ }} />
           ) : !accountSynced ? (
             <div className="text-center text-gray-300 py-20">{t('common', 'loading')}</div>
