@@ -19,6 +19,7 @@ interface SimpleAppProps {
   user?: any;
   isPreviewingAsAdmin?: boolean;
   onReturnToAdmin?: () => void;
+  previewMode?: boolean;
 }
 
 const STORAGE_KEY_ANSWERS = 'comm_style_answers';
@@ -52,6 +53,7 @@ const SimpleApp: React.FC<SimpleAppProps> = ({ onAdminLoginAttempt, user, isPrev
   // real Firebase account yet". A session can exist with no `user` in between the
   // code screen and the sign-up/sign-in screen.)
   const [session, setSession] = useState<UserSession | null>(() => {
+    if (previewMode) return ({ type: 'personal', accessCode: 'PREVIEW-ONLY', teamName: 'סביבת בדיקה' } as UserSession);
     const saved = localStorage.getItem(STORAGE_KEY_SESSION);
     return saved ? JSON.parse(saved) : null;
   });
