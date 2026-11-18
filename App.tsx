@@ -130,7 +130,16 @@ export const App: React.FC = () => {
   // Participant-preview clicked "חזרה לניהול" — go back to the admin screen.
   const handleReturnToAdmin = () => setPreviewAsUser(false);
 
-  // Full questionnaire preview: local-only participant flow, hard-locked to this deploy preview.\n  if (isFullPreview) {\n    return (\n      <LanguageProvider>\n        <SimpleApp onAdminLoginAttempt={async () => {}} previewMode />\n      </LanguageProvider>\n    );\n  }\n\n  // Standalone experimental prototype — isolated from authentication and the live questionnaire.
+  // Full questionnaire preview: local-only participant flow, hard-locked to this deploy preview.
+  if (isFullPreview) {
+    return (
+      <LanguageProvider>
+        <SimpleApp onAdminLoginAttempt={async () => {}} previewMode />
+      </LanguageProvider>
+    );
+  }
+
+  // Standalone experimental prototype — isolated from authentication and the live questionnaire.
   if (window.location.pathname.split('/').filter(Boolean).join('/') === 'prototype/colors') {
     return <IndependentColorPrototype />;
   }
