@@ -59,6 +59,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 }
 
 export const App: React.FC = () => {
+  // Temporary full-tool preview is hard-locked to this exact Netlify deploy-preview hostname.
+  const isFullPreview = window.location.hostname === 'deploy-preview-5--hilarious-kashata-9aafa2.netlify.app'
+    && window.location.pathname.replace(/\\/+$/, '') === '/prototype/full';
+
   const [view, setView] = useState<AppView>('loading');
   const [user, setUser] = useState<any>(null);
   // Whether an admin account clicked "בדוק כמשתמש" — shows the participant
