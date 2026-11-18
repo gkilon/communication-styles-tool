@@ -70,7 +70,8 @@ export const App: React.FC = () => {
   const [previewAsUser, setPreviewAsUser] = useState(false);
 
   useEffect(() => {
-     if (isFullPreview) return; // No Firebase Authentication in this isolated preview.
+     const currentPath = window.location.pathname.replace(/\\/+$/, '');
+     if (isFullPreview || currentPath === '/prototype/colors') return; // No Firebase Authentication in either isolated prototype.
      const timer = setTimeout(() => {
        if (view === 'loading') setView('simple');
      }, 3000);
