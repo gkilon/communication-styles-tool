@@ -70,6 +70,7 @@ export const App: React.FC = () => {
   const [previewAsUser, setPreviewAsUser] = useState(false);
 
   useEffect(() => {
+     if (isFullPreview) return; // No Firebase Authentication in this isolated preview.
      const timer = setTimeout(() => {
        if (view === 'loading') setView('simple');
      }, 3000);
@@ -106,7 +107,7 @@ export const App: React.FC = () => {
        if (unsubscribe) unsubscribe();
        clearTimeout(timer);
      };
-  }, []);
+  }, [isFullPreview]);
 
   const handleAdminLogin = async (email: string, pass: string) => {
       try {
