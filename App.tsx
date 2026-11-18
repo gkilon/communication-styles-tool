@@ -61,7 +61,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 export const App: React.FC = () => {
   // Temporary full-tool preview is hard-locked to this exact Netlify deploy-preview hostname.
   const isFullPreview = window.location.hostname === 'deploy-preview-5--hilarious-kashata-9aafa2.netlify.app'
-    && window.location.pathname.split('/').filter(Boolean).join('/') === '/prototype/full';
+    && window.location.pathname.split('/').filter(Boolean).join('/') === 'prototype/full';
 
   const [view, setView] = useState<AppView>('loading');
   const [user, setUser] = useState<any>(null);
@@ -71,7 +71,7 @@ export const App: React.FC = () => {
 
   useEffect(() => {
      const currentPath = window.location.pathname.split('/').filter(Boolean).join('/');
-     if (isFullPreview || currentPath === '/prototype/colors') return; // No Firebase Authentication in either isolated prototype.
+     if (isFullPreview || currentPath === 'prototype/colors') return; // No Firebase Authentication in either isolated prototype.
      const timer = setTimeout(() => {
        if (view === 'loading') setView('simple');
      }, 3000);
@@ -131,12 +131,12 @@ export const App: React.FC = () => {
   const handleReturnToAdmin = () => setPreviewAsUser(false);
 
   // Full questionnaire preview: local-only participant flow, hard-locked to this deploy preview.\n  if (isFullPreview) {\n    return (\n      <LanguageProvider>\n        <SimpleApp onAdminLoginAttempt={async () => {}} previewMode />\n      </LanguageProvider>\n    );\n  }\n\n  // Standalone experimental prototype — isolated from authentication and the live questionnaire.
-  if (window.location.pathname.split('/').filter(Boolean).join('/') === '/prototype/colors') {
+  if (window.location.pathname.split('/').filter(Boolean).join('/') === 'prototype/colors') {
     return <IndependentColorPrototype />;
   }
 
   // Standalone public page — no login needed to read the privacy policy.
-  if (window.location.pathname.split('/').filter(Boolean).join('/') === '/privacy') {
+  if (window.location.pathname.split('/').filter(Boolean).join('/') === 'privacy') {
     return <PrivacyPolicy />;
   }
 
